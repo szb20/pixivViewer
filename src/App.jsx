@@ -1,126 +1,60 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { storageFacade } from './pixiv-assistant/index.js'
-import './App.css'
+import { useState } from 'react';
+import TabBar from './components/TabBar.jsx';
+import ToastHost from './components/ToastHost.jsx';
+import SettingsModal from './components/SettingsModal.jsx';
+import PreviewModal from './components/PreviewModal.jsx';
+import DiscoverPage from './pages/DiscoverPage.jsx';
+import RankingPage from './pages/RankingPage.jsx';
+import BookmarksPage from './pages/BookmarksPage.jsx';
+import SearchPage from './pages/SearchPage.jsx';
+import GalleryPage from './pages/GalleryPage.jsx';
+import { storageFacade } from './pixiv-assistant/index.js';
+import './index.css';
 
-// 开发期调试入口：控制台可访问 storageFacade
-window.__pixivViewer = window.__pixivViewer || { storageFacade }
+// 开发期调试入口
+window.__pixivViewer = window.__pixivViewer || { storageFacade };
 
-function App() {
-  const [count, setCount] = useState(0)
+const TABS = [
+  { key: 'discover', label: '推荐', icon: '🧭' },
+  { key: 'ranking', label: '排行', icon: '🏆' },
+  { key: 'bookmarks', label: '收藏', icon: '❤️' },
+  { key: 'search', label: '搜索', icon: '🔍' },
+  { key: 'gallery', label: '相册', icon: '🖼️' },
+];
+
+const TITLES = {
+  discover: 'Pixiv 推荐',
+  ranking: '排行榜',
+  bookmarks: '我的收藏',
+  search: '搜索',
+  gallery: '本地相册',
+};
+
+export default function App() {
+  const [tab, setTab] = useState('ranking');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app">
+      <header className="app-header">
+        <h1>{TITLES[tab]}</h1>
+        <button className="icon-btn" title="设置" onClick={() => setSettingsOpen(true)}>⚙️</button>
+      </header>
 
-      <div className="ticks"></div>
+      <main className="app-content">
+        {tab === 'discover' && <DiscoverPage onOpen={setPreview} />}
+        {tab === 'ranking' && <RankingPage onOpen={setPreview} />}
+        {tab === 'bookmarks' && <BookmarksPage onOpen={setPreview} />}
+        {tab === 'search' && <SearchPage onOpen={setPreview} />}
+        {tab === 'gallery' && <GalleryPage />}
+      </main>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+      {preview && <PreviewModal item={preview} onClose={() => setPreview(null)} />}
+      <ToastHost />
+    </div>
+  );
 }
-
-export default App
