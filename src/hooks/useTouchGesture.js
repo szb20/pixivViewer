@@ -689,7 +689,7 @@ export function useTouchGesture({
 
     // ── 单击：切换 UI 显隐 ──
     if (tapDur < 200 && moved < 10 && now - prevLastTap > 350) {
-      if (!e.target.closest('button, a, .lightbox-info, .lightbox-stage-wrap')) {
+      if (!e.target.closest('button, a')) {
         lastTapTimeRef.current = now;
         setHideUI(h => !h);
       }

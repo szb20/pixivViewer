@@ -179,9 +179,7 @@ export class StorageFacade {
       return { success: false, liked: false, likedAt: 0 };
     }
     const result = await this.service.toggleLike(illustId, pageIndex);
-    if (result.success) {
-      showToast(result.liked ? '❤️ 已喜欢' : '已取消喜欢');
-    } else {
+    if (!result.success) {
       showToast('操作失败', { type: 'error' });
     }
     return result;

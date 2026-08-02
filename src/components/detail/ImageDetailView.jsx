@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { proxyThumb, pixivOriginalUrl, pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import PageHeader from '../PageHeader.jsx';
@@ -84,12 +84,10 @@ export default function ImageDetailView({
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
-  const [pageIndex, setPageIndex] = useState(image?._pageIndex ?? 0); // 当前视口内/最后点击的页码（导航条高亮用）
   const [illustData, setIllustData] = useState(null);
   const [loadedPages, setLoadedPages] = useState({}); // `${illustId}_${page}` → { url, w, h }（供灯箱读取已加载原图）
   const contentRef = useRef(null);
   const pageRefs = useRef({}); // page → DOM 节点（跳转 / 视口定位）
-  const pageIndexRef = useRef(image?._pageIndex ?? 0);
   // 已成功加载的原图缓存：`${illustId}_${page}` → { url, w, h }（翻页回看秒开 + 每页宽高比）
   const originalCacheRef = useRef({});
   // 本次详情会话内已自动保存过的 (作品, 页码)，避免 illustData 到达/切换作品时重复触发
@@ -103,52 +101,11 @@ export default function ImageDetailView({
     1,
   );
 
-  // 构造反映当前 pageIndex 的派生条目（页码、缩略图、mediumUrl 等跟随翻页）
-  const currentImage = useMemo(() => {
-    if (!image) return null;
-    return {
-      ...image,
-      _pageIndex: pageIndex,
-      thumbnailUrl: image.illustId
-        ? pixivReUrl(image.illustId, pageIndex, 'thumb')
-        : (image.thumbnailUrl || image.mediumUrl || ''),
-      mediumUrl: image.illustId
-        ? pixivReUrl(image.illustId, pageIndex)
-        : (image.mediumUrl || ''),
-    };
-  }, [image, pageIndex]);
-
-  // 切换作品时重置页码与详情数据（避免残留上一张作品的画面）
+  // 切换作品时重置详情数据（避免残留上一张作品的画面）
   useEffect(() => {
-    const initial = image?._pageIndex ?? 0;
-    setPageIndex(initial);
-    pageIndexRef.current = initial;
     setIllustData(null);
     setLightboxIndex(null);
   }, [image?.illustId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 滚动时更新当前页码（导航条高亮）：取容器顶部附近最靠下的已入视口页面
-  const handleContentScroll = useCallback(() => {
-    const el = contentRef.current;
-    if (!el) return;
-    const scanY = el.getBoundingClientRect().top + 80;
-    let best = 0;
-    for (const [p, node] of Object.entries(pageRefs.current)) {
-      if (node && node.getBoundingClientRect().top <= scanY) best = Math.max(best, Number(p));
-    }
-    if (best !== pageIndexRef.current) {
-      pageIndexRef.current = best;
-      setPageIndex(best);
-    }
-  }, []);
-
-  // 导航条点击 → 平滑滚动到对应页
-  const scrollToPage = useCallback((p) => {
-    const node = pageRefs.current[p];
-    if (node) node.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    pageIndexRef.current = p;
-    setPageIndex(p);
-  }, []);
 
   // 页面原图加载完成 → 记录到 state，供灯箱复用已加载原图
   const handlePageLoaded = useCallback((page, entry) => {
@@ -167,14 +124,6 @@ export default function ImageDetailView({
     }, 60);
     return () => clearTimeout(t);
   }, [image?.illustId, image?._pageIndex]);
-
-  // 分页缩略图：优先用 pixiv.re 按页生成（250px 缩略图），失败再回退字符串推导
-  const pageThumb = useCallback((p) => {
-    if (image?.illustId) return pixivReUrl(image.illustId, p, 'thumb');
-    const base = image?.thumbnailUrl || image?.mediumUrl || '';
-    const replaced = base.replace(/_p\d+_/, `_p${p}_`);
-    return replaced !== base ? replaced : base;
-  }, [image]);
 
   // 获取作品详情（所有页共享同一份 API 响应，仅依赖 illustId，不随翻页重复请求）
   useEffect(() => {
@@ -424,7 +373,7 @@ export default function ImageDetailView({
       {/* 顶部栏 — 仅返回按钮 */}
       <PageHeader title="图片详情" onBack={onBack} />
 
-      <div className="char-state-content" ref={contentRef} onScroll={handleContentScroll}>
+      <div className="char-state-content" ref={contentRef}>
         {/* GIF 动图：用动图播放器 */}
         {isGif ? (
           <div style={{ padding: '12px', display: 'flex', justifyContent: 'center' }}>
@@ -439,39 +388,6 @@ export default function ImageDetailView({
           </div>
         ) : (
           <>
-            {/* 多页作品：页码指示 + 缩略图导航条（点击跳转，随内容滚动吸顶） */}
-            {pageCount > 1 && (
-              <div style={{
-                position: 'sticky', top: 0, zIndex: 20,
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 12px', overflowX: 'auto', scrollbarWidth: 'none',
-                background: 'var(--color-bg-panel)',
-              }}>
-                <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
-                  {pageIndex + 1}/{pageCount}
-                </span>
-                {Array.from({ length: pageCount }, (_, p) => (
-                  <div
-                    key={p}
-                    onClick={() => scrollToPage(p)}
-                    style={{
-                      width: 44, height: 44, flexShrink: 0, borderRadius: 4, overflow: 'hidden',
-                      border: p === pageIndex ? '2px solid var(--color-primary)' : '2px solid transparent',
-                      opacity: p === pageIndex ? 1 : 0.65,
-                    }}
-                  >
-                    <img
-                      src={pageThumb(p)}
-                      alt={`第 ${p + 1} 页`}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      loading="lazy"
-                      onError={e => { e.target.style.display = 'none'; }}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* 全部页面上下堆叠：进入视口懒加载原图，滚到哪看到哪 */}
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {Array.from({ length: pageCount }, (_, p) => (
@@ -495,7 +411,7 @@ export default function ImageDetailView({
         <div style={{ padding: '8px 12px' }}>
           <LightboxActions
             scene="search"
-            cur={currentImage}
+            cur={image}
             pixivCache={pixivCache}
             setPixivCache={setPixivCache}
             onAuthorWorks={onAuthorWorks}
