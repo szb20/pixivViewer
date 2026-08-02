@@ -147,6 +147,7 @@
   width: 100% !important;
   height: auto !important;
   overflow: visible !important;
+  position: relative;
 }
 
 .lightbox-slide--ugoira .gif-canvas {
@@ -160,14 +161,39 @@
   display: none !important;
 }
 
-.lightbox-slide--ugoira .gif-play-overlay,
-.lightbox-slide--ugoira .gif-loading-overlay,
-.lightbox-slide--ugoira .gif-progress-bar {
+.lightbox-slide--ugoira .gif-play-overlay {
+  position: absolute;
+  inset: 0;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
-.lightbox-slide--ugoira .gif-info {
-  display: none;
+.lightbox-slide--ugoira .gif-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-slide--ugoira .gif-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.15);
+  z-index: 3;
+}
+
+.lightbox-slide--ugoira .gif-progress-fill {
+  height: 100%;
+  background: rgba(255,255,255,0.7);
+  transition: none;
 }
 
 .lightbox-img-full {

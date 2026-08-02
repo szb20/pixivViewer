@@ -524,3 +524,45 @@ button {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* GIF/Ugoira 播放器通用样式 */
+.gif-canvas-wrap, .ugoira-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.gif-progress-bar, .ugoira-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.15);
+  z-index: 3;
+}
+
+.gif-progress-fill, .ugoira-progress-fill {
+  height: 100%;
+  background: rgba(255,255,255,0.7);
+  transition: none;
+}
+
+.gif-loading-overlay, .ugoira-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gif-play-overlay, .ugoira-play-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}

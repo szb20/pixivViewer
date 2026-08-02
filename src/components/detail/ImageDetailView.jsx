@@ -457,7 +457,7 @@ export default function ImageDetailView({
                   onSavePage={savePage}
                   onPageLoaded={handlePageLoaded}
                   onOpenLightbox={(page) => setLightboxIndex(page)}
-                  illustDataReady={illustData !== null}
+                  illustDataReady={illustData !== null && String(illustData.illust?.illustId) === String(image.illustId)}
                 />
               ))}
             </div>

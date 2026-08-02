@@ -295,7 +295,7 @@ export default function UgoiraPlayer({
       ref={containerRef}
       className={`ugoira-player ${playing ? 'playing' : ''} ${loaded ? 'loaded' : 'loading'} ${compact ? 'compact' : ''} ${className}`}
       style={{ width: displayWidth, maxWidth: '100%', ...style }}
-      onClick={loaded ? togglePlay : loadFrames}
+      onClick={loaded ? undefined : loadFrames}
     >
       <div className="ugoira-canvas-wrap" style={{ width: displayWidth, height: displayHeight }}>
         {/* 缩略图兜底：帧加载完成前始终显示卡片同款缩略图 */}
