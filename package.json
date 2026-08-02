@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.2",
     "gifenc": "^1.0.3",
     "https-proxy-agent": "^9.1.0",
@@ -21,6 +20,7 @@
   "devDependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
