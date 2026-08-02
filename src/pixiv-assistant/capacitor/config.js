@@ -22,7 +22,8 @@ export function configurePixiv(opts = {}) {
 
 const SETTINGS_KEY = 'pixiv_viewer_settings';
 
-async function defaultGetSettings() {
+/** 同步读取设置（渲染期可用；合并默认值） */
+export function getSettingsSync() {
   let stored = {};
   try {
     stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
@@ -32,8 +33,14 @@ async function defaultGetSettings() {
   return {
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
     pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
+    gridQuality: stored.gridQuality || 'thumb',       // 'mini' | 'thumb'
+    detailQuality: stored.detailQuality || 'original', // 'regular' | 'original'
     ...stored,
   };
+}
+
+async function defaultGetSettings() {
+  return getSettingsSync();
 }
 
 let _fsCache = null;

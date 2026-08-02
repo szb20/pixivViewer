@@ -16,8 +16,6 @@ export default function HeartIcon({ filled = false, className = '', onClick }) {
     <svg
       className={`heart-icon ${filled ? 'heart-icon--filled' : 'heart-icon--outline'} ${className}`}
       viewBox="0 0 24 24"
-      width="24"
-      height="24"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"

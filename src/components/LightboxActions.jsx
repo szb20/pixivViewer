@@ -24,19 +24,10 @@ const SCENE = {
   gallery: { like: true, author: false, pixiv: true, delete: true  },
 };
 
-export default function LightboxActions({
-  scene = 'chat',
-  cur,
-  pixivCache,
-  setPixivCache,
-  onDelete,
-  onAuthorWorks,
-  onLikeSaveAll,
-  index,
-}) {
-  const cfg = SCENE[scene] || SCENE.chat;
-
-  // 喜欢状态：优先读取实时 pixivCache，回退条目自带的 _liked（初始快照）
+/**
+ * 喜欢按钮 — 独立导出，用于灯箱左下角悬浮。
+ */
+export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll }) {
   const liked = cur?.illustId
     ? (pixivCache[getCompositeKey(cur)]?.liked || cur._liked || false)
     : false;
@@ -46,7 +37,6 @@ export default function LightboxActions({
     if (!cur?.illustId) return;
     const ck = getCompositeKey(cur);
     const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
-    // 乐观更新：立刻切换图标颜色，不等异步操作
     setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: !prevLiked, likedAt: Date.now() } }));
 
     const sf = window.api?.storageFacade;
@@ -57,7 +47,6 @@ export default function LightboxActions({
       return;
     }
 
-    // 1. 先切换喜欢状态（轻量 DB 操作，瞬完；Facade 内部已弹 toast）
     let result;
     try {
       result = await toggle(cur.illustId, cur._pageIndex ?? 0);
@@ -69,17 +58,37 @@ export default function LightboxActions({
     if (result.success) {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
     } else {
-      // 失败 → 回退乐观状态
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       showToast('操作失败');
       return;
     }
 
-    // 2. 点♥→后台保存全部页；取消♥→跳过保存
     if (result.liked && typeof onLikeSaveAll === 'function') {
       onLikeSaveAll(cur).catch(() => {});
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll]);
+
+  if (!cur?.illustId) return null;
+
+  return (
+    <button className="lightbox-dl-btn lightbox-icon-only" onClick={handleLike}>
+      <HeartIcon filled={liked} />
+    </button>
+  );
+}
+
+export default function LightboxActions({
+  scene = 'chat',
+  cur,
+  pixivCache,
+  setPixivCache,
+  onDelete,
+  onAuthorWorks,
+  onLikeSaveAll,
+  index,
+  noLike = false,
+}) {
+  const cfg = SCENE[scene] || SCENE.chat;
 
   const handleAuthor = useCallback((e) => {
     e.stopPropagation();
@@ -93,10 +102,8 @@ export default function LightboxActions({
   return (
     <>
       {/* 喜欢 */}
-      {cfg.like && cur.illustId && (
-        <button className="lightbox-dl-btn" onClick={handleLike}>
-          <HeartIcon filled={liked} /> 喜欢
-        </button>
+      {!noLike && cfg.like && cur.illustId && (
+        <LikeButton cur={cur} pixivCache={pixivCache} setPixivCache={setPixivCache} onLikeSaveAll={onLikeSaveAll} />
       )}
 
       {/* 作者作品 */}

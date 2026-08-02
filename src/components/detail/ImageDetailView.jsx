@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { proxyThumb, pixivOriginalUrl, pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import PageHeader from '../PageHeader.jsx';
-import LightboxActions from '../LightboxActions.jsx';
+import LightboxActions, { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
 import { parsePixivResults, allMediaFromRelated } from './helpers.js';
+import { getSettingsSync } from '../../pixiv-assistant/index.js';
+import { gridThumbUrl } from '../../utils/quality.js';
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
@@ -166,10 +168,13 @@ export default function ImageDetailView({
       } catch { /* 本地读取失败 → 回退网络下载 */ }
     }
 
-    // 2. 网络原图：illustData 地址优先，未就绪时从列表条目 URL 推导
+    // 2. 网络图片：按设置档位加载（regular=1200px / original=原图全分辨率）
     const imgs = illustData?.illust?.images || [];
     const baseForFallback = image?.thumbnailUrl || image?.mediumUrl || '';
-    const rawUrl = imgs[page]?.originalUrl || pixivOriginalUrl(baseForFallback, page) || '';
+    const useRegular = getSettingsSync().detailQuality === 'regular';
+    const rawUrl = useRegular
+      ? (imgs[page]?.url || pixivPageUrl(baseForFallback, page) || '')
+      : (imgs[page]?.originalUrl || pixivOriginalUrl(baseForFallback, page) || '');
     if (!rawUrl) return null;
 
     const loaded = await new Promise(resolve => {
@@ -313,11 +318,17 @@ export default function ImageDetailView({
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const items = [];
     for (let p = 0; p < totalPages; p++) {
-      // 已懒加载过的页优先用已加载原图，其余用 pixiv.re 按页推导直链
+      // 已懒加载过的页优先用已加载原图，其余按设置档位推导直链
       const cached = loadedPages[`${image.illustId}_${p}`];
+      const useRegular = getSettingsSync().detailQuality === 'regular';
+      const fallbackSrc = useRegular
+        ? (illustData?.illust?.images?.[p]?.url
+          || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p)
+          || pixivReUrl(String(image.illustId), p))
+        : pixivReUrl(String(image.illustId), p);
       items.push({
         type: isGif ? 'gif' : 'image',
-        src: cached?.url || pixivReUrl(String(image.illustId), p),
+        src: cached?.url || fallbackSrc,
         illustId: image.illustId,
         _pageIndex: p,
         _totalPages: totalPages,
@@ -416,6 +427,7 @@ export default function ImageDetailView({
             setPixivCache={setPixivCache}
             onAuthorWorks={onAuthorWorks}
             onLikeSaveAll={handleSaveAllOnLike}
+            noLike
           />
         </div>
 
@@ -451,7 +463,7 @@ export default function ImageDetailView({
                 >
                   <div className="media-card-thumb-wrap">
                     <img className="media-card-thumb"
-                      src={img.thumbnailUrl || img.mediumUrl}
+                      src={gridThumbUrl(img.thumbnailUrl || img.mediumUrl)}
                       alt={img.title}
                       loading="lazy"
                       onError={e => { e.target.style.display = 'none'; }}
@@ -490,6 +502,16 @@ export default function ImageDetailView({
           zIndex={10000}
         />
       )}
+
+      {/* 喜欢按钮 — 左下角悬浮 */}
+      <div className="detail-floating-like">
+        <LikeButton
+          cur={image}
+          pixivCache={pixivCache}
+          setPixivCache={setPixivCache}
+          onLikeSaveAll={handleSaveAllOnLike}
+        />
+      </div>
     </div>
   );
 }

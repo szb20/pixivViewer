@@ -288,6 +288,26 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* 图标专用圆形按钮（喜欢） */
+.lightbox-icon-only {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.lightbox-icon-only .heart-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
 /* 灯箱爱心按钮 */
 .lightbox-dl-btn .heart-icon {
   display: inline-block;

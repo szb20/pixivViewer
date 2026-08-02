@@ -235,3 +235,11 @@
   color: #fff;
   font-size: 10px;
 }
+
+/* 详情页左下角悬浮喜欢按钮 */
+.detail-floating-like {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom, 16px));
+  left: 16px;
+  z-index: 100;
+}

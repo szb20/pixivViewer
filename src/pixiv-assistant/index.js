@@ -10,7 +10,7 @@ export {
 export { PIXIV_BASE, PIXIV_RE, PIXIV_CACHE_TTL, RANKING_MODES, RANKING_MODE_NAMES, CACHE_DIR } from './core/constants.js';
 export { createPixivApi } from './core/pixivApi.js';
 
-export { configurePixiv, getSettings, saveSettings, getFS } from './capacitor/config.js';
+export { configurePixiv, getSettings, getSettingsSync, saveSettings, getFS } from './capacitor/config.js';
 export { PixivEntity } from './capacitor/entity.js';
 export { PixivRepository } from './capacitor/repository.js';
 export { FileStore } from './capacitor/fileStore.js';
