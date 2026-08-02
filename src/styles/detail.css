@@ -117,6 +117,16 @@
   transition: opacity 0.25s ease;
 }
 
+/* 堆叠页的主图：由图片自身比例撑起高度（不锁容器比例，避免裁剪/跳变） */
+.image-detail-main--flow {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: initial;
+}
+
 .image-detail-section-header {
   display: flex;
   align-items: center;

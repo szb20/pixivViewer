@@ -42,36 +42,31 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
   const thumb = image?.illustId
     ? pixivReUrl(String(image.illustId), page, 'thumb')
     : (image?.thumbnailUrl || '');
-  const ratio = (entry?.w && entry?.h)
-    ? `${entry.w} / ${entry.h}`
-    : (image?.width && image?.height) ? `${image.width} / ${image.height}` : null;
 
   return (
     <div
       ref={(node) => { wrapRef.current = node; registerRef?.(page, node); }}
       className="image-detail-hero"
       onClick={() => onOpenLightbox?.(page)}
-      style={ratio ? { aspectRatio: ratio } : { minHeight: 240 }}
     >
       {/* 缩略图模糊铺底（cover 填满） */}
       <img className="image-detail-bg" src={thumb} alt="" />
-      {/* 原图（懒加载完成后替换） */}
-      {entry?.url && !failed && (
+      {/* 主图：流式布局，宽 100% 高 auto，由图片自身比例撑起容器高度，完整显示不裁剪 */}
+      {entry?.url && !failed ? (
         <img
-          className="image-detail-main"
+          className="image-detail-main image-detail-main--flow"
           key={entry.url}
           src={entry.url}
           alt={`第 ${page + 1} 页`}
           onError={() => setFailed(true)}
         />
-      )}
-      {/* 加载中/失败：缩略图 cover 兜底，避免正方形缩略图显示为卡片形状 */}
-      {(!entry || failed) && (
+      ) : (
+        /* 加载中/失败：固定高度占位 + 缩略图 cover，避免方形缩略图撑出超高块 */
         <img
-          className="image-detail-main"
+          className="image-detail-main image-detail-main--flow"
           src={thumb}
           alt={`第 ${page + 1} 页`}
-          style={{ objectFit: 'cover' }}
+          style={{ height: 260, objectFit: 'cover' }}
         />
       )}
     </div>
