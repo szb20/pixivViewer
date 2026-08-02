@@ -11,6 +11,30 @@
   --ok: #4ade80;
 }
 
+/* llm-chat 搬运组件的 CSS 变量别名（让 lightbox 等样式直接生效） */
+:root {
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-hover: #242833;
+  --color-bg-white: var(--bg-panel);
+  --color-border: var(--border);
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-primary: var(--accent);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --z-lightbox: 10000;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-base: 13px;
+  --radius-sm: 8px;
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
 * {
   box-sizing: border-box;
 }

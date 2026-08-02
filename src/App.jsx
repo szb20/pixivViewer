@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
-import PreviewModal from './components/PreviewModal.jsx';
+import DetailView from './components/detail/DetailView.jsx';
 import DiscoverPage from './pages/DiscoverPage.jsx';
 import RankingPage from './pages/RankingPage.jsx';
 import BookmarksPage from './pages/BookmarksPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import GalleryPage from './pages/GalleryPage.jsx';
-import { storageFacade } from './pixiv-assistant/index.js';
+import { storageFacade, getCompositeKey } from './pixiv-assistant/index.js';
 import './index.css';
+import './styles/detail.css';
 
 // 开发期调试入口
 window.__pixivViewer = window.__pixivViewer || { storageFacade };
@@ -33,7 +34,46 @@ const TITLES = {
 export default function App() {
   const [tab, setTab] = useState('ranking');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [preview, setPreview] = useState(null);
+  const [detailImage, setDetailImage] = useState(null);
+  const [pixivCache, setPixivCache] = useState({});
+
+  // 启动时扫描相册/缓存元数据，用于"已保存绿点"与喜欢状态
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const all = await storageFacade.getAll();
+        if (cancelled || !Array.isArray(all)) return;
+        const patch = {};
+        for (const e of all) {
+          const ck = getCompositeKey({ illustId: e.illustId, _pageIndex: e.pageIndex ?? 0 });
+          patch[ck] = {
+            cached: e.state === 'cached' || e.state === 'saved',
+            saved: e.isSaved,
+            liked: e.isLiked,
+            illustId: e.illustId,
+          };
+        }
+        setPixivCache(patch);
+      } catch { /* 忽略 */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // 详情页打开时全屏接管
+  if (detailImage) {
+    return (
+      <>
+        <DetailView
+          image={detailImage}
+          pixivCache={pixivCache}
+          setPixivCache={setPixivCache}
+          onClose={() => setDetailImage(null)}
+        />
+        <ToastHost />
+      </>
+    );
+  }
 
   return (
     <div className="app">
@@ -43,17 +83,16 @@ export default function App() {
       </header>
 
       <main className="app-content">
-        {tab === 'discover' && <DiscoverPage onOpen={setPreview} />}
-        {tab === 'ranking' && <RankingPage onOpen={setPreview} />}
-        {tab === 'bookmarks' && <BookmarksPage onOpen={setPreview} />}
-        {tab === 'search' && <SearchPage onOpen={setPreview} />}
+        {tab === 'discover' && <DiscoverPage onOpen={setDetailImage} />}
+        {tab === 'ranking' && <RankingPage onOpen={setDetailImage} />}
+        {tab === 'bookmarks' && <BookmarksPage onOpen={setDetailImage} />}
+        {tab === 'search' && <SearchPage onOpen={setDetailImage} />}
         {tab === 'gallery' && <GalleryPage />}
       </main>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
-      {preview && <PreviewModal item={preview} onClose={() => setPreview(null)} />}
       <ToastHost />
     </div>
   );

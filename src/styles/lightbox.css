@@ -1,0 +1,323 @@
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-lightbox);
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  opacity: 1;
+  animation: lightboxIn 0.2s ease;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  touch-action: none;
+  /* 防止触摸手势穿透到背景页面 */
+}
+
+.lightbox-overlay.closing {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+/* 点击图片隐藏 UI 控件 */
+.lightbox-overlay .lightbox-close,
+.lightbox-overlay .lightbox-nav,
+.lightbox-overlay .lightbox-dl-btn,
+.lightbox-overlay .lightbox-link {
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.lightbox-overlay.hide-ui .lightbox-close,
+.lightbox-overlay.hide-ui .lightbox-nav,
+.lightbox-overlay.hide-ui .lightbox-dl-btn,
+.lightbox-overlay.hide-ui .lightbox-link {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 标题区域单独处理：移除 transition 避免滑动时闪烁，用 will-change 保持 GPU 层 */
+.lightbox-overlay .lightbox-info {
+  opacity: 1;
+  will-change: opacity;
+}
+
+.lightbox-overlay.hide-ui .lightbox-info {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 22px;
+  cursor: pointer;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.lightbox-nav:active {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-50%) scale(0.92);
+}
+
+.lightbox-prev {
+  left: 10px;
+}
+
+.lightbox-next {
+  right: 10px;
+}
+
+.lightbox-stage-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  width: 100%;
+  touch-action: none;
+}
+
+.lightbox-track {
+  display: flex;
+  width: 100%;
+  will-change: transform;
+  align-items: center;
+}
+
+.lightbox-slide {
+  min-width: 100%;
+  max-width: 100%;
+  max-height: 75vh;
+  opacity: 1 !important;
+  /* 防止手势冲突导致半透明 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lightbox-slide--ugoira {
+  overflow: visible;
+}
+
+.lightbox-slide--ugoira .gif-player {
+  border-radius: 0 !important;
+  background: transparent !important;
+  max-width: 100%;
+  overflow: visible !important;
+}
+
+.lightbox-slide--ugoira .gif-canvas-wrap {
+  width: 100% !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+.lightbox-slide--ugoira .gif-canvas {
+  width: 100% !important;
+  height: auto !important;
+  object-fit: contain;
+  border-radius: 0 !important;
+}
+
+.lightbox-slide--ugoira .gif-info {
+  display: none !important;
+}
+
+.lightbox-slide--ugoira .gif-play-overlay,
+.lightbox-slide--ugoira .gif-loading-overlay,
+.lightbox-slide--ugoira .gif-progress-bar {
+  z-index: 2;
+}
+
+.lightbox-slide--ugoira .gif-info {
+  display: none;
+}
+
+.lightbox-img-full {
+  max-width: 100vw;
+  max-height: 75vh;
+  object-fit: contain;
+}
+
+.lightbox-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px 16px calc(16px + env(safe-area-inset-bottom));
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+}
+
+.lightbox-info>* {
+  pointer-events: auto;
+}
+
+.lightbox-title {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lightbox-author {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+}
+
+.lightbox-size {
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-link {
+  color: rgba(255, 255, 255, 0.45);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 5px 8px;
+}
+
+/* ── 多页导航 ── */
+.lightbox-page-nav-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+
+.lightbox-page-nav-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 1;
+}
+
+.lightbox-page-nav-btn:disabled {
+  opacity: 0.15;
+  pointer-events: none;
+}
+
+.lightbox-page-nav-label {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
+
+/* ── 操作按钮：毛玻璃胶囊 ── */
+.lightbox-btns {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.lightbox-dl-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lightbox-dl-btn:active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* 灯箱爱心按钮 */
+.lightbox-dl-btn .heart-icon {
+  display: inline-block;
+  vertical-align: middle;
+  width: 16px;
+  height: 16px;
+  margin-right: 4px;
+}
+.lightbox-dl-btn .heart-icon--filled {
+  color: #ff4757;
+  filter: drop-shadow(0 0 4px rgba(255, 71, 87, 0.6));
+}
+.lightbox-dl-btn:active .heart-icon {
+  animation: heart-pop 0.3s ease;
+}
+
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.3); }
+  60%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+html.dark .lightbox-inline-nav {
+  color: #fff;
+}
+
+/* 移动端：隐藏灯箱左右箭头（用手势滑动即可） */
+@media (max-width: 768px) {
+  .lightbox-nav {
+    display: none;
+  }
+}

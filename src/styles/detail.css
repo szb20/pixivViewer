@@ -1,0 +1,227 @@
+/* ============ 详情页 / 页头 / 图片堆叠 / 相关推荐 ============ */
+
+.char-state-bar {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  height: 100dvh;
+  height: 100vh;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.char-state-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  position: relative;
+}
+
+/* ---- 页头 ---- */
+.page-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  min-height: 44px;
+  position: relative;
+}
+
+.chat-header-char {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.header-title-wrap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-block;
+  text-align: center;
+  pointer-events: none;
+}
+
+.header-title {
+  position: static;
+  transform: none;
+  left: auto;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.chat-back-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.chat-back-btn::before {
+  content: '';
+  display: block;
+  width: 9px;
+  height: 9px;
+  border-left: 2px solid var(--text-primary);
+  border-bottom: 2px solid var(--text-primary);
+  transform: rotate(45deg);
+  margin-left: 3px;
+}
+
+/* ---- 图片堆叠块 ---- */
+.image-detail-hero {
+  width: 100%;
+  background: var(--bg-secondary);
+  position: relative;
+  cursor: pointer;
+}
+
+.image-detail-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(20px) brightness(0.6);
+  z-index: 0;
+}
+
+.image-detail-main {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  z-index: 1;
+  transition: opacity 0.25s ease;
+}
+
+.image-detail-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 12px 8px;
+}
+
+.image-detail-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.image-detail-section-loading {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- 相关推荐网格 ---- */
+.pixiv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
+  padding: 0;
+}
+
+.pixiv-grid-item {
+  border-radius: 0;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: transform 0.15s;
+  display: flex;
+  flex-direction: column;
+}
+
+.pixiv-grid-item .media-card-thumb-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+
+.pixiv-grid-item .media-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---- 骨架屏 ---- */
+.pixiv-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 6px;
+}
+
+.pixiv-skeleton-item {
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.pixiv-skeleton-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  background: linear-gradient(90deg,
+    var(--bg-secondary) 25%,
+    #242833 50%,
+    var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: detail-shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes detail-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- GIF 角标 / 播放覆盖层 ---- */
+.gif-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.2s;
+  z-index: 2;
+}
+
+.gif-play-icon {
+  font-size: 48px;
+  color: rgba(255, 255, 255, 0.9);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.gif-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+}

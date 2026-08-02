@@ -1,0 +1,405 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import GifPlayer from './GifPlayer.jsx';
+import { useTouchGesture } from '../hooks/useTouchGesture.js';
+import '../styles/lightbox.css';
+
+/**
+ * 统一媒体灯箱 — 支持图片、Ugoira 动图、视频（抖音/iwara/B站/通用嵌入）。
+ *
+ * 触摸手势引擎由 useTouchGesture hook 统一管理，
+ * 根据媒体类型自动启用/禁用缩放手势（图片可缩放，视频/动图仅滑动翻页）。
+ *
+ * Props:
+ *   items        — { type, src?, title?, author?, ... }[]
+ *                   type: 'image' | 'gif' | 'douyin' | 'iwara' | 'bilibili' | 'video'
+ *   initialIndex — 初始显示的媒体索引
+ *   onClose      — () => void
+ *   onIndexChange— (index) => void
+ *   renderActions— (item, index) => ReactNode  消费者自定义操作按钮
+ *   disableZoom  — 强制禁用缩放手势（默认根据 type 自动判断）
+ *   zIndex       — 自定义 z-index（默认 10000）
+ */
+/** 视频播放器 — controls 播放 2s 后自动渐隐，点击画面重新显示 */
+function VideoPlayer({ src, poster, isCurrent, onRef }) {
+  const [showControls, setShowControls] = useState(true);
+  const hideTimer = useRef(null);
+  const elRef = useRef(null);
+
+  const scheduleHide = useCallback(() => {
+    clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setShowControls(false), 2000);
+  }, []);
+
+  const handlePlay = () => scheduleHide();
+  const handlePause = () => { clearTimeout(hideTimer.current); setShowControls(true); };
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (!showControls) {
+      setShowControls(true);
+      scheduleHide();
+    }
+  };
+
+  useEffect(() => {
+    onRef(elRef.current);
+    return () => onRef(null);
+  }, [onRef]);
+
+  useEffect(() => () => clearTimeout(hideTimer.current), []);
+
+  return (
+    <div className="video-player-wrapper" key={src}>
+      <video
+        ref={elRef}
+        className="video-direct-player"
+        src={src}
+        poster={poster}
+        autoPlay={isCurrent}
+        playsInline
+        controls={showControls}
+        onPlay={handlePlay}
+        onPause={handlePause}
+        onClick={handleClick}
+      />
+    </div>
+  );
+}
+
+export default function MediaLightbox({
+  items,
+  initialIndex = 0,
+  onClose,
+  onIndexChange,
+  renderActions,
+  disableZoom: forceDisableZoom,
+  zIndex = 10000,
+}) {
+  const [retryMap, setRetryMap] = useState({});
+  const videoRefs = useRef({});
+  const [iwaraQuality, setIwaraQuality] = useState('Source');
+
+  const {
+    overlayRef, trackRef, slideRefs,
+    index, closing, hideUI,
+    swipeOff, pinchScale, pinchPan, zoomTrans,
+    cur, isGif, hasPrev, hasNext,
+    handleTouchStart, handleTouchMove, handleTouchEnd,
+    handleClose, handleOverlayClick,
+    nav, navPage, findAdjacentPage,
+  } = useTouchGesture({
+    images: items,
+    initialIndex,
+    onClose,
+    onIndexChange,
+    disableZoom: forceDisableZoom,
+  });
+
+  const isVideoType = (t) => t === 'douyin' || t === 'iwara' || t === 'bilibili' || t === 'video';
+  const isImage = cur?.type === 'image';
+  const isVideo = isVideoType(cur?.type);
+
+  // ── 切换 slide 时暂停非当前视频 ──
+  useEffect(() => {
+    Object.entries(videoRefs.current).forEach(([i, el]) => {
+      if (Number(i) !== index && el && !el.paused) el.pause();
+    });
+  }, [index]);
+
+  // ── Body 滚动锁定（防止灯箱内触控影响背景页面） ──
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
+  // ── 切换 iwara 视频时重置画质选择 ──
+  useEffect(() => {
+    if (cur?.type === 'iwara') {
+      const t = setTimeout(() => setIwaraQuality(cur.selectedQuality || 'Source'), 0);
+      return () => clearTimeout(t);
+    }
+  }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── 主动预加载相邻图片（浏览器缓存预热，避免滑动时等待） ──
+  useEffect(() => {
+    for (let d = -2; d <= 2; d++) {
+      const idx = index + d;
+      if (idx < 0 || idx >= items.length) continue;
+      const item = items[idx];
+      if (item.type !== 'image') continue;
+      // 本地/缓存 URL 无需预热
+      if (item.src?.startsWith('blob:') || item.src?.startsWith('file:')) continue;
+      const img = new Image();
+      img.src = item.src;
+    }
+  }, [index, items]);
+
+  // ── 下载（仅图片） ──
+  const handleDownload = useCallback(() => {
+    if (!cur || !isImage) return;
+    const link = document.createElement('a');
+    link.href = cur.src;
+    link.download = cur.title || 'image';
+    link.click();
+  }, [cur, isImage]);
+
+  if (!cur) return null;
+
+  const trackStyle = {
+    transform: `translateX(calc(-${index * 100}% + ${swipeOff}px))`,
+    transition: swipeOff !== 0
+      ? 'none'
+      : 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)',
+  };
+
+  /** 渲染视频类内容（抖音 / iwara / B站 / 通用） */
+  function renderVideoContent(item, idx, isCurrent) {
+    switch (item.type) {
+      // ── 抖音视频 ──
+      case 'douyin': {
+        const vidSrc = item.localUrl || item.downloadUrl || item.url;
+        return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+      }
+
+      // ── iwara 视频 ──
+      case 'iwara':
+        if (item.noDirectDownload && item.embedUrl) {
+          return isCurrent ? (
+            <iframe
+              className="video-embed-iframe"
+              src={item.embedUrl}
+              title={item.title}
+              frameBorder="0"
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+              style={{ width: '100%', height: Math.min(450, window.innerHeight * 0.7) }}
+            />
+          ) : <div className="lightbox-slide-placeholder" />;
+        }
+        {
+          const qualities = item.availableQualities;
+          const qName = iwaraQuality;
+          const q = Array.isArray(qualities) ? qualities.find(qo => qo.name === qName) : null;
+          const vidSrc = (qName === 'Source' && item.localUrl)
+            ? item.localUrl
+            : (q?.view || item.localUrl || item.downloadUrl || item.url);
+          return (
+            <div className="iwara-video-wrapper">
+              <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />
+              {qualities?.length > 1 && (
+                <div className="quality-selector">
+                  {qualities.map(qo => (
+                    <button key={qo.name}
+                      className={'quality-btn' + (qo.name === qName ? ' active' : '')}
+                      onClick={e => { e.stopPropagation(); setIwaraQuality(qo.name); }}
+                    >
+                      {qo.name === 'Source' ? '原画' : qo.name + 'p'}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+      // ── Bilibili 视频 ──
+      case 'bilibili': {
+        // 优先本地缓存 blob URL（Capacitor 下载），其次 streamUrl（Electron 自定义协议），
+        // 再其次 playUrl（CDN 直链），最后 iframe 嵌入
+        if (item.localUrl) {
+          return <VideoPlayer src={item.localUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+        }
+        if (item.streamUrl) {
+          return <VideoPlayer src={item.streamUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+        }
+        if (item.playUrl) {
+          return <VideoPlayer src={item.playUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+        }
+        if (item.embedUrl) {
+          return isCurrent ? (
+            <iframe
+              className="video-embed-iframe"
+              src={item.embedUrl}
+              title={item.title}
+              frameBorder="0"
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+              style={{ width: '100%', height: Math.min(450, window.innerHeight * 0.7) }}
+            />
+          ) : <div className="lightbox-slide-placeholder" />;
+        }
+        return <div className="lightbox-slide-placeholder">B站视频</div>;
+      }
+
+      // ── 通用视频（YouTube 或其他嵌入） ──
+      case 'video':
+      default: {
+        if (item.embedUrl) {
+          return isCurrent ? (
+            <iframe
+              className="video-embed-iframe"
+              src={item.embedUrl}
+              title={item.title}
+              frameBorder="0"
+              allow="autoplay; encrypted-media; fullscreen"
+              allowFullScreen
+              style={{ width: '100%', height: Math.min(450, window.innerHeight * 0.7) }}
+            />
+          ) : <div className="lightbox-slide-placeholder" />;
+        }
+        {
+          const vidSrc = item.url;
+          return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+        }
+      }
+    }
+  }
+
+  /** 根据 type 渲染当前 slide 的内容 — 按图片类 / 视频类归类 */
+  function renderSlideContent(item, idx) {
+    const isCurrent = idx === index;
+
+    // 只渲染当前及前后各两张，其余用占位符避免带宽竞争
+    const loadable = Math.abs(idx - index) <= 2;
+    if (!loadable) {
+      return <div className="lightbox-slide-placeholder" />;
+    }
+
+    // ── 图片类 ──
+    if (item.type === 'image') {
+      return (
+        <img
+          ref={el => slideRefs.current[idx] = el}
+          className="lightbox-img-full"
+          src={item.src + (retryMap[idx] ? `?r=${retryMap[idx]}` : '')}
+          alt={item.title || ''}
+          draggable={false}
+          onError={() => setRetryMap(prev => ({ ...prev, [idx]: (prev[idx] || 0) + 1 }))}
+          loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
+          fetchpriority={idx === index ? 'high' : 'auto'}
+          style={{
+            width: '100%',
+            maxHeight: '75vh',
+            objectFit: 'contain',
+            ...(idx === index && zoomTrans
+              ? {
+                  transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
+                }
+              : {}),
+          }}
+        />
+      );
+    }
+
+    if (item.type === 'gif') {
+      return (
+        <div
+          ref={el => slideRefs.current[idx] = el}
+          style={{
+            width: '100%',
+            maxHeight: '75vh',
+            display: 'flex',
+            justifyContent: 'center',
+            ...(idx === index && zoomTrans
+              ? {
+                  transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
+                }
+              : {}),
+          }}
+        >
+          <GifPlayer
+            key={item.illustId || idx}
+            frames={item.frames || []}
+            _lazy={item._lazy}
+            illustId={item.illustId}
+            title={item.title}
+            author={item.author}
+            src={item.src}
+            thumbnailUrl={item.thumbnailUrl || item.mediumUrl}
+            style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+          />
+        </div>
+      );
+    }
+
+    // ── 视频类 ──
+    if (isVideoType(item.type)) {
+      return renderVideoContent(item, idx, isCurrent);
+    }
+
+    return <div className="lightbox-slide-placeholder" />;
+  }
+
+  const overlay = (
+    <div
+      ref={overlayRef}
+      className={`lightbox-overlay${isGif ? ' lightbox-overlay--gif' : ''}${isVideo ? ' video-lightbox-overlay' : ''}${closing ? ' closing' : ''}${hideUI ? ' hide-ui' : ''}`}
+      onClick={handleOverlayClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{ zIndex }}
+    >
+      <span className="lightbox-close" onClick={e => { e.stopPropagation(); handleClose(); }}>✕</span>
+
+      <div className="lightbox-stage-wrap" onClick={e => e.stopPropagation()}>
+        <div ref={trackRef} className="lightbox-track" style={trackStyle}>
+          {items.map((item, idx) => (
+            <div
+              key={idx}
+              className={`lightbox-slide${item.type === 'gif' ? ' lightbox-slide--ugoira' : ''}`}
+            >
+              {renderSlideContent(item, idx)}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 底部信息栏 */}
+      <div className="lightbox-info" onClick={e => e.stopPropagation()}>
+        {/* 多页导航 — 显示页码，按钮在无相邻页时变暗 */}
+        {cur._totalPages > 1 && (
+          <div className="lightbox-page-nav-top">
+            <button
+              className="lightbox-page-nav-btn"
+              style={findAdjacentPage(-1) < 0 ? { opacity: 0.25 } : undefined}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); navPage(-1); }}
+            >◀</button>
+            <span className="lightbox-page-nav-label">
+              p{(cur._pageIndex || 0) + 1}/{cur._totalPages}
+            </span>
+            <button
+              className="lightbox-page-nav-btn"
+              style={findAdjacentPage(1) < 0 ? { opacity: 0.25 } : undefined}
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); navPage(1); }}
+            >▶</button>
+          </div>
+        )}
+
+        <div className="lightbox-title">{cur.title || (isVideo ? '视频' : '未命名')}{cur.type === 'bilibili' && cur.duration ? ` · ${Math.floor(cur.duration / 60)}:${String(cur.duration % 60).padStart(2, '0')}` : ''}</div>
+        {!isVideo && cur.width > 0 && cur.height > 0 && (
+          <div className="lightbox-size">{cur.width} × {cur.height}px</div>
+        )}
+        {cur.author && <div className="lightbox-author">{cur.authorName || cur.author}</div>}
+
+        <div className="lightbox-btns">
+          {/* 消费者自定义操作按钮 */}
+          {renderActions?.(cur, index)}
+        </div>
+
+        {items.length > 1 && (
+          <span className="lightbox-page">{index + 1} / {items.length}</span>
+        )}
+      </div>
+    </div>
+  );
+
+  return createPortal(overlay, document.body);
+}
