@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "https-proxy-agent": "^9.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

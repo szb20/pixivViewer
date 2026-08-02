@@ -2,7 +2,11 @@ import { useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import heroImg from './assets/hero.png'
+import { storageFacade } from './pixiv-assistant/index.js'
 import './App.css'
+
+// 开发期调试入口：控制台可访问 storageFacade
+window.__pixivViewer = window.__pixivViewer || { storageFacade }
 
 function App() {
   const [count, setCount] = useState(0)

@@ -1,0 +1,194 @@
+/**
+ * Pixiv Repository — Entity ↔ IndexedDB 之间的映射器。
+ *
+ * 上层（StorageService / TransitionEngine）只和 Entity 打交道，
+ * 不知道 IndexedDB 的存在。
+ * 切换存储（IndexedDB → SQLite）只需改这个文件。
+ */
+import { PixivEntity } from './entity.js';
+import {
+  getMeta, putMeta, putMetaBatch, deleteMeta,
+  getAllMeta, getByStatePaginated, getLikedMetaPaginated,
+  getByIllustId, getCacheStats,
+} from './cacheDB.js';
+
+export class PixivRepository {
+  /**
+   * 保存 entity（新建或更新）。
+   * @param {PixivEntity} entity
+   */
+  async save(entity) {
+    const record = entity.toRecord();
+    await putMeta(record);
+  }
+
+  /**
+   * 批量保存。
+   * @param {PixivEntity[]} entities
+   */
+  async saveBatch(entities) {
+    const records = entities.map(e => e.toRecord());
+    await putMetaBatch(records);
+  }
+
+  /**
+   * 按 id 查找。
+   * @param {string} id — entity key (pixiv:{illustId}:{pageIndex})
+   * @returns {PixivEntity|null}
+   */
+  async find(id) {
+    let record = await getMeta(id);
+
+    // 兼容旧格式 key：pixiv_{id}_{page} / pixiv_{id}_g0 / pixiv_{id}（无后缀）
+    // 命中后迁移到新格式 key，避免旧数据在相册/喜欢/删除中 miss
+    if (!record && typeof id === 'string' && id.startsWith('pixiv:')) {
+      const parts = id.slice('pixiv:'.length).split(':');
+      const illustId = parts[0];
+      const pageIndex = parseInt(parts[1], 10) || 0;
+      const legacyKeys = [
+        `pixiv_${illustId}_${pageIndex}`,
+        `pixiv_${illustId}_g0`,
+        `pixiv_${illustId}`,
+      ];
+      for (const legacyKey of legacyKeys) {
+        if (legacyKey === id) continue;
+        const legacy = await getMeta(legacyKey);
+        if (legacy) {
+          const migrated = { ...legacy, cacheKey: id };
+          if (migrated.pageIndex == null) migrated.pageIndex = pageIndex;
+          // 旧 GIF 记录可能没有 type 字段，靠 _g0 后缀区分，迁移时补上
+          if (!migrated.type && (legacyKey.includes('_g0') || legacyKey.startsWith('ugoira_'))) {
+            migrated.type = 'gif';
+          }
+          await putMeta(migrated).catch(() => {});
+          await deleteMeta(legacyKey).catch(() => {});
+          record = migrated;
+          break;
+        }
+      }
+    }
+    return PixivEntity.fromRecord(record);
+  }
+
+  /**
+   * 按 illustId 查找所有页。
+   * @param {string} illustId
+   * @returns {PixivEntity[]}
+   */
+  async findByIllustId(illustId) {
+    const records = await getByIllustId(illustId);
+    return records.map(r => PixivEntity.fromRecord(r)).filter(Boolean);
+  }
+
+  /**
+   * 按状态分页查询。
+   * @param {'cached'|'saved'} state
+   * @param {number} offset
+   * @param {number} limit
+   * @returns {{ items: PixivEntity[], total: number }}
+   */
+  async listByState(state, offset = 0, limit = 50) {
+    const result = await getByStatePaginated(state, offset, limit);
+    return {
+      items: (result.items || []).map(r => PixivEntity.fromRecord(r)).filter(Boolean),
+      total: result.total || 0,
+    };
+  }
+
+  /**
+   * 按喜欢状态分页查询（likedAt > 0）。
+   * @param {number} offset
+   * @param {number} limit
+   * @returns {{ items: PixivEntity[], total: number }}
+   */
+  async listLiked(offset = 0, limit = 50) {
+    const result = await getLikedMetaPaginated(offset, limit);
+    return {
+      items: (result.items || []).map(r => PixivEntity.fromRecord(r)).filter(Boolean),
+      total: result.total || 0,
+    };
+  }
+
+  /**
+   * 删除 entity。
+   * @param {string} id
+   */
+  async delete(id) {
+    await deleteMeta(id);
+  }
+
+  /**
+   * 修改状态（TransitionEngine 专用）。
+   * 直接更新 state 字段，不加载整个 entity。
+   * @param {string} id
+   * @param {'cached'|'saved'} newState
+   */
+  async changeState(id, newState) {
+    const record = await getMeta(id);
+    if (!record) throw new Error(`entity_not_found: ${id}`);
+    record.state = newState;
+    // 保留旧字段兼容旧代码
+    record.saved = newState === 'saved' ? 1 : 0;
+    await putMeta(record);
+  }
+
+  /**
+   * 更新 flags。
+   * @param {string} id
+   * @param {object} flags — 要合并的 flags
+   */
+  async updateFlags(id, flags) {
+    const record = await getMeta(id);
+    if (!record) return;
+    record.flags = { ...(record.flags || {}), ...flags };
+    await putMeta(record);
+  }
+
+  /**
+   * 切换喜欢状态。
+   * @param {string} id
+   * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
+   */
+  async toggleLike(id) {
+    const record = await getMeta(id);
+    if (!record) {
+      // 不存在 → 建轻记录
+      const parts = id.replace('pixiv:', '').split(':');
+      const illustId = parts[0];
+      const pageIndex = parseInt(parts[1], 10) || 0;
+      const now = Date.now();
+      const lightRecord = {
+        cacheKey: id,
+        illustId,
+        pageIndex,
+        state: 'cached',
+        likedAt: now,
+        cachedAt: now,
+      };
+      await putMeta(lightRecord);
+      return { success: true, liked: true, likedAt: now };
+    }
+
+    const wasLiked = (record.likedAt || 0) > 0;
+    record.likedAt = wasLiked ? 0 : Date.now();
+    await putMeta(record);
+    return { success: true, liked: !wasLiked, likedAt: record.likedAt };
+  }
+
+  /**
+   * 统计信息。
+   * @returns {{ total: number, saved: number, auto: number, totalSize: number }}
+   */
+  async stats() {
+    return await getCacheStats();
+  }
+
+  /**
+   * 获取所有 entity（全量扫描，仅用于迁移/清理）。
+   * @returns {PixivEntity[]}
+   */
+  async getAll() {
+    const records = await getAllMeta();
+    return records.map(r => PixivEntity.fromRecord(r)).filter(Boolean);
+  }
+}

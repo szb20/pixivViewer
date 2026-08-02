@@ -1,0 +1,86 @@
+/**
+ * Pixiv 模块配置 — 支持依赖注入，与宿主应用解耦。
+ *
+ * 允许主应用注入 settings 和 storage 适配器（configurePixiv），
+ * 未注入时使用内置默认实现：
+ * - getSettings: localStorage（pixiv_viewer_settings），支持 VITE_PIXIV_COOKIE 环境变量
+ * - getFS: Capacitor Filesystem（原生环境），非原生环境返回 null
+ */
+let _getSettings = null;
+let _getFS = null;
+
+/**
+ * 配置 Pixiv 模块的适配器。
+ * @param {Object} opts
+ * @param {Function} [opts.getSettings] - 返回 settings 对象的异步函数
+ * @param {Function} [opts.getFS] - 返回 Capacitor Filesystem 对象的异步函数
+ */
+export function configurePixiv(opts = {}) {
+  if (opts.getSettings) _getSettings = opts.getSettings;
+  if (opts.getFS) _getFS = opts.getFS;
+}
+
+const SETTINGS_KEY = 'pixiv_viewer_settings';
+
+async function defaultGetSettings() {
+  let stored = {};
+  try {
+    stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+  } catch {
+    stored = {};
+  }
+  return {
+    proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
+    pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
+    ...stored,
+  };
+}
+
+let _fsCache = null;
+
+async function defaultGetFS() {
+  if (_fsCache !== null) return _fsCache;
+  const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
+  if (!isNative) {
+    _fsCache = null;
+    return null;
+  }
+  try {
+    const { Filesystem } = await import('@capacitor/filesystem');
+    _fsCache = { plugin: Filesystem };
+  } catch {
+    _fsCache = null;
+  }
+  return _fsCache;
+}
+
+/**
+ * 获取 settings 对象。
+ * 已通过 configurePixiv 注入则使用注入版本，否则使用默认实现。
+ */
+export async function getSettings() {
+  if (_getSettings) return _getSettings();
+  return defaultGetSettings();
+}
+
+/** 保存 settings（localStorage）。 */
+export async function saveSettings(s) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 获取 Capacitor Filesystem 对象（{ plugin } 形态）。
+ * 已通过 configurePixiv 注入则使用注入版本，否则使用默认实现。
+ */
+export async function getFS() {
+  if (_getFS) return _getFS();
+  try {
+    return await defaultGetFS();
+  } catch {
+    return null;
+  }
+}
