@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
@@ -13,15 +13,17 @@ import { runBackHandlers } from './utils/backHandler.js';
 import './index.css';
 import './styles/detail.css';
 
+const scrollStore = { top: 0 };
+
 // 开发期调试入口
 window.__pixivViewer = window.__pixivViewer || { storageFacade };
 
 const TABS = [
-  { key: 'discover', label: '推荐', icon: '🧭' },
-  { key: 'ranking', label: '排行', icon: '🏆' },
-  { key: 'bookmarks', label: '收藏', icon: '❤️' },
-  { key: 'search', label: '搜索', icon: '🔍' },
-  { key: 'gallery', label: '相册', icon: '🖼️' },
+  { key: 'discover', label: '推荐' },
+  { key: 'ranking', label: '排行' },
+  { key: 'bookmarks', label: '收藏' },
+  { key: 'search', label: '搜索' },
+  { key: 'gallery', label: '相册' },
 ];
 
 const TITLES = {
@@ -36,6 +38,18 @@ export default function App() {
   const [tab, setTab] = useState('ranking');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailImage, setDetailImage] = useState(null);
+
+  const openDetail = (img) => {
+    scrollStore.top = document.querySelector('.app-content')?.scrollTop || 0;
+    setDetailImage(img);
+  };
+  const closeDetail = () => {
+    setDetailImage(null);
+    requestAnimationFrame(() => {
+      const el = document.querySelector('.app-content');
+      if (el) el.scrollTop = scrollStore.top;
+    });
+  };
   const [pixivCache, setPixivCache] = useState({});
 
   // Android 系统返回（边缘滑动/返回键）：先走应用内层级，最后才退出 App
@@ -46,8 +60,8 @@ export default function App() {
       try {
         const { App } = await import('@capacitor/app');
         const listener = await App.addListener('backButton', (event) => {
-          // 注册监听器即接管返回行为（默认不再退出/后退）
-          if (runBackHandlers()) return; // 详情/弹窗等已消费
+          event.preventDefault?.();
+          if (runBackHandlers()) return;
           if (event.canGoBack) {
             window.history.back();
           } else {
@@ -83,20 +97,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // 详情页打开时全屏接管
-  if (detailImage) {
-    return (
-      <>
-        <DetailView
-          image={detailImage}
-          pixivCache={pixivCache}
-          setPixivCache={setPixivCache}
-          onClose={() => setDetailImage(null)}
-        />
-        <ToastHost />
-      </>
-    );
-  }
+  const likedSet = useMemo(() => {
+    const s = new Set();
+    for (const [key, val] of Object.entries(pixivCache)) {
+      if (val?.liked) s.add(key);
+    }
+    return s;
+  }, [pixivCache]);
 
   return (
     <div className="app">
@@ -106,16 +113,27 @@ export default function App() {
       </header>
 
       <main className="app-content">
-        {tab === 'discover' && <DiscoverPage onOpen={setDetailImage} onOpenSettings={() => setSettingsOpen(true)} />}
-        {tab === 'ranking' && <RankingPage onOpen={setDetailImage} />}
-        {tab === 'bookmarks' && <BookmarksPage onOpen={setDetailImage} onOpenSettings={() => setSettingsOpen(true)} />}
-        {tab === 'search' && <SearchPage onOpen={setDetailImage} />}
-        {tab === 'gallery' && <GalleryPage />}
+        {tab === 'discover' && <DiscoverPage onOpen={openDetail} onOpenSettings={() => setSettingsOpen(true)} likedSet={likedSet} />}
+        {tab === 'ranking' && <RankingPage onOpen={openDetail} likedSet={likedSet} />}
+        {tab === 'bookmarks' && <BookmarksPage onOpen={openDetail} onOpenSettings={() => setSettingsOpen(true)} likedSet={likedSet} />}
+        {tab === 'search' && <SearchPage onOpen={openDetail} likedSet={likedSet} />}
+        {tab === 'gallery' && <GalleryPage likedSet={likedSet} />}
       </main>
 
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* 详情页 — 全屏叠加层，不卸载下方 tab 页面 */}
+      {detailImage && (
+        <DetailView
+          image={detailImage}
+          pixivCache={pixivCache}
+          setPixivCache={setPixivCache}
+          onClose={closeDetail}
+        />
+      )}
+
       <ToastHost />
     </div>
   );

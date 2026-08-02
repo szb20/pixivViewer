@@ -5,8 +5,7 @@
  * 从 scripts/pixiv-proxy.mjs 提取的 Pixiv 专用部分。
  */
 import https from 'node:https';
-import { HttpsProxyAgent } from 'https-proxy-agent';
-import { getProxyUrl, createApiProxy, createImageProxy } from './proxy-utils.mjs';
+import { getProxyUrl, createApiProxy, createImageProxy, createAgentHolder } from './proxy-utils.mjs';
 
 /** 统一错误处理：记录日志 + 返回 502 */
 function proxyError(req, res, err, context = '') {
@@ -17,6 +16,8 @@ function proxyError(req, res, err, context = '') {
     console.error(`      代理地址: ${getProxyUrl()}`);
   } else if (msg.includes('ETIMEOUT') || msg.includes('timeout')) {
     console.error(`   ⚠️ [proxy] ${context}代理请求超时`);
+  } else {
+    console.warn(`   ⚠️ [proxy] ${context}上游连接失败: ${msg}`);
   }
   if (!res.headersSent) res.writeHead(502).end();
 }
@@ -24,8 +25,25 @@ function proxyError(req, res, err, context = '') {
 /** /pixiv-img/*, /pixiv-thumb/*, /pixiv-zip/* → i.pixiv.re / pixiv.re */
 export function pixivImageProxy() {
   const proxyUrl = getProxyUrl();
-  const imgAgent = new HttpsProxyAgent(proxyUrl);
+  const holder = createAgentHolder(proxyUrl);
   const imgHeaders = { Referer: 'https://www.pixiv.net/' };
+
+  const doRequest = (url, headers, agent) => new Promise((ok, fail) => {
+    const r = https.request(url, { headers, agent }, (p) => ok(p));
+    r.on('error', fail);
+    r.end();
+  });
+
+  /** 连接级失败时换全新 Agent 重试一次，吸收 Clash/Pixiv 的间歇性断连 */
+  const withRetry = async (fn, context) => {
+    try {
+      return await fn(holder.get());
+    } catch (err) {
+      console.warn(`   ⚠️ [proxy] ${context} 上游连接失败: ${err.message || err}，正在重试...`);
+      holder.reset();
+      return await fn(holder.get());
+    }
+  };
 
   return {
     /** /pixiv-img/... → i.pixiv.re 或 pixiv.re（需处理重定向） */
@@ -33,38 +51,30 @@ export function pixivImageProxy() {
       const pathPart = req.url.slice(1);
       // c/ 前缀也走 i.pixiv.re（缩略图裁剪路径）
       const isFullPath = /^(img[-/]|c\/)/.test(pathPart);
-      if (isFullPath) {
-        const r = https.request(
-          `https://i.pixiv.re/${pathPart}`,
-          { headers: imgHeaders, agent: imgAgent },
-          (p) => {
+      (async () => {
+        try {
+          if (isFullPath) {
+            const p = await withRetry((agent) => doRequest(`https://i.pixiv.re/${pathPart}`, imgHeaders, agent), 'pixiv-img');
             // 图片可长缓存：滚动浏览网格/回看时浏览器直接命中缓存，避免重复下载
             res.writeHead(p.statusCode, { ...p.headers, 'Cache-Control': 'public, max-age=604800' });
             p.pipe(res);
-          },
-        );
-        r.on('error', (err) => proxyError(req, res, err, 'pixiv-img'));
-        r.end();
-      } else {
-        const baseUrl = `https://pixiv.re/${pathPart}`;
-        const doGet = (url) =>
-          new Promise((ok, fail) => {
-            https.get(url, { headers: imgHeaders, agent: imgAgent }, (r) => ok(r)).on('error', fail);
-          });
-        (async () => {
-          try {
-            let r = await doGet(baseUrl);
+          } else {
+            const baseUrl = `https://pixiv.re/${pathPart}`;
+            const doGet = (url, agent) => new Promise((ok, fail) => {
+              https.get(url, { headers: imgHeaders, agent }, (r) => ok(r)).on('error', fail);
+            });
+            let r = await withRetry((agent) => doGet(baseUrl, agent), 'pixiv-img');
             if ([301, 302, 307, 308].includes(r.statusCode) && r.headers.location) {
               const redirect = new URL(r.headers.location, baseUrl).href;
-              r = await doGet(redirect);
+              r = await withRetry((agent) => doGet(redirect, agent), 'pixiv-img-redirect');
             }
             res.writeHead(r.statusCode, { ...r.headers, 'Cache-Control': 'public, max-age=604800' });
             r.pipe(res);
-          } catch (err) {
-            proxyError(req, res, err, 'pixiv-img-redirect');
           }
-        })();
-      }
+        } catch (err) {
+          proxyError(req, res, err, isFullPath ? 'pixiv-img' : 'pixiv-img-redirect');
+        }
+      })();
     },
 
     /** /pixiv-thumb/... → i.pixiv.re */
@@ -76,17 +86,19 @@ export function pixivImageProxy() {
     /** /pixiv-zip/... → 原始 ZIP（Ugoira 动图） */
     zip: (req, res) => {
       const targetUrl = decodeURIComponent(req.url.slice(1));
-      const r = https.request(
-        targetUrl,
-        { headers: { Referer: 'https://www.pixiv.net/', 'User-Agent': 'Mozilla/5.0' }, agent: imgAgent },
-        (p) => {
+      (async () => {
+        try {
+          const p = await withRetry(
+            (agent) => doRequest(targetUrl, { Referer: 'https://www.pixiv.net/', 'User-Agent': 'Mozilla/5.0' }, agent),
+            'pixiv-zip',
+          );
           const headers = { ...p.headers, 'Access-Control-Allow-Origin': '*' };
           res.writeHead(p.statusCode, headers);
           p.pipe(res);
-        },
-      );
-      r.on('error', (err) => proxyError(req, res, err, 'pixiv-zip'));
-      r.end();
+        } catch (err) {
+          proxyError(req, res, err, 'pixiv-zip');
+        }
+      })();
     },
   };
 }

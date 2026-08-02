@@ -37,7 +37,6 @@ export default function GalleryPage() {
 
   return (
     <div className="page">
-      <p className="page-desc">已下载到相册的作品（共 {items.length} 张已加载）</p>
       {loading && items.length === 0 && <div className="hint">加载中...</div>}
       {!loading && items.length === 0 && (
         <div className="error-box">相册为空 — 在推荐/排行/搜索中浏览作品会自动下载</div>

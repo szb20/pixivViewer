@@ -11,6 +11,14 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
   const stackRef = useRef([initialImage]);
   const handleBackRef = useRef(null);
 
+  // 外部 prop 变化（从列表/推荐直接打开新作品）→ 重置栈
+  useEffect(() => {
+    if (initialImage?.illustId !== stackRef.current[stackRef.current.length - 1]?.illustId) {
+      stackRef.current = [initialImage];
+      setImage(initialImage);
+    }
+  }, [initialImage?.illustId]);
+
   const handleSelect = (img) => {
     if (!img) return;
     stackRef.current.push(img);
@@ -34,12 +42,14 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
   }, []);
 
   return (
-    <ImageDetailView
-      image={image}
-      onBack={handleBack}
-      onSelectImage={handleSelect}
-      pixivCache={pixivCache}
-      setPixivCache={setPixivCache}
-    />
+    <div className="detail-overlay">
+      <ImageDetailView
+        image={image}
+        onBack={handleBack}
+        onSelectImage={handleSelect}
+        pixivCache={pixivCache}
+        setPixivCache={setPixivCache}
+      />
+    </div>
   );
 }

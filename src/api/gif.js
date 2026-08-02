@@ -8,19 +8,28 @@
 import JSZip from 'jszip';
 import { browserFetch } from './pixiv.js';
 import {
-  PixivEntity, PixivRepository, getFS, safeFileName, CACHE_DIR,
+  PixivEntity, PixivRepository, getFS, getSettings, safeFileName, CACHE_DIR, ensureDirectory,
 } from '../pixiv-assistant/index.js';
 
 const cache = new Map(); // illustId -> { frames, meta }
 const repo = new PixivRepository();
+
+async function getPixivCookie() {
+  const s = await getSettings();
+  return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
+}
 
 export async function fetchUgoiraFrames(illustId, onProgress) {
   const id = String(illustId);
   const cached = cache.get(id);
   if (cached) return cached;
 
+  const cookie = await getPixivCookie();
+  const h = {};
+  if (cookie) h['Cookie'] = `PHPSESSID=${cookie}`;
+
   onProgress?.(5);
-  const metaResp = await browserFetch(`/ajax/illust/${id}/ugoira_meta`, { skipCookie: false });
+  const metaResp = await browserFetch(`/ajax/illust/${id}/ugoira_meta`, { headers: h });
   const body = metaResp?.body;
   if (!body?.originalSrc || !body?.frames?.length) {
     throw new Error(body?.error_message || 'GIF 元数据未找到');
@@ -152,7 +161,7 @@ export async function saveGifToAlbum(item, onProgress) {
       .slice(0, 200);
 
     // 写文件（DOCUMENTS/TeyvatWhisper 相册目录）
-    await FS.plugin.mkdir({ path: CACHE_DIR, directory: 'DOCUMENTS', recursive: true }).catch(() => {});
+    await ensureDirectory(FS, CACHE_DIR, 'DOCUMENTS');
     await FS.plugin.writeFile({ path: `${CACHE_DIR}/${gifFileName}`, data: base64, directory: 'DOCUMENTS' });
 
     // 写元数据（动图统一存 page 0）

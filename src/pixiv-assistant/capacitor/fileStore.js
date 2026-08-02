@@ -10,6 +10,38 @@ import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
 import { safeFileName } from '../core/utils.js';
 
+/** 本会话已确认存在的目录（directoryType:dir），避免每次保存都重复 mkdir */
+const ensuredDirs = new Set();
+
+/**
+ * 确保目录存在（幂等）。
+ * Capacitor Filesystem 在 Android 上对已存在的目录会报 OS-PLUG-FILE-0010
+ * （即使传了 recursive: true），这里把「已存在」视为成功并缓存到会话集合，
+ * 避免每次保存都重复 mkdir / 刷错误日志。
+ * @param {{ plugin: import('@capacitor/filesystem').FilesystemPlugin }} FS
+ * @param {string} dir
+ * @param {string} dirType
+ * @returns {Promise<boolean>}
+ */
+export async function ensureDirectory(FS, dir, dirType) {
+  const key = `${dirType}:${dir}`;
+  if (ensuredDirs.has(key)) return true;
+  try {
+    await FS.plugin.mkdir({ path: dir, directory: dirType, recursive: true });
+    ensuredDirs.add(key);
+    return true;
+  } catch (err) {
+    const message = err?.message || String(err);
+    const alreadyExists = err?.code === 'OS-PLUG-FILE-0010' || /already exists/i.test(message);
+    if (alreadyExists) {
+      ensuredDirs.add(key);
+      return true;
+    }
+    console.warn('[ensureDirectory] 无法创建目录，继续尝试写入:', dir, message);
+    return false;
+  }
+}
+
 export class FileStore {
   /**
    * 保存文件（从 base64 数据写入文件系统）。
@@ -26,9 +58,7 @@ export class FileStore {
       if (!entity?.fileName) { console.error('[FileStore.save] entity.fileName 为空', entity); return false; }
       const targetState = state || entity.state;
       const { dir, dirType } = this._resolveDir(targetState);
-      await FS.plugin.mkdir({ path: dir, directory: dirType, recursive: true }).catch((err) => {
-        console.error('[FileStore.save] mkdir 失败:', dir, err?.message || err);
-      });
+      await ensureDirectory(FS, dir, dirType);
       await FS.plugin.writeFile({ path: `${dir}/${entity.fileName}`, data, directory: dirType });
       return true;
     } catch (e) {
@@ -85,7 +115,7 @@ export class FileStore {
       if (!raw) return false;
 
       const data = typeof raw === 'string' ? raw : raw.data || '';
-      await FS.plugin.mkdir({ path: dstDir, directory: dstType, recursive: true }).catch(() => {});
+      await ensureDirectory(FS, dstDir, dstType);
       await FS.plugin.writeFile({ path: `${dstDir}/${entity.fileName}`, data, directory: dstType });
       return true;
     } catch {

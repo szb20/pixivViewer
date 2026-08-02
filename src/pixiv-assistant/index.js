@@ -14,6 +14,7 @@ export { configurePixiv, getSettings, getSettingsSync, saveSettings, getFS } fro
 export { PixivEntity } from './capacitor/entity.js';
 export { PixivRepository } from './capacitor/repository.js';
 export { FileStore } from './capacitor/fileStore.js';
+export { ensureDirectory } from './capacitor/fileStore.js';
 export { TransitionEngine } from './capacitor/transitionEngine.js';
 export { PixivStorageService } from './capacitor/storageService.js';
 export { NetworkStore } from './capacitor/networkStore.js';

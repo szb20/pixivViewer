@@ -310,17 +310,19 @@
 
 .lightbox-icon-only .heart-icon {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   margin: 0;
   flex-shrink: 0;
 }
 
-/* 灯箱爱心按钮 — 填充/动画 */
-.lightbox-dl-btn .heart-icon--filled,
-.lightbox-icon-only .heart-icon--filled {
+/* 灯箱爱心按钮 — 颜色/动画 */
+.lightbox-icon-only .heart-icon--liked {
   color: #ff4757;
   filter: drop-shadow(0 0 4px rgba(255, 71, 87, 0.6));
+}
+.lightbox-icon-only .heart-icon--neutral {
+  color: rgba(255, 255, 255, 0.55);
 }
 .lightbox-dl-btn:active .heart-icon,
 .lightbox-icon-only:active .heart-icon {

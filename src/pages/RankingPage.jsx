@@ -17,7 +17,7 @@ const MODES = [
 // 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
 const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
 
-export default function RankingPage({ onOpen }) {
+export default function RankingPage({ onOpen, likedSet }) {
   const [category, setCategory] = useState('daily');
   const [r18, setR18] = useState(true);
   const [items, setItems] = useState([]);
@@ -26,6 +26,7 @@ export default function RankingPage({ onOpen }) {
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(1);
+  const sentinelRef = useRef(null);
   const saved = useSavedSet();
   const mode = r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category;
 
@@ -48,6 +49,17 @@ export default function RankingPage({ onOpen }) {
   }, [mode]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // 哨兵触底自动加载
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && hasMore && !loadingMore) load(true);
+    }, { rootMargin: '200px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loading, loadingMore, load]);
 
   const handleCategory = (cat) => {
     // 选 R18G 时自动开 R18；选无 R18 档的分类时自动关
@@ -80,14 +92,13 @@ export default function RankingPage({ onOpen }) {
             : { marginLeft: 'auto' }}
         >{r18 ? 'R18' : '公开'}</button>
       </div>
-      {loading && <div className="skeleton-grid">{[...Array(4)].map((_, i) => <div key={i} className="skeleton-item" />)}</div>}
       {error && <div className="error-box">{error}</div>}
-      <ImageGrid items={items} savedSet={saved} onOpen={onOpen} />
-      {!loading && items.length > 0 && (
-        <button className="load-more" disabled={loadingMore || !hasMore} onClick={() => load(true)}>
-          {loadingMore ? '加载中...' : (hasMore ? '加载更多' : '没有更多了')}
-        </button>
+      <ImageGrid items={items} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+      {!loading && hasMore && (
+        <div ref={sentinelRef} style={{ height: 1 }} />
       )}
+      {loadingMore && <div className="hint">加载中...</div>}
+      {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
     </div>
   );
 }

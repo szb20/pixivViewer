@@ -10,7 +10,8 @@ export function registerBackHandler(fn) {
 }
 
 export function runBackHandlers() {
-  for (const fn of [...handlers]) {
+  // 后注册先执行（LIFO），让最近打开的（灯箱/弹窗）优先消费返回事件
+  for (const fn of [...handlers].reverse()) {
     if (fn()) return true;
   }
   return false;

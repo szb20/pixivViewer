@@ -64,7 +64,7 @@ export function pixivPageUrl(baseUrl, page) {
 
   // 匹配日期路径 + illustId（从各种 URL 格式中提取）
   // 日期格式: YYYY/MM/DD/HH/MM/SS (6组)
-  const match = baseUrl.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)_p0_/);
+  const match = baseUrl.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)_/);
   if (match) {
     const datePath = match[1];
     const illustId = match[2];
@@ -73,10 +73,11 @@ export function pixivPageUrl(baseUrl, page) {
     return result;
   }
 
-  // 兜底
-  const idMatch = baseUrl.match(/(\d+)/);
-  const fallback = pixivReUrl(idMatch ? idMatch[1] : '', page);
-  console.log('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
+  // 兜底：从 URL 末尾提取最长连续数字作为 illustId
+  const parts = baseUrl.match(/\/(\d{7,})(?:_|\.|$)/);
+  const idMatch = parts ? parts[1] : baseUrl.match(/(\d+)/)?.[1];
+  const fallback = pixivReUrl(idMatch || '', page);
+  if (!idMatch) console.log('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
   return fallback;
 }
 

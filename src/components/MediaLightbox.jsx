@@ -279,7 +279,7 @@ export default function MediaLightbox({
           draggable={false}
           onError={() => setRetryMap(prev => ({ ...prev, [idx]: (prev[idx] || 0) + 1 }))}
           loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
-          fetchpriority={idx === index ? 'high' : 'auto'}
+      fetchPriority={idx === index ? 'high' : 'auto'}
           style={{
             width: '100%',
             maxHeight: '75vh',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { proxyThumb, pixivOriginalUrl, pixivReUrl } from '../../pixiv-assistant/core/utils.js';
+import { proxyThumb, pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import PageHeader from '../PageHeader.jsx';
 import LightboxActions, { LikeButton } from '../LightboxActions.jsx';
@@ -8,21 +8,25 @@ import UgoiraPlayer from '../UgoiraPlayer.jsx';
 import { parsePixivResults, allMediaFromRelated } from './helpers.js';
 import { getSettingsSync } from '../../pixiv-assistant/index.js';
 import { gridThumbUrl } from '../../utils/quality.js';
+import { registerBackHandler } from '../../utils/backHandler.js';
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
  * 进入视口时触发自动保存并懒加载原图（本地相册优先 → 网络原图），
  * 原图就绪前用缩略图模糊铺底；点击打开灯箱。
  */
-function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSavePage, onPageLoaded, onOpenLightbox }) {
+function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSavePage, onPageLoaded, onOpenLightbox, illustDataReady }) {
   const wrapRef = useRef(null);
   const [entry, setEntry] = useState(null); // { url, w, h }
   const [failed, setFailed] = useState(false);
+  const loadedRef = useRef(false); // 已成功加载过则跳过重试
 
   // 进入视口 → 自动保存该页 + 懒加载原图
+  // illustDataReady 变化时重试未成功加载的页面（本地文件缺失 + 网络 URL 需 illustData）
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    if (loadedRef.current) return;
     let cancelled = false;
     let saved = false;
     const io = new IntersectionObserver(([e]) => {
@@ -33,17 +37,19 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
       }
       loadOriginal(image?.illustId, page).then(res => {
         if (cancelled) return;
-        if (res?.url) { setEntry(res); setFailed(false); onPageLoaded?.(page, res); }
-        else setFailed(true);
+        if (res?.url) { setEntry(res); setFailed(false); loadedRef.current = true; onPageLoaded?.(page, res); }
+        else if (illustDataReady) setFailed(true); // illustData 就绪仍失败 → 真失败
+        // illustData 未就绪 → 静默等待下次 retry
       });
-    }, { root: rootRef?.current || null, rootMargin: '400px 0px' }); // 以滚动容器为根，提前 400px 预加载
+    }, { root: rootRef?.current || null, rootMargin: '400px 0px' });
     io.observe(el);
     return () => { cancelled = true; io.disconnect(); };
-  }, [image?.illustId, page, rootRef, loadOriginal, onSavePage, onPageLoaded]);
+  }, [image?.illustId, page, rootRef, loadOriginal, onSavePage, onPageLoaded, illustDataReady]);
 
-  const thumb = image?.illustId
-    ? pixivReUrl(String(image.illustId), page, 'thumb')
-    : (image?.thumbnailUrl || '');
+  // 第 0 页：直接用列表传来的真缩略图；其它页：等 illustData 就绪后再显示
+  const thumb = page === 0
+    ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0, 'thumb'))
+    : '';
 
   return (
     <div
@@ -51,10 +57,8 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
       className="image-detail-hero"
       onClick={() => onOpenLightbox?.(page)}
     >
-      {/* 缩略图模糊铺底（cover 填满） */}
-      <img className="image-detail-bg" src={thumb} alt="" />
-      {/* 主图：流式布局，宽 100% 高 auto，由图片自身比例撑起容器高度，完整显示不裁剪 */}
-      {entry?.url && !failed ? (
+      {thumb && <img className="image-detail-bg" src={thumb} alt="" />}
+      {entry?.url ? (
         <img
           className="image-detail-main image-detail-main--flow"
           key={entry.url}
@@ -62,14 +66,19 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
           alt={`第 ${page + 1} 页`}
           onError={() => setFailed(true)}
         />
+      ) : failed ? (
+        <div className="image-detail-error">加载失败</div>
       ) : (
-        /* 加载中/失败：固定高度占位 + 缩略图 cover，避免方形缩略图撑出超高块 */
-        <img
-          className="image-detail-main image-detail-main--flow"
-          src={thumb}
-          alt={`第 ${page + 1} 页`}
-          style={{ height: 260, objectFit: 'cover' }}
-        />
+        page === 0 ? (
+          <img
+            className="image-detail-main image-detail-main--flow"
+            src={thumb}
+            alt={`第 ${page + 1} 页`}
+            onError={() => setFailed(true)}
+          />
+        ) : (
+          <div className="image-detail-placeholder" />
+        )
       )}
     </div>
   );
@@ -115,14 +124,16 @@ export default function ImageDetailView({
     setLoadedPages(prev => ({ ...prev, [`${image.illustId}_${page}`]: entry }));
   }, [image]);
 
-  // 从列表进入时若指定了非首页，滚动到对应页
+  // 切换作品时滚回顶部，或指定非首页时滚动到对应页
   useEffect(() => {
     if (!image?.illustId) return;
     const target = image?._pageIndex ?? 0;
-    if (target <= 0) return;
     const t = setTimeout(() => {
-      const node = pageRefs.current[target];
-      if (node) node.scrollIntoView({ block: 'start' });
+      if (target > 0) {
+        const node = pageRefs.current[target];
+        if (node) { node.scrollIntoView({ block: 'start' }); return; }
+      }
+      contentRef.current?.scrollTo({ top: 0, behavior: 'instant' });
     }, 60);
     return () => clearTimeout(t);
   }, [image?.illustId, image?._pageIndex]);
@@ -168,13 +179,13 @@ export default function ImageDetailView({
       } catch { /* 本地读取失败 → 回退网络下载 */ }
     }
 
-    // 2. 网络图片：按设置档位加载（regular=1200px / original=原图全分辨率）
+    // 2. 网络图片：必须等 illustData 就绪才能拿到精确的多页 URL
     const imgs = illustData?.illust?.images || [];
-    const baseForFallback = image?.thumbnailUrl || image?.mediumUrl || '';
+    if (!imgs.length) return null; // illustData 未就绪 → 等下次 retry
     const useRegular = getSettingsSync().detailQuality === 'regular';
-    const rawUrl = useRegular
-      ? (imgs[page]?.url || pixivPageUrl(baseForFallback, page) || '')
-      : (imgs[page]?.originalUrl || pixivOriginalUrl(baseForFallback, page) || '');
+    const p0 = imgs[0]?.originalUrl || imgs[0]?.url || '';
+    const rawUrl = (useRegular ? imgs[page]?.url : imgs[page]?.originalUrl)
+      || (p0 ? p0.replace(/_p0\./, `_p${page}.`).replace(/_p0_/, `_p${page}_`) : '');
     if (!rawUrl) return null;
 
     const loaded = await new Promise(resolve => {
@@ -318,20 +329,20 @@ export default function ImageDetailView({
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const items = [];
     for (let p = 0; p < totalPages; p++) {
-      // 已懒加载过的页优先用已加载原图，其余按设置档位推导直链
       const cached = loadedPages[`${image.illustId}_${p}`];
-      const useRegular = getSettingsSync().detailQuality === 'regular';
-      const fallbackSrc = useRegular
-        ? (illustData?.illust?.images?.[p]?.url
-          || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p)
-          || pixivReUrl(String(image.illustId), p))
-        : pixivReUrl(String(image.illustId), p);
+      const imgs = illustData?.illust?.images || [];
+      let fallbackSrc = imgs[p]?.url || imgs[p]?.originalUrl;
+      if (!fallbackSrc) {
+        const p0 = imgs[0]?.url || imgs[0]?.originalUrl || '';
+        fallbackSrc = p0 ? p0.replace(/_p0\./, `_p${p}.`).replace(/_p0_/, `_p${p}_`) : '';
+      }
       items.push({
         type: isGif ? 'gif' : 'image',
         src: cached?.url || fallbackSrc,
         illustId: image.illustId,
         _pageIndex: p,
         _totalPages: totalPages,
+        _lazy: isGif ? true : undefined,
         title: image?.title || '',
         author: image?.author || '',
         authorId: image?.authorId || '',
@@ -339,7 +350,7 @@ export default function ImageDetailView({
         pixivUrl: image?.pixivUrl || `https://www.pixiv.net/artworks/${image.illustId}`,
         width: cached?.w || image?.width || 0,
         height: cached?.h || image?.height || 0,
-        thumbnailUrl: p === 0 ? image?.thumbnailUrl : pixivReUrl(String(image.illustId), p, 'thumb'),
+        thumbnailUrl: image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0, 'thumb'),
       });
     }
     return items;
@@ -355,6 +366,15 @@ export default function ImageDetailView({
       onLikeSaveAll={handleSaveAllOnLike}
     />
   ), [pixivCache, setPixivCache, onAuthorWorks, handleSaveAllOnLike]);
+
+  // 灯箱打开时注册返回处理（关闭灯箱，不回退到详情栈）
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    return registerBackHandler(() => {
+      setLightboxIndex(null);
+      return true;
+    });
+  }, [lightboxIndex]);
 
   // 加载相关推荐
   useEffect(() => {
@@ -387,7 +407,7 @@ export default function ImageDetailView({
       <div className="char-state-content" ref={contentRef}>
         {/* GIF 动图：用动图播放器 */}
         {isGif ? (
-          <div style={{ padding: '12px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }} onClick={() => setLightboxIndex(0)}>
             <UgoiraPlayer
               illustId={image?.illustId}
               title={image?.title}
@@ -412,6 +432,7 @@ export default function ImageDetailView({
                   onSavePage={savePage}
                   onPageLoaded={handlePageLoaded}
                   onOpenLightbox={(page) => setLightboxIndex(page)}
+                  illustDataReady={illustData !== null}
                 />
               ))}
             </div>
@@ -436,17 +457,6 @@ export default function ImageDetailView({
           <span className="image-detail-section-title">相关推荐</span>
           {loadingRelated && <span className="image-detail-section-loading">加载中...</span>}
         </div>
-
-        {/* 相关推荐加载中 — 骨架屏占位（撑起内容高度，保证页面可滚动） */}
-        {loadingRelated && (
-          <div className="pixiv-skeleton-grid" aria-hidden="true">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="pixiv-skeleton-item">
-                <div className="pixiv-skeleton-thumb" />
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* 相关推荐网格 */}
         {!loadingRelated && related.length > 0 && (

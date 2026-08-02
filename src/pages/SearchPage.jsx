@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import useSavedSet from '../hooks/useSavedSet.js';
@@ -6,7 +6,7 @@ import useSavedSet from '../hooks/useSavedSet.js';
 const PAGE_SIZE = 20;
 const HISTORY_KEY = 'pixiv_search_history';
 
-export default function SearchPage({ onOpen }) {
+export default function SearchPage({ onOpen, likedSet }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -18,6 +18,7 @@ export default function SearchPage({ onOpen }) {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
   });
   const pageRef = useRef(1);
+  const sentinelRef = useRef(null);
   const queryRef = useRef('');
   const saved = useSavedSet();
 
@@ -52,6 +53,16 @@ export default function SearchPage({ onOpen }) {
 
   const submit = (e) => { e.preventDefault(); doSearch(query, false); };
 
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting && hasMore && !loadingMore) doSearch(queryRef.current, true);
+    }, { rootMargin: '200px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loading, loadingMore, doSearch]);
+
   return (
     <div className="page">
       <form className="search-bar" onSubmit={submit}>
@@ -77,14 +88,11 @@ export default function SearchPage({ onOpen }) {
         </div>
       )}
 
-      {loading && <div className="skeleton-grid">{[...Array(4)].map((_, i) => <div key={i} className="skeleton-item" />)}</div>}
       {error && <div className="error-box">{error}</div>}
-      <ImageGrid items={results} savedSet={saved} onOpen={onOpen} />
-      {!loading && results.length > 0 && (
-        <button className="load-more" disabled={loadingMore || !hasMore} onClick={() => doSearch(queryRef.current, true)}>
-          {loadingMore ? '加载中...' : (hasMore ? '加载更多' : '没有更多了')}
-        </button>
-      )}
+      <ImageGrid items={results} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+      {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
+      {loadingMore && <div className="hint">加载中...</div>}
+      {!loading && !hasMore && results.length > 0 && <div className="hint">没有更多了</div>}
     </div>
   );
 }

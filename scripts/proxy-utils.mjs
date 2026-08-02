@@ -27,6 +27,30 @@ export function createAgent(proxyUrl) {
 }
 
 /**
+ * 可重置的共享 Agent 容器。
+ *
+ * 长时间复用同一个 https-proxy-agent 时，Pixiv/Clash 可能关闭空闲隧道，
+ * 复用到已失效的连接会导致间歇性 502。出错时调用 reset() 换成全新 Agent。
+ */
+export function createAgentHolder(proxyUrl) {
+  let agent = createAgent(proxyUrl);
+  return {
+    get() {
+      return agent;
+    },
+    reset() {
+      try {
+        agent.destroy();
+      } catch {
+        /* ignore */
+      }
+      agent = createAgent(proxyUrl);
+      console.warn('[proxy] 代理连接池已重置，后续请求使用全新连接');
+    },
+  };
+}
+
+/**
  * 检查代理是否可用（通过尝试建立 TCP 连接）。
  * 在 Vite dev server 启动时调用，提前给用户提示。
  */
@@ -70,7 +94,7 @@ export function checkProxyAvailability() {
  * @returns {Function} Vite 中间件
  */
 export function createApiProxy(targetHost, opts = {}) {
-  const agent = createAgent();
+  const holder = createAgentHolder();
   const extraHeaders = opts.extraHeaders || {};
 
   return (req, res) => {
@@ -78,55 +102,77 @@ export function createApiProxy(targetHost, opts = {}) {
     const targetUrl = `${targetHost}${req.url}`;
     const parsed = new URL(targetUrl);
 
-    const proxyOpts = {
-      hostname: parsed.hostname,
-      port: parsed.port || 443,
-      path: parsed.pathname + parsed.search,
-      method: req.method,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': targetHost,
-        ...extraHeaders,
-        // 透传自定义头
-        ...(req.headers['x-pixiv-cookie'] ? { Cookie: req.headers['x-pixiv-cookie'] } : {}),
-      },
-      agent,
-      timeout: 15000,
-    };
+    const send = (agent) => new Promise((resolve, reject) => {
+      const proxyOpts = {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: req.method,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json, */*',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Referer': targetHost,
+          ...extraHeaders,
+          // 透传自定义头
+          ...(req.headers['x-pixiv-cookie'] ? { Cookie: req.headers['x-pixiv-cookie'] } : {}),
+        },
+        agent,
+        timeout: 15000,
+      };
+      delete proxyOpts.headers['host'];
 
-    delete proxyOpts.headers['host'];
+      const proxyReq = https.request(proxyOpts, (proxyRes) => {
+        // 响应已开始后出错（半截流）无法重试：直接掐断客户端连接
+        if (res.headersSent) {
+          proxyRes.resume();
+          resolve();
+          return;
+        }
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+        resolve();
+      });
 
-    const proxyReq = https.request(proxyOpts, (proxyRes) => {
-      res.writeHead(proxyRes.statusCode, proxyRes.headers);
-      proxyRes.pipe(res);
+      proxyReq.on('error', (err) => {
+        if (res.headersSent) {
+          res.destroy();
+          resolve();
+          return;
+        }
+        reject(err);
+      });
+      proxyReq.on('timeout', () => {
+        proxyReq.destroy(new Error('ETIMEDOUT'));
+      });
+
+      if (req.method === 'POST' || req.method === 'PUT') {
+        req.pipe(proxyReq);
+      } else {
+        proxyReq.end();
+      }
     });
 
-    proxyReq.on('error', (err) => {
-      const msg = err?.message || '';
-      if (msg.includes('ECONNREFUSED') || msg.includes('connect refused')) {
-        console.log(`   ⚠️ [proxy] ${targetHost} 代理连接失败 — Clash 可能未运行`);
+    (async () => {
+      try {
+        await send(holder.get());
+      } catch (err) {
+        // 连接级失败：记录真实错误、换新连接、重试一次
+        console.warn(`[proxy] ${targetHost} 上游连接失败: ${err.message || err}，正在重试...`);
+        holder.reset();
+        try {
+          await send(holder.get());
+        } catch (err2) {
+          const msg = err2.message || String(err2);
+          console.error(`[proxy] ${targetHost} 重试仍失败: ${msg}`);
+          if (!res.headersSent) {
+            const isTimeout = /timeout|ETIMEDOUT/i.test(msg);
+            res.writeHead(isTimeout ? 504 : 502);
+            res.end(JSON.stringify({ error: msg }));
+          }
+        }
       }
-      if (!res.headersSent) {
-        res.writeHead(502);
-        res.end(JSON.stringify({ error: err.message }));
-      }
-    });
-
-    proxyReq.on('timeout', () => {
-      proxyReq.destroy();
-      if (!res.headersSent) {
-        res.writeHead(504);
-        res.end(JSON.stringify({ error: 'timeout' }));
-      }
-    });
-
-    if (req.method === 'POST' || req.method === 'PUT') {
-      req.pipe(proxyReq);
-    } else {
-      proxyReq.end();
-    }
+    })();
   };
 }
 
@@ -140,7 +186,7 @@ export function createApiProxy(targetHost, opts = {}) {
  * @returns {Function} Vite 中间件
  */
 export function createImageProxy(targetHost, opts = {}) {
-  const agent = createAgent();
+  const holder = createAgentHolder();
   const referer = opts.referer || targetHost;
   const timeout = opts.timeout || 30000;
   const cacheControl = opts.cacheControl || null;
@@ -149,41 +195,65 @@ export function createImageProxy(targetHost, opts = {}) {
     const targetUrl = `${targetHost}${req.url}`;
     const parsed = new URL(targetUrl);
 
-    const proxyOpts = {
-      hostname: parsed.hostname,
-      port: parsed.port || 443,
-      path: parsed.pathname + parsed.search,
-      method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Referer': referer,
-        'Accept': '*/*',
-      },
-      agent,
-      timeout,
-    };
+    const send = (agent) => new Promise((resolve, reject) => {
+      const proxyOpts = {
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: parsed.pathname + parsed.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': referer,
+          'Accept': '*/*',
+        },
+        agent,
+        timeout,
+      };
 
-    const proxyReq = https.request(proxyOpts, (proxyRes) => {
-      const headers = cacheControl
-        ? { ...proxyRes.headers, 'Cache-Control': cacheControl }
-        : proxyRes.headers;
-      res.writeHead(proxyRes.statusCode, headers);
-      proxyRes.pipe(res);
+      const proxyReq = https.request(proxyOpts, (proxyRes) => {
+        if (res.headersSent) {
+          proxyRes.resume();
+          resolve();
+          return;
+        }
+        const headers = cacheControl
+          ? { ...proxyRes.headers, 'Cache-Control': cacheControl }
+          : proxyRes.headers;
+        res.writeHead(proxyRes.statusCode, headers);
+        proxyRes.pipe(res);
+        resolve();
+      });
+
+      proxyReq.on('error', (err) => {
+        if (res.headersSent) {
+          res.destroy();
+          resolve();
+          return;
+        }
+        reject(err);
+      });
+      proxyReq.on('timeout', () => {
+        proxyReq.destroy(new Error('ETIMEDOUT'));
+      });
+      proxyReq.end();
     });
 
-    proxyReq.on('error', (err) => {
-      const msg = err?.message || '';
-      if (msg.includes('ECONNREFUSED') || msg.includes('connect refused')) {
-        console.log(`   ⚠️ [proxy] ${targetHost} 代理连接失败 — Clash 可能未运行`);
+    (async () => {
+      try {
+        await send(holder.get());
+      } catch (err) {
+        console.warn(`[proxy] ${targetHost} 上游连接失败: ${err.message || err}，正在重试...`);
+        holder.reset();
+        try {
+          await send(holder.get());
+        } catch (err2) {
+          const msg = err2.message || String(err2);
+          console.error(`[proxy] ${targetHost} 重试仍失败: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(/timeout|ETIMEDOUT/i.test(msg) ? 504 : 502).end();
+          }
+        }
       }
-      if (!res.headersSent) res.writeHead(502).end();
-    });
-
-    proxyReq.on('timeout', () => {
-      proxyReq.destroy();
-      if (!res.headersSent) res.writeHead(504).end();
-    });
-
-    proxyReq.end();
+    })();
   };
 }

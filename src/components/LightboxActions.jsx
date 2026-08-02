@@ -72,7 +72,7 @@ export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll }) {
 
   return (
     <button className="lightbox-dl-btn lightbox-icon-only" onClick={handleLike}>
-      <HeartIcon filled={liked} />
+      <HeartIcon filled className={liked ? 'heart-icon--liked' : 'heart-icon--neutral'} />
     </button>
   );
 }
