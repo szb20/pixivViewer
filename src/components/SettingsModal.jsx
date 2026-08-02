@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
+import { registerBackHandler } from '../utils/backHandler.js';
 
 export default function SettingsModal({ onClose }) {
   const [cookie, setCookie] = useState('');
@@ -13,6 +14,14 @@ export default function SettingsModal({ onClose }) {
       setProxyUrl(s.proxyUrl || '');
     });
   }, []);
+
+  // 系统返回手势：先关设置弹窗
+  useEffect(() => {
+    return registerBackHandler(() => {
+      onClose();
+      return true;
+    });
+  }, [onClose]);
 
   const handleSave = async () => {
     setSaving(true);

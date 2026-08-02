@@ -9,6 +9,7 @@ import BookmarksPage from './pages/BookmarksPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import GalleryPage from './pages/GalleryPage.jsx';
 import { storageFacade, getCompositeKey } from './pixiv-assistant/index.js';
+import { runBackHandlers } from './utils/backHandler.js';
 import './index.css';
 import './styles/detail.css';
 
@@ -36,6 +37,28 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailImage, setDetailImage] = useState(null);
   const [pixivCache, setPixivCache] = useState({});
+
+  // Android 系统返回（边缘滑动/返回键）：先走应用内层级，最后才退出 App
+  useEffect(() => {
+    if (!window.Capacitor?.isNativePlatform?.()) return;
+    let cleanup;
+    (async () => {
+      try {
+        const { App } = await import('@capacitor/app');
+        const listener = await App.addListener('backButton', (event) => {
+          event.preventDefault(); // 阻止 WebView 默认"退出/历史后退"
+          if (runBackHandlers()) return; // 详情/弹窗等已消费
+          if (event.canGoBack) {
+            window.history.back();
+          } else {
+            App.exitApp();
+          }
+        });
+        cleanup = () => { listener.remove(); };
+      } catch { /* 非原生环境 */ }
+    })();
+    return () => { cleanup?.(); };
+  }, []);
 
   // 启动时扫描相册/缓存元数据，用于"已保存绿点"与喜欢状态
   useEffect(() => {

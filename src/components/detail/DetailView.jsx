@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ImageDetailView from './ImageDetailView.jsx';
+import { registerBackHandler } from '../../utils/backHandler.js';
 
 /**
  * 详情页包装 — 管理"当前作品"切换栈：
@@ -8,6 +9,7 @@ import ImageDetailView from './ImageDetailView.jsx';
 export default function DetailView({ image: initialImage, pixivCache, setPixivCache, onClose }) {
   const [image, setImage] = useState(initialImage);
   const stackRef = useRef([initialImage]);
+  const handleBackRef = useRef(null);
 
   const handleSelect = (img) => {
     if (!img) return;
@@ -21,6 +23,15 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
     if (prev) setImage(prev);
     else onClose();
   };
+  handleBackRef.current = handleBack;
+
+  // 系统返回手势/返回键：先弹详情内历史，栈空才关闭详情页
+  useEffect(() => {
+    return registerBackHandler(() => {
+      handleBackRef.current();
+      return true;
+    });
+  }, []);
 
   return (
     <ImageDetailView

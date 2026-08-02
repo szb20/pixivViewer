@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.1",
     "@capacitor/filesystem": "^8.1.2",
     "gifenc": "^1.0.3",
     "https-proxy-agent": "^9.1.0",
