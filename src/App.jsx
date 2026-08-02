@@ -46,7 +46,7 @@ export default function App() {
       try {
         const { App } = await import('@capacitor/app');
         const listener = await App.addListener('backButton', (event) => {
-          event.preventDefault(); // 阻止 WebView 默认"退出/历史后退"
+          // 注册监听器即接管返回行为（默认不再退出/后退）
           if (runBackHandlers()) return; // 详情/弹窗等已消费
           if (event.canGoBack) {
             window.history.back();
