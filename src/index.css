@@ -37,7 +37,9 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
 }
+*::-webkit-scrollbar { display: none; }
 
 html, body, #root {
   height: 100%;
@@ -65,72 +67,55 @@ button {
   background: var(--bg);
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  flex: none;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-
-.app-header h1 {
-  font-size: 16px;
-  margin: 0;
-  font-weight: 600;
-}
-
-.icon-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 18px;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
-  line-height: 1;
-}
-
-.icon-btn:hover {
-  background: var(--bg-secondary);
-}
-
 .app-content {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
+  padding-bottom: 48px;
+}
+.app-content::-webkit-scrollbar { display: none; }
+
+.bar-frosted {
+  background: rgba(15, 17, 21, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 560px;
+  height: 48px;
   display: flex;
-  flex: none;
-  border-top: 1px solid var(--border);
-  background: var(--bg-panel);
+  z-index: 10;
 }
 
 .tab-btn {
   flex: 1;
-  padding: 9px 0 12px;
+  padding: 0;
+  font-size: 16px;
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 12px;
   cursor: pointer;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
 }
 
 .tab-btn.active {
-  color: var(--accent);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .page {
-  padding: 10px 0 24px;
+  padding: 0 0 24px;
 }
 
 .grid {
@@ -155,6 +140,17 @@ button {
   display: block;
 }
 
+.grid-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 32px;
+  color: rgba(255, 255, 255, 0.85);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+}
+
 .grid-like {
   position: absolute;
   bottom: 4px;
@@ -169,22 +165,71 @@ button {
   height: 100%;
 }
 
-.grid-gif {
-  position: absolute;
-  bottom: 6px;
-  right: 6px;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 10px;
-}
-
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
+}
+
+.chips-bottom {
+  position: fixed;
+  bottom: 48px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 560px;
+  padding: 4px 10px 4px;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  opacity: 1;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  scrollbar-width: none;
+  z-index: 5;
+}
+.chips-bottom::-webkit-scrollbar { display: none; }
+
+.chips-hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+.chips-bottom .chip {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.chips-bottom .chip.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.chips-bottom .r18-toggle {
+  flex-shrink: 0;
+  margin-left: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  min-width: 0;
+  border-radius: 50%;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .chip {
@@ -296,20 +341,16 @@ button {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0;
 }
 
 .gallery-item {
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: 0;
   overflow: hidden;
   background: var(--bg-secondary);
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
 }
 
 .gallery-thumb {
@@ -339,7 +380,7 @@ button {
 
 .modal h3 {
   margin: 0 0 14px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .field {

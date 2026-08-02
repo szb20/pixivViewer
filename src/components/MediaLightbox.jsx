@@ -71,7 +71,6 @@ export default function MediaLightbox({
   initialIndex = 0,
   onClose,
   onIndexChange,
-  renderActions,
   disableZoom: forceDisableZoom,
   zIndex = 10000,
 }) {
@@ -336,15 +335,13 @@ export default function MediaLightbox({
   const overlay = (
     <div
       ref={overlayRef}
-      className={`lightbox-overlay${isGif ? ' lightbox-overlay--gif' : ''}${isVideo ? ' video-lightbox-overlay' : ''}${closing ? ' closing' : ''}${hideUI ? ' hide-ui' : ''}`}
-      onClick={handleOverlayClick}
+      className={`lightbox-overlay${isGif ? ' lightbox-overlay--gif' : ''}${isVideo ? ' video-lightbox-overlay' : ''}${closing ? ' closing' : ''}`}
+      onClick={handleClose}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       style={{ zIndex }}
     >
-      <span className="lightbox-close" onClick={e => { e.stopPropagation(); handleClose(); }}>✕</span>
-
       <div className="lightbox-stage-wrap" onClick={e => e.stopPropagation()}>
         <div ref={trackRef} className="lightbox-track" style={trackStyle}>
           {items.map((item, idx) => (
@@ -356,47 +353,6 @@ export default function MediaLightbox({
             </div>
           ))}
         </div>
-      </div>
-
-      {/* 底部信息栏 */}
-      <div className="lightbox-info" onClick={e => e.stopPropagation()}>
-        {/* 多页导航 — 显示页码，按钮在无相邻页时变暗 */}
-        {cur._totalPages > 1 && (
-          <div className="lightbox-page-nav-top">
-            <button
-              className="lightbox-page-nav-btn"
-              style={findAdjacentPage(-1) < 0 ? { opacity: 0.25 } : undefined}
-              onTouchStart={e => e.stopPropagation()}
-              onTouchEnd={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); navPage(-1); }}
-            >◀</button>
-            <span className="lightbox-page-nav-label">
-              p{(cur._pageIndex || 0) + 1}/{cur._totalPages}
-            </span>
-            <button
-              className="lightbox-page-nav-btn"
-              style={findAdjacentPage(1) < 0 ? { opacity: 0.25 } : undefined}
-              onTouchStart={e => e.stopPropagation()}
-              onTouchEnd={e => e.stopPropagation()}
-              onClick={e => { e.stopPropagation(); navPage(1); }}
-            >▶</button>
-          </div>
-        )}
-
-        <div className="lightbox-title">{cur.title || (isVideo ? '视频' : '未命名')}{cur.type === 'bilibili' && cur.duration ? ` · ${Math.floor(cur.duration / 60)}:${String(cur.duration % 60).padStart(2, '0')}` : ''}</div>
-        {!isVideo && cur.width > 0 && cur.height > 0 && (
-          <div className="lightbox-size">{cur.width} × {cur.height}px</div>
-        )}
-        {cur.author && <div className="lightbox-author">{cur.authorName || cur.author}</div>}
-
-        <div className="lightbox-btns">
-          {/* 消费者自定义操作按钮 */}
-          {renderActions?.(cur, index)}
-        </div>
-
-        {items.length > 1 && (
-          <span className="lightbox-page">{index + 1} / {items.length}</span>
-        )}
       </div>
     </div>
   );

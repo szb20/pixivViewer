@@ -20,6 +20,8 @@ export default function UgoiraPlayer({
   _lazy = false,
   maxWidth: maxWidthProp,
   thumbnailUrl = '',
+  hideLink = false,
+  hideInfo = false,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -50,7 +52,19 @@ export default function UgoiraPlayer({
     return () => { mountedRef.current = false; };
   }, []);
 
-  // 挂载时检查缓存：直接恢复帧，跳过 loading 态
+  // 切换作品时重置状态
+  useEffect(() => {
+    loadedRef.current = false;
+    autoLoadRef.current = false;
+    restoringRef.current = false;
+    setFrames(initialFrames);
+    setLoaded(false);
+    setPlaying(false);
+    setLoadProgress(0);
+    cancelAnimationFrame(timerRef.current);
+  }, [illustId]);
+
+  // 检查缓存：直接恢复帧，跳过 loading 态
   useEffect(() => {
     const cached = downloadCache.get(illustId);
     if (cached?.result?.frames?.length && !loadedRef.current) {
@@ -322,17 +336,17 @@ export default function UgoiraPlayer({
         )}
 
         {/* 暂停指示 */}
-        {playing && (
+        {!hideInfo && playing && (
           <div className="ugoira-pause-hint">⏸ 点击暂停</div>
         )}
       </div>
 
       {/* 信息栏（非紧凑模式） */}
-      {!compact && (
+      {!hideInfo && !compact && (
         <div className="ugoira-info">
           <span className="ugoira-title">{title || 'Ugoira 动图'}</span>
           {author && <span className="ugoira-author">@{author}</span>}
-          {pixivUrl && (
+          {pixivUrl && !hideLink && (
             <a className="ugoira-pixiv-link" href={pixivUrl} target="_blank"
               onClick={e => e.stopPropagation()}>
               Pixiv →

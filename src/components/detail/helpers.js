@@ -130,6 +130,7 @@ export function allMediaFromRelated(img) {
     originalUrl: img.originalUrl || img.mediumUrl,
     width: w,
     height: h,
+    tags: img.tags || [],
     _lazy: img.type === 'gif' ? true : undefined,
   };
 }

@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor/app": "^8.1.1",
     "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/status-bar": "^8.0.3",
     "gifenc": "^1.0.3",
     "https-proxy-agent": "^9.1.0",
     "jszip": "^3.10.1",

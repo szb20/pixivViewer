@@ -17,16 +17,23 @@ export class NetworkStore {
    * @param {string} url
    * @returns {Promise<string|null>}
    */
+  _absUrl(url) {
+    if (!url) return '';
+    return url.startsWith('/') ? window.location.origin + url : url;
+  }
+
   async downloadImage(url) {
     if (!url) return null;
+    const abs = this._absUrl(url);
+    console.log('[NetworkStore] downloadImage:', { raw: url, abs });
     try {
-      // 优先 fetch
-      const resp = await fetch(url, { headers: { Referer: 'https://www.pixiv.net/' } });
+      const resp = await fetch(abs, { headers: { Referer: 'https://www.pixiv.net/' } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
+      console.log('[NetworkStore] fetch OK, size:', blob.size);
       return await this._blobToBase64(blob);
-    } catch {
-      // 回退 CapacitorHttp
+    } catch (e) {
+      console.log('[NetworkStore] fetch failed, fallback CapacitorHttp:', e.message);
       return await this._downloadWithCapacitor(url);
     }
   }
@@ -110,8 +117,9 @@ export class NetworkStore {
 
   async _downloadWithCapacitor(url) {
     try {
+      const fullUrl = this._absUrl(url);
       const resp = await CapacitorHttp.request({
-        method: 'GET', url,
+        method: 'GET', url: fullUrl,
         headers: { Referer: 'https://www.pixiv.net/' },
         responseType: 'blob', connectTimeout: 30000, readTimeout: 30000,
       });

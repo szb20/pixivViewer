@@ -26,6 +26,7 @@ const DEFAULT_HEADERS = {
 /** 统一映射插画条目（API 返回 → 输出格式），兼容 camelCase 和 snake_case */
 function mapIllustItem(item) {
   const illustId = String(item.illustId || item.id || item.illust_id || '');
+  const illustType = parseInt(item.illustType || item.illust_type) || 0;
   return {
     illustId,
     title: item.title || item.illustTitle || '',
@@ -39,7 +40,8 @@ function mapIllustItem(item) {
     tags: (item.tags || []).slice(0, 5).map(t => typeof t === 'string' ? t : (t.tag || t)),
     pixivUrl: `https://www.pixiv.net/artworks/${illustId}`,
     pageCount: parseInt(item.pageCount || item.illust_page_count) || 1,
-    illustType: parseInt(item.illustType || item.illust_type) || 0,
+    type: illustType === 2 ? 'gif' : 'image',
+    illustType,
     width: item.width || 0,
     height: item.height || 0,
   };
@@ -345,6 +347,7 @@ export function createPixivApi(transport) {
         tags: [],
         pixivUrl: `https://www.pixiv.net/artworks/${id}`,
         pageCount: 1,
+        type: 'image',
         illustType: 0,
       }));
       return { illusts, hasCookie: true };

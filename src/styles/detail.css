@@ -14,10 +14,11 @@
   margin: 0 auto;
   height: 100dvh;
   height: 100vh;
-  background: var(--bg-panel);
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  scrollbar-width: none;
 }
 
 .char-state-bar::-webkit-scrollbar {
@@ -35,6 +36,61 @@
 
 .char-state-content::-webkit-scrollbar {
   display: none;
+}
+
+/* ---- 标题 & 作者 ---- */
+.image-detail-meta {
+  padding: 16px 12px 4px;
+}
+
+.image-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.image-detail-author-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.image-detail-author {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.image-detail-pixiv-link {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-decoration: none;
+}
+
+/* ---- 详情页 Tag 展示栏 ---- */
+.image-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px 4px;
+}
+
+.image-detail-tag {
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.image-detail-tag:active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* ---- 页头 ---- */
@@ -104,9 +160,18 @@
 }
 
 /* ---- 图片堆叠块 ---- */
+.image-detail-error {
+  width: 100%;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
 .image-detail-hero {
   width: 100%;
-  background: var(--bg-secondary);
   position: relative;
   cursor: pointer;
 }
@@ -132,25 +197,7 @@
   transition: opacity 0.25s ease;
 }
 
-.image-detail-hero {
-  min-height: 200px;
-}
 
-.image-detail-placeholder {
-  width: 100%;
-  min-height: 200px;
-  background: var(--bg-secondary);
-}
-
-.image-detail-error {
-  width: 100%;
-  height: 200px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
 
 /* 堆叠页的主图：由图片自身比例撑起高度（不锁容器比例，避免裁剪/跳变） */
 .image-detail-main--flow {

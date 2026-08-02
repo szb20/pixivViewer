@@ -268,12 +268,19 @@ export function buildDownloadUrls(item) {
   if (!item) return [];
   const page = item._pageIndex ?? 0;
   const candidates = [];
+  // 优先：直接从 illustId 推导（最可靠）
   if (item.illustId) candidates.push(pixivReUrl(String(item.illustId), page));
-  for (const u of [item.originalUrl, item.mediumUrl, item.thumbnailUrl]) {
-    if (!u) continue;
-    const isPixivUrl = /i\.pximg\.net|(?:i\.)?pixiv\.re|\/pixiv-(?:img|thumb|zip)\//i.test(u);
-    const converted = isPixivUrl ? (pixivOriginalUrl(u, page) || proxyThumb(u)) : u;
-    if (converted) candidates.push(converted);
+  // 其次：直接从 API 返回的 originalUrl 推导（含日期路径，精确）
+  for (const u of [item.originalUrl, item.mediumUrl]) {
+    if (!u || !item.illustId) continue;
+    // 仅从含日期路径的 Pixiv URL 推导（正则匹配日期路径+illustId_pN），避免误取缩略图尺寸
+    const m = u.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)_p\d+/);
+    if (m) {
+      const datePath = m[1];
+      const id = m[2];
+      candidates.push(`https://i.pixiv.re/img-original/img/${datePath}/${id}_p${page}.jpg`);
+    }
   }
+  console.log('[buildDownloadUrls] illustId:', item.illustId, 'page:', page, '→', candidates);
   return [...new Set(candidates)].filter(Boolean);
 }

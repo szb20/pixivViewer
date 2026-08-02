@@ -1,6 +1,6 @@
 export default function TabBar({ tabs, active, onChange }) {
   return (
-    <nav className="tab-bar">
+    <nav className="tab-bar bar-frosted">
       {tabs.map(t => (
         <button
           key={t.key}
