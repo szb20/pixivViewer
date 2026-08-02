@@ -35,6 +35,9 @@ export default function SettingsModal({ onClose }) {
             placeholder="登录 pixiv.net 后从浏览器 Cookie 中获取"
             onChange={e => setCookie(e.target.value)}
           />
+          <div className="hint" style={{ textAlign: 'left', padding: '4px 0 0' }}>
+            获取方式：浏览器登录 pixiv.net → 开发者工具 → Application → Cookies → 复制 PHPSESSID 的值
+          </div>
         </div>
         <div className="field">
           <label>代理地址（默认 http://127.0.0.1:7890）</label>

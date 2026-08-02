@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import useSavedSet from '../hooks/useSavedSet.js';
 
 const PAGE_SIZE = 48;
 
-export default function BookmarksPage({ onOpen }) {
+export default function BookmarksPage({ onOpen, onOpenSettings }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -13,6 +14,7 @@ export default function BookmarksPage({ onOpen }) {
   const [hasMore, setHasMore] = useState(true);
   const offsetRef = useRef(0);
   const saved = useSavedSet();
+  const needCookie = !!error && /cookie|no_cookie|需要 Cookie/i.test(error);
 
   const load = useCallback(async (append) => {
     if (append) setLoadingMore(true);
@@ -37,7 +39,9 @@ export default function BookmarksPage({ onOpen }) {
     <div className="page">
       <p className="page-desc">我的收藏 — 需要设置 Pixiv Cookie 才能加载</p>
       {loading && <div className="skeleton-grid">{[...Array(4)].map((_, i) => <div key={i} className="skeleton-item" />)}</div>}
-      {error && <div className="error-box">{error}</div>}
+      {needCookie
+        ? <NeedCookieNotice onOpenSettings={onOpenSettings} />
+        : (error && <div className="error-box">{error}</div>)}
       <ImageGrid items={items} savedSet={saved} onOpen={onOpen} />
       {!loading && items.length > 0 && (
         <button className="load-more" disabled={loadingMore || !hasMore} onClick={() => load(true)}>

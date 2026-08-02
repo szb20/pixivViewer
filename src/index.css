@@ -221,6 +221,31 @@ button {
   text-align: center;
 }
 
+.cookie-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(79, 140, 255, 0.12);
+  color: #9ec5ff;
+  font-size: 13px;
+}
+
+.cookie-notice button {
+  flex: none;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .hint {
   font-size: 12px;
   color: var(--text-tertiary);

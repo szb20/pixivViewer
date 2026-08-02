@@ -36,4 +36,6 @@ async function getCookie() {
   return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
 }
 
+export { browserFetch };
+
 export const pixivApi = createPixivApi({ fetch: browserFetch, getCookie });

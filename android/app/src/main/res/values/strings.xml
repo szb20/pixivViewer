@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PixivViewer</string>
+    <string name="title_activity_main">PixivViewer</string>
+    <string name="package_name">com.pixivviewer.app</string>
+    <string name="custom_url_scheme">com.pixivviewer.app</string>
+</resources>

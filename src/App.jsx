@@ -83,9 +83,9 @@ export default function App() {
       </header>
 
       <main className="app-content">
-        {tab === 'discover' && <DiscoverPage onOpen={setDetailImage} />}
+        {tab === 'discover' && <DiscoverPage onOpen={setDetailImage} onOpenSettings={() => setSettingsOpen(true)} />}
         {tab === 'ranking' && <RankingPage onOpen={setDetailImage} />}
-        {tab === 'bookmarks' && <BookmarksPage onOpen={setDetailImage} />}
+        {tab === 'bookmarks' && <BookmarksPage onOpen={setDetailImage} onOpenSettings={() => setSettingsOpen(true)} />}
         {tab === 'search' && <SearchPage onOpen={setDetailImage} />}
         {tab === 'gallery' && <GalleryPage />}
       </main>
