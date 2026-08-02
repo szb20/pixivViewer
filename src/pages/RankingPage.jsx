@@ -11,10 +11,15 @@ const MODES = [
   { key: 'female', label: '女榜' },
   { key: 'rookie', label: '新人' },
   { key: 'original', label: '原创' },
+  { key: 'r18g', label: 'R18G' },
 ];
 
+// 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
+const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
+
 export default function RankingPage({ onOpen }) {
-  const [mode, setMode] = useState('daily');
+  const [category, setCategory] = useState('daily');
+  const [r18, setR18] = useState(true);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -22,6 +27,7 @@ export default function RankingPage({ onOpen }) {
   const [hasMore, setHasMore] = useState(true);
   const pageRef = useRef(1);
   const saved = useSavedSet();
+  const mode = r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category;
 
   const load = useCallback(async (append) => {
     const page = append ? pageRef.current + 1 : 1;
@@ -43,16 +49,36 @@ export default function RankingPage({ onOpen }) {
 
   useEffect(() => { load(false); }, [load]);
 
+  const handleCategory = (cat) => {
+    // 选 R18G 时自动开 R18；选无 R18 档的分类时自动关
+    if (cat === 'r18g') setR18(true);
+    else if (!R18_CATEGORIES.has(cat)) setR18(false);
+    setCategory(cat);
+  };
+
+  const handleR18Toggle = () => {
+    if (category === 'r18g') return; // R18G 固定 R18
+    if (!R18_CATEGORIES.has(category)) return; // 当前分类无 R18 档
+    setR18(v => !v);
+  };
+
   return (
     <div className="page">
       <div className="chips">
         {MODES.map(m => (
           <button
             key={m.key}
-            className={`chip${m.key === mode ? ' active' : ''}`}
-            onClick={() => setMode(m.key)}
+            className={`chip${m.key === category ? ' active' : ''}`}
+            onClick={() => handleCategory(m.key)}
           >{m.label}</button>
         ))}
+        <button
+          className={`chip r18-toggle${r18 ? ' on' : ''}`}
+          onClick={handleR18Toggle}
+          style={r18
+            ? { background: '#e88090', color: '#fff', borderColor: '#e88090', marginLeft: 'auto' }
+            : { marginLeft: 'auto' }}
+        >{r18 ? 'R18' : '公开'}</button>
       </div>
       {loading && <div className="skeleton-grid">{[...Array(4)].map((_, i) => <div key={i} className="skeleton-item" />)}</div>}
       {error && <div className="error-box">{error}</div>}

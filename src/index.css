@@ -211,6 +211,11 @@ button {
   background: rgba(79, 140, 255, 0.12);
 }
 
+.r18-toggle {
+  min-width: 52px;
+  text-align: center;
+}
+
 .error-box {
   margin: 12px 0;
   padding: 14px 16px;
