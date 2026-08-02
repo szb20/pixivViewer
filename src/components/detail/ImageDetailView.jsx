@@ -281,7 +281,11 @@ export default function ImageDetailView({
           setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
         } else if (r?.error === 'gif_not_supported' && window.api?.cachePixivImage) {
           // GIF 走旧下载接口（含 ZIP 解码/GIF 编码）
-          window.api.cachePixivImage(item).catch(() => {});
+          const gifRes = await window.api.cachePixivImage(item).catch(() => null);
+          if (gifRes?.success || gifRes?.cached) {
+            const ck = getCompositeKey(item);
+            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
+          }
         } else {
           // 保存失败（缺地址/下载失败）：释放 key，等下次触发时重试
           autoSavedKeysRef.current.delete(saveKey);
@@ -345,7 +349,10 @@ export default function ImageDetailView({
           if (r2?.success) {
             setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
           } else if (r2?.error === 'gif_not_supported' && window.api?.cachePixivImage) {
-            await window.api.cachePixivImage(item).catch(() => {});
+            const gifRes = await window.api.cachePixivImage(item).catch(() => null);
+            if (gifRes?.success || gifRes?.cached) {
+              setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
+            }
           }
         } else {
           await window.api.cachePixivImage?.(item).catch(() => {});

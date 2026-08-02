@@ -3,7 +3,7 @@
  * 新 app 在这里把 pixivApi + storageFacade 组装成同一面。
  */
 import { pixivApi } from './pixiv.js';
-import { fetchUgoiraFrames } from './gif.js';
+import { fetchUgoiraFrames, saveGifToAlbum } from './gif.js';
 import { storageFacade } from '../pixiv-assistant/index.js';
 
 window.api = {
@@ -13,7 +13,12 @@ window.api = {
   toggleLike: (illustId, pageIndex) => storageFacade.toggleLike(illustId, pageIndex),
   fetchGif: (illustId, onProgress) => fetchUgoiraFrames(illustId, onProgress),
   fetchUgoira: (illustId, onProgress) => fetchUgoiraFrames(illustId, onProgress),
-  // 旧版图片缓存接口（GIF 回退用），新 app 走 storageFacade
-  cachePixivImage: () => Promise.resolve({ error: 'not_supported' }),
+  // 旧版图片缓存接口：GIF 走动图编码保存，静态图走 storageFacade
+  cachePixivImage: (item) => {
+    if (item?.type === 'gif' || Number(item?.illustType) === 2) {
+      return saveGifToAlbum(item);
+    }
+    return storageFacade.saveFromNetwork(item);
+  },
   scanExistingFiles: () => Promise.resolve([]),
 };
