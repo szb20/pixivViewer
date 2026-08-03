@@ -132,7 +132,7 @@ export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll, tota
 
   return (
     <button
-      className="lightbox-dl-btn lightbox-icon-only"
+      className="lightbox-dl-btn lightbox-icon-only frosted-light"
       onClick={handleLike}
       onPointerDown={startLongPress}
       onPointerUp={cancelLongPress}
@@ -176,7 +176,7 @@ export default function LightboxActions({
 
       {/* 作者作品 */}
       {cfg.author && cur.authorId && cur.authorName && onAuthorWorks && (
-        <button className="lightbox-dl-btn" onClick={handleAuthor}
+        <button className="lightbox-dl-btn frosted-light" onClick={handleAuthor}
           style={{ color: '#60a5fa' }}>@{cur.authorName}</button>
       )}
 
@@ -188,7 +188,7 @@ export default function LightboxActions({
 
       {/* 删除（本地相册） */}
       {cfg.delete && onDelete && (
-        <button className="lightbox-dl-btn"
+        <button className="lightbox-dl-btn frosted-light"
           onClick={(e) => { e.stopPropagation(); onDelete(cur, index); }}
           style={{ color: '#ff6b6b' }}>
           删除

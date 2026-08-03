@@ -37,6 +37,7 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
     if (cur?.illustId) scrollMapRef.current[cur.illustId] = s;
     log.info('push:', cur?.illustId, 'stack:', stackRef.current.length, '→', img.illustId);
     stackRef.current.push(img);
+    setRestoreScroll(0);
     setImage(img);
   };
 

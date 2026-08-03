@@ -335,6 +335,8 @@ export default function MediaLightbox({
             author={item.author}
             src={item.src}
             thumbnailUrl={item.thumbnailUrl || item.mediumUrl}
+            width={item.width}
+            height={item.height}
             style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain' }}
           />
         </div>

@@ -226,6 +226,9 @@ export default function App() {
         </div>
       </main>
 
+      {/* 顶部状态栏毛玻璃 */}
+      <div className="status-bar-frosted" />
+
       {/* 下拉刷新指示器 — 仅当前 tab 生效 */}
       <PullToRefresh onRefresh={handlePullRefresh} />
 

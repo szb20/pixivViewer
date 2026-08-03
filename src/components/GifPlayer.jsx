@@ -67,8 +67,11 @@ export default function GifPlayer({
   onTogglePlay,
   _lazy = false,
   maxWidth: maxWidthProp,
+  maxHeight: maxHeightProp,
   thumbnailUrl = '',
   src,
+  width: widthProp = 0,
+  height: heightProp = 0,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -151,34 +154,34 @@ export default function GifPlayer({
       }
     }
 
-    // 已有进行中的下载 → 等它完成
-    if (cached?.promise) {
-      setLoading(true);
-      setError(null);
-      try { await cached.promise; } catch {}
-      if (mountedRef.current) setLoading(false);
-      const updated = downloadCache.get(illustId);
-      if (updated?.result?.frames?.length) {
-        restoringRef.current = true;
-        loadedRef.current = false;
-        if (mountedRef.current) {
-          setFrames(updated.result.frames);
-          setLoadProgress(100);
-        }
-      }
-      return;
-    }
-
     setLoading(true);
     setLoadProgress(0);
     setError(null);
 
     const promise = (async () => {
-      const result = await window.api.fetchGif(illustId, (pct) => {
-        if (mountedRef.current) setLoadProgress(pct);
-      }, retry ? { force: true } : undefined);
-      cacheDownload(illustId, { result });
-      return result;
+      // 看门狗：只在「无任何进度」超过 90 秒时超时；慢速但持续有数据的下载不会被误杀。
+      // 超时后底层下载仍会在后台继续并写入缓存，重进灯箱可直接命中。
+      let stallTimer = null;
+      let rejectStall;
+      const stallPromise = new Promise((_, reject) => { rejectStall = reject; });
+      const armStall = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => rejectStall(new Error('GIF 下载停滞超时，请检查网络后重试')), 90000);
+      };
+      armStall();
+      try {
+        const result = await Promise.race([
+          window.api.fetchGif(illustId, (pct) => {
+            armStall(); // 有进度 → 重置停滞计时
+            if (mountedRef.current) setLoadProgress(pct);
+          }, retry ? { force: true } : undefined),
+          stallPromise,
+        ]);
+        cacheDownload(illustId, { result });
+        return result;
+      } finally {
+        clearTimeout(stallTimer);
+      }
     })();
 
     cacheDownload(illustId, { promise });
@@ -359,12 +362,17 @@ export default function GifPlayer({
     }
   }, [illustId, frames]);
 
-  const hasValidSize = canvasSize.width > 0 && canvasSize.height > 0;
+  const knownRatio = widthProp > 0 && heightProp > 0 ? heightProp / widthProp : null;
   const maxW = maxWidthProp ?? (compact ? 240 : window.innerWidth);
-  const displayWidth = hasValidSize ? Math.min(canvasSize.width, maxW) : maxW;
-  const displayHeight = hasValidSize
-    ? Math.round(displayWidth * (canvasSize.height / canvasSize.width))
-    : Math.round(displayWidth * 0.75);
+  const maxH = maxHeightProp ?? Math.round(window.innerHeight * 0.75);
+  // 盒子尺寸始终用已知宽高比（加载前后不变），超高图按 maxHeight 约束
+  const boxRatio = knownRatio ?? 0.75;
+  let displayWidth = maxW;
+  let displayHeight = Math.round(maxW * boxRatio);
+  if (displayHeight > maxH) {
+    displayHeight = maxH;
+    displayWidth = Math.round(maxH / boxRatio);
+  }
 
   // 已有 blob URL（网格已加载）→ 直接用原生 <img> 播放，无需 Canvas 重载
   if (src && src.startsWith('blob:')) {
@@ -413,7 +421,7 @@ export default function GifPlayer({
           ref={canvasRef}
           width={canvasSize.width || displayWidth}
           height={canvasSize.height || displayHeight}
-          style={{ width: displayWidth, height: displayHeight }}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           className="gif-canvas"
         />
 

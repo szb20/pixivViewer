@@ -35,6 +35,9 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadRef = useRef(null);
+  const cacheRef = useRef(new Map()); // mode → { items, hasMore, page } 内存缓存
+  const fetchSeqRef = useRef(0); // 防止快速切档时旧响应覆盖新内容
+  const loadedModeRef = useRef(null); // 当前 items 属于哪个 mode
   const saved = savedSet;
   const savedRef = useRef(saved);
   savedRef.current = saved;
@@ -42,10 +45,31 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
 
   const load = useCallback(async (append) => {
     const page = append ? pageRef.current + 1 : 1;
+    const seq = ++fetchSeqRef.current;
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); }
+
+    // 切换档位（非首次且 mode 变化）：先秒开内存缓存，或清空显示加载态，后台再拉新数据
+    if (!append && loadedModeRef.current !== null && loadedModeRef.current !== mode) {
+      const hit = cacheRef.current.get(mode);
+      if (hit) {
+        itemsRef.current = hit.items;
+        setItems(hit.items);
+        setHasMore(hit.hasMore);
+        pageRef.current = hit.page;
+        setLoading(false); // 有缓存：不转圈，后台刷新
+      } else {
+        itemsRef.current = [];
+        setItems([]);
+        setHasMore(true);
+        pageRef.current = 1;
+      }
+      loadedModeRef.current = mode;
+    }
+
     try {
       const r = await pixivApi.fetchRanking({ mode, page });
+      if (seq !== fetchSeqRef.current) return; // 用户已切走，丢弃过期响应
       const rawList = r?.illusts || [];
       const filtered = savedRef.current?.size ? rawList.filter(img => !savedRef.current.has(`${img.illustId}_0`)) : rawList;
       pageRef.current = page;
@@ -54,14 +78,20 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
       setItems(nextItems);
       const nextHasMore = rawList.length > 0;
       setHasMore(nextHasMore);
+      if (!append) {
+        loadedModeRef.current = mode;
+        cacheRef.current.set(mode, { items: nextItems, hasMore: nextHasMore, page });
+      }
       if (!append && !filtered.length) setError(r?.message || r?.error || '排行榜为空');
       // 持久化缓存（24h TTL）：重启 App 后直接恢复
       saveTabCache(CACHE_KEY, { category, r18, items: nextItems, hasMore: nextHasMore, page }).catch(() => { });
     } catch (e) {
-      setError(e.message);
+      if (seq === fetchSeqRef.current) setError(e.message);
     }
-    setLoading(false);
-    setLoadingMore(false);
+    if (seq === fetchSeqRef.current) {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   }, [mode, category, r18]);
 
   loadRef.current = load;
@@ -82,6 +112,15 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
         cacheUsedRef.current = true;
         if (cache.category) setCategory(cache.category);
         if (typeof cache.r18 === 'boolean') setR18(cache.r18);
+        const hydratedR18 = typeof cache.r18 === 'boolean' ? cache.r18 : true;
+        loadedModeRef.current = (hydratedR18 && R18_CATEGORIES.has(cache.category))
+          ? `${cache.category}_r18`
+          : (cache.category || 'daily');
+        cacheRef.current.set(loadedModeRef.current, {
+          items: cache.items,
+          hasMore: !!cache.hasMore,
+          page: cache.page > 0 ? cache.page : 1,
+        });
         itemsRef.current = cache.items;
         setItems(cache.items);
         setHasMore(!!cache.hasMore);
@@ -160,16 +199,17 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
         </div>
       )}
       <ImageGrid items={items} likedSet={likedSet} onOpen={onOpen} />
+      {loading && items.length === 0 && <div className="hint">加载中...</div>}
       {!loading && hasMore && (
         <div ref={sentinelRef} style={{ height: 1 }} />
       )}
       {loadingMore && <div className="hint">加载中...</div>}
       {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
-      <div className={`chips chips-bottom bar-frosted${showFilters ? '' : ' chips-hidden'}`}>
+      <div className={`chips chips-bottom frosted${showFilters ? '' : ' chips-hidden'}`}>
         {MODES.map(m => (
           <button
             key={m.key}
-            className={`chip${m.key === category ? ' active' : ''}${m.label.length > 2 ? ' chip--small' : ''}`}
+            className={`chip${m.key === category ? ' active' : ''}${m.label.length > 2 && m.key !== 'r18g' ? ' chip--small' : ''}`}
             onClick={() => handleCategory(m.key)}
           >{m.label}</button>
         ))}

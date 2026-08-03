@@ -175,20 +175,6 @@
   overflow: visible !important;
 }
 
-.lightbox-slide--ugoira .gif-canvas-wrap {
-  width: 100% !important;
-  height: auto !important;
-  overflow: visible !important;
-  position: relative;
-}
-
-.lightbox-slide--ugoira .gif-canvas {
-  width: 100% !important;
-  height: auto !important;
-  object-fit: contain;
-  border-radius: 0 !important;
-}
-
 .lightbox-slide--ugoira .gif-info {
   display: none !important;
 }
@@ -328,15 +314,12 @@
 }
 
 .lightbox-dl-btn {
-  background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.8);
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 5px 14px;
   border-radius: 20px;
   font-size: 13px;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   transition: background 0.15s, border-color 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
@@ -357,9 +340,6 @@
   align-items: center;
   justify-content: center;
   line-height: 0;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .lightbox-icon-only:active {

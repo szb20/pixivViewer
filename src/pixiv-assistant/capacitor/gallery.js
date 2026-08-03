@@ -61,6 +61,19 @@ export async function loadFromGallery(fileName) {
   }
 }
 
+/** 查询系统相册是否已存在同名文件（只查索引，不读内容，轻量） */
+export async function galleryHasFile(fileName) {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver || !fileName) return false;
+    const r = await saver.exists({ fileName });
+    return r?.exists === true;
+  } catch (e) {
+    log.debug('查询相册同名文件失败:', e?.message || e);
+    return false;
+  }
+}
+
 /** 导出到系统相册（MediaStore / Pictures/TeyvatWhisper） */
 export async function exportToGallery(data, fileName, mimeType = mimeFor(fileName)) {
   try {

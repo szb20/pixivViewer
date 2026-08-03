@@ -18,7 +18,7 @@ export default function ToastHost() {
   if (!toasts.length) return null;
   return (
     <div className="toast-host">
-      {toasts.map(t => <div key={t.id} className="toast">{t.message}</div>)}
+      {toasts.map(t => <div key={t.id} className="toast frosted">{t.message}</div>)}
     </div>
   );
 }

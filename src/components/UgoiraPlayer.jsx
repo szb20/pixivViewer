@@ -47,6 +47,7 @@ export default function UgoiraPlayer({
   thumbnailUrl = '',
   hideLink = false,
   hideInfo = false,
+  clickable = true,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -128,27 +129,6 @@ export default function UgoiraPlayer({
         loadedRef.current = false;
         setFrames(cached.result.frames);
         setLoadProgress(100);
-      }
-      return;
-    }
-
-    // 已有进行中的下载 → 等它完成
-    if (cached?.promise) {
-      setLoading(true);
-      try { await cached.promise; } catch {}
-      if (mountedRef.current) setLoading(false);
-      const updated = downloadCache.get(illustId);
-      if (updated?.result?.frames?.length) {
-        restoringRef.current = true;
-        loadedRef.current = false;
-        if (mountedRef.current) {
-          setFrames(updated.result.frames);
-          setLoadProgress(100);
-        }
-      }
-      if (mountedRef.current) {
-        const err = updated?.result?.error;
-        if (err) setError(err);
       }
       return;
     }
@@ -354,7 +334,7 @@ export default function UgoiraPlayer({
       ref={containerRef}
       className={`ugoira-player ${playing ? 'playing' : ''} ${loaded ? 'loaded' : 'loading'} ${compact ? 'compact' : ''} ${className}`}
       style={{ width: displayWidth, maxWidth: '100%', ...style }}
-      onClick={loaded ? togglePlay : () => loadFrames()}
+      onClick={clickable ? (loaded ? togglePlay : () => loadFrames()) : undefined}
     >
       <div className="ugoira-canvas-wrap" style={{ width: displayWidth, height: displayHeight }}>
         {/* 缩略图兜底：帧加载完成前始终显示卡片同款缩略图 */}

@@ -121,7 +121,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 12px 4px;
+  padding: 10px 12px 8px;
 }
 
 .image-detail-tag {

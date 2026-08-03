@@ -7,7 +7,7 @@ import { createLogger } from './utils/logger.js'
 
 // 设置透明状态栏 + 白色文字/图标（适配深色背景）
 import { StatusBar, Style } from '@capacitor/status-bar'
-StatusBar.setStyle({ style: Style.Light })
+StatusBar.setStyle({ style: Style.Dark })
 StatusBar.setOverlaysWebView({ overlay: true })
 
 const log = createLogger('global')

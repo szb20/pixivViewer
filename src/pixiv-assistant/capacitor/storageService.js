@@ -11,6 +11,7 @@ import { PixivRepository } from './repository.js';
 import { FileStore } from './fileStore.js';
 import { TransitionEngine } from './transitionEngine.js';
 import { NetworkStore } from './networkStore.js';
+import { galleryHasFile } from './gallery.js';
 import { pixivReUrl } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 
@@ -212,6 +213,40 @@ export class PixivStorageService {
       }
     }
 
+    const cleanTitle = (item.title || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
+
+    // 目标文件名由 illustId/作者/标题决定：若系统相册已有同名文件 → 跳过下载，直接补元数据
+    const probe = new PixivEntity({
+      id,
+      illustId: item.illustId,
+      pageIndex: item._pageIndex ?? 0,
+      type: 'image',
+      title: cleanTitle,
+      authorName: item.authorName || item.author || '',
+    });
+    const probeName = this.fileStore.buildFileName(probe);
+    if (await galleryHasFile(probeName)) {
+      const newEntity = new PixivEntity({
+        id,
+        illustId: item.illustId,
+        pageIndex: item._pageIndex ?? 0,
+        type: 'image',
+        state: 'saved',
+        fileName: probeName,
+        title: cleanTitle,
+        author: item.author || '',
+        authorName: item.authorName || item.author || '',
+        authorAccount: item.authorAccount || '',
+        authorId: item.authorId || '',
+        tags: item.tags || [],
+        cachedAt: Date.now(),
+        likedAt: item._liked ? Date.now() : 0,
+        originalUrl: '',
+      });
+      await this.repository.save(newEntity);
+      return { success: true, cached: true, idempotent: true, skipped: true, fileName: probeName, entity: newEntity };
+    }
+
     // 全新记录 → 下载图片并创建 saved 实体（原图优先，失败自动降级）
     const urls = buildDownloadUrls(item);
     if (urls.length === 0) return { success: false, error: 'no_url' };
@@ -223,7 +258,6 @@ export class PixivStorageService {
     }
     if (!data) return { success: false, error: 'download_failed' };
 
-    const cleanTitle = (item.title || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
     const newEntity = new PixivEntity({
       id,
       illustId: item.illustId,

@@ -41,7 +41,9 @@ import java.io.OutputStream;
 )
 public class GallerySaverPlugin extends Plugin {
 
-    private static final String RELATIVE_PATH = "Pictures/TeyvatWhisper";
+    // 注意：MediaStore 实际存储的 RELATIVE_PATH 带尾斜杠（Pictures/TeyvatWhisper/），
+    // 查询必须用带斜杠的值，否则 read/exists/delete 全部匹配不到。
+    private static final String RELATIVE_PATH = "Pictures/TeyvatWhisper/";
 
     /**
      * 确保存储权限。
@@ -179,6 +181,36 @@ public class GallerySaverPlugin extends Plugin {
                     ret.put("data", Base64.encodeToString(bytes, Base64.NO_WRAP));
                     call.resolve(ret);
                 }
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 查询相册中是否存在同名文件（只查 MediaStore 索引，不读文件内容） */
+    @PluginMethod
+    public void exists(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            String selection = MediaStore.Images.Media.DISPLAY_NAME + " = ? AND "
+                + MediaStore.Images.Media.RELATIVE_PATH + " = ?";
+            String[] args = new String[]{fileName, RELATIVE_PATH};
+            try (Cursor c = cr.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media._ID, MediaStore.Images.Media.SIZE},
+                    selection, args, null)) {
+                boolean exists = c != null && c.moveToFirst();
+                JSObject ret = new JSObject();
+                ret.put("exists", exists);
+                if (exists) {
+                    ret.put("size", c.getLong(1));
+                }
+                call.resolve(ret);
             }
         } catch (Exception e) {
             call.reject(e.getMessage(), e);

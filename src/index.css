@@ -86,16 +86,16 @@ button {
 
 .ptr-indicator {
   position: fixed;
-  top: 0;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
   left: 50%;
   z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 10px 16px;
-  padding-top: calc(10px + env(safe-area-inset-top, 0px));
-  border-radius: 0 0 16px 16px;
+  gap: 6px;
+  padding: 4px 14px;
+  line-height: 1;
+  border-radius: 16px;
   color: #fff;
   font-size: 13px;
   pointer-events: none;
@@ -127,10 +127,29 @@ button {
   to { transform: rotate(360deg); }
 }
 
-.bar-frosted {
-  background: rgba(15, 17, 21, 0.72);
+/* ── 毛玻璃通用样式 ── */
+.frosted {
+  background: rgba(15, 17, 21, 0.45);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+}
+
+.frosted-light {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+/* 顶部状态栏毛玻璃（复用 .frosted） */
+.status-bar-frosted {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 30;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  background: rgba(100, 110, 125, 0.45);
+  backdrop-filter: blur(8px);
 }
 
 .tab-bar {
@@ -153,7 +172,7 @@ button {
   font-size: 16px;
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: #b8bcc5;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -263,7 +282,7 @@ button {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
-  color: var(--text-secondary);
+  color: #b8bcc5;
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -305,15 +324,15 @@ button {
   transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .chips-bottom .r18-toggle.on {
-  border-color: #d48af0;
-  color: #d48af0;
+  border-color: #e6a6fa;
+  color: #e6a6fa;
   box-shadow:
-    0 0 10px rgba(212, 138, 240, 0.7),
-    0 0 20px rgba(212, 138, 240, 0.4);
+    0 0 10px rgba(230, 166, 250, 0.7),
+    0 0 20px rgba(230, 166, 250, 0.4);
   text-shadow:
-    0 0 8px rgba(212, 138, 240, 0.95),
-    0 0 18px rgba(212, 138, 240, 0.7),
-    0 0 32px rgba(212, 138, 240, 0.45);
+    0 0 8px rgba(230, 166, 250, 0.95),
+    0 0 18px rgba(230, 166, 250, 0.7),
+    0 0 32px rgba(230, 166, 250, 0.45);
 }
 
 .chip {
@@ -618,9 +637,6 @@ button {
 .toast {
   padding: 9px 16px;
   border-radius: 20px;
-  background: rgba(15, 17, 21, 0.72);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);

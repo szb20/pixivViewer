@@ -198,40 +198,6 @@ export default function ImageDetailView({
     return savedCount;
   }, [image, pageCount, illustData, pixivCache, buildSaveItem, setPixivCache]);
 
-  // 灯箱内"下载当前页"（多图逐页手动保存，单图/GIF 即保存当前作品）
-  const handleLightboxDownload = useCallback(async (item) => {
-    if (!item?.illustId) return;
-    const ck = getCompositeKey(item);
-    if (pixivCache[ck]?.saved) {
-      showToast('已在相册中');
-      return;
-    }
-    const saveItem = {
-      illustId: item.illustId,
-      _pageIndex: item._pageIndex ?? 0,
-      _silent: true, // 统一由这里弹 toast，避免与 storageFacade 重复
-      type: item.type === 'gif' ? 'gif' : 'image',
-      originalUrl: item.src || '',
-      mediumUrl: item.src || '',
-      thumbnailUrl: item.thumbnailUrl || image?.thumbnailUrl || '',
-      title: item.title || image?.title,
-      author: item.author || image?.author,
-      authorName: item.authorName || image?.authorName,
-    };
-    try {
-      const r = await window.api.saveItem?.(saveItem);
-      if (r?.success || r?.cached) {
-        setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
-        showToast(r?.idempotent ? '已在相册中' : '已保存到相册');
-      } else {
-        showToast(r?.error ? `保存失败：${r.error}` : '保存失败', { type: 'error' });
-      }
-    } catch (e) {
-      log.warn('灯箱下载失败:', ck, e?.message || e);
-      showToast('保存失败', { type: 'error' });
-    }
-  }, [image, pixivCache, setPixivCache]);
-
   // 灯箱媒体项：点击大图弹出全屏预览（按 detailQuality 加载原图档）。
   // 滚动视图只显示最小等比预览图，原图在灯箱按需加载。
   const lightboxMedia = (() => {
@@ -325,6 +291,7 @@ export default function ImageDetailView({
               thumbnailUrl={image?.thumbnailUrl}
               hideInfo
               _lazy
+              clickable={false}
             />
           </div>
         ) : (
@@ -373,23 +340,18 @@ export default function ImageDetailView({
                 key={tag}
                 className="image-detail-tag"
                 onClick={() => onSearchTag?.(tag)}
-              >#{tag}</button>
+              >{tag}</button>
             ))}
           </div>
         )}
 
         {/* 相关推荐网格 */}
+        <div style={{ height: 60 }} />
         {loadingRelated && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0 }}>
             {[1,2,3,4,5,6].map(i => (
               <div key={i} style={{ aspectRatio: '1', background: 'var(--bg-secondary)' }} />
             ))}
-          </div>
-        )}
-        {!loadingRelated && <div style={{ height: 16 }} />}
-        {!loadingRelated && (
-          <div style={{ textAlign: 'center', padding: '4px 0 8px', color: 'var(--text-tertiary)', fontSize: 11 }}>
-            {related.length === 0 ? '暂无相关推荐' : '相关推荐'}
           </div>
         )}
         {related.length > 0 && (
@@ -434,20 +396,6 @@ export default function ImageDetailView({
           initialIndex={lightboxIndex}
           onClose={() => setLightboxIndex(null)}
           onIndexChange={(idx) => setLightboxIndex(idx)}
-          renderActions={(item) => {
-            const ck = getCompositeKey(item);
-            const isSaved = !!pixivCache[ck]?.saved;
-            return (
-              <button
-                className="lightbox-dl-btn"
-                disabled={isSaved}
-                onTouchStart={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); handleLightboxDownload(item); }}
-              >
-                {isSaved ? '已保存' : '下载'}
-              </button>
-            );
-          }}
           zIndex={10000}
         />
       )}
