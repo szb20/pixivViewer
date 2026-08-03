@@ -72,9 +72,17 @@ button {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  padding-bottom: 48px;
+  padding-bottom: 32px;
 }
 .app-content::-webkit-scrollbar { display: none; }
+
+/* 滚动式顶部安全区：初始时内容避开状态栏，滚动时可滑入状态栏下（沉浸式） */
+.app-content::before {
+  content: '';
+  display: block;
+  height: env(safe-area-inset-top, 0px);
+  flex-shrink: 0;
+}
 
 .ptr-indicator {
   position: fixed;
@@ -86,12 +94,18 @@ button {
   justify-content: center;
   gap: 8px;
   padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
   border-radius: 0 0 16px 16px;
-  background: rgba(15, 17, 21, 0.85);
   color: #fff;
   font-size: 13px;
   pointer-events: none;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: none;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 20px rgba(255, 255, 255, 0.75),
+    0 0 40px rgba(255, 255, 255, 0.5);
 }
 
 .ptr-arrow {
@@ -144,11 +158,17 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  text-shadow: 0 0 8px rgba(107, 112, 128, 0.3);
+  transition: color 0.2s ease, text-shadow 0.2s ease;
 }
 
 .tab-btn.active {
   color: var(--text-primary);
   font-weight: 600;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 20px rgba(255, 255, 255, 0.75),
+    0 0 40px rgba(255, 255, 255, 0.5);
 }
 
 .page {
@@ -248,11 +268,25 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+  transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
 .chips-bottom .chip.active {
-  background: var(--accent);
+  background: transparent;
   color: #fff;
-  border-color: var(--accent);
+  border-color: #fff;
+  box-shadow:
+    0 0 10px rgba(255, 255, 255, 0.7),
+    0 0 20px rgba(255, 255, 255, 0.4);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 18px rgba(255, 255, 255, 0.7),
+    0 0 32px rgba(255, 255, 255, 0.45);
+}
+
+/* 长标签（如"男性向/女性向"）在 32px 圆钮内用小一号字号 */
+.chips-bottom .chip--small {
+  font-size: 9px;
 }
 
 .chips-bottom .r18-toggle {
@@ -267,6 +301,19 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+  transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.chips-bottom .r18-toggle.on {
+  border-color: #d48af0;
+  color: #d48af0;
+  box-shadow:
+    0 0 10px rgba(212, 138, 240, 0.7),
+    0 0 20px rgba(212, 138, 240, 0.4);
+  text-shadow:
+    0 0 8px rgba(212, 138, 240, 0.95),
+    0 0 18px rgba(212, 138, 240, 0.7),
+    0 0 32px rgba(212, 138, 240, 0.45);
 }
 
 .chip {
@@ -280,9 +327,13 @@ button {
 }
 
 .chip.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(79, 140, 255, 0.12);
+  border-color: #fff;
+  color: #fff;
+  background: transparent;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 0 16px rgba(255, 255, 255, 0.55),
+    0 0 28px rgba(255, 255, 255, 0.35);
 }
 
 .r18-toggle {
@@ -346,7 +397,7 @@ button {
   font-size: 12px;
   color: var(--text-tertiary);
   text-align: center;
-  padding: 8px 0;
+  padding: 8px 0 4px;
 }
 
 .search-bar {
@@ -567,11 +618,18 @@ button {
 .toast {
   padding: 9px 16px;
   border-radius: 20px;
-  background: rgba(30, 33, 40, 0.95);
+  background: rgba(15, 17, 21, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   animation: toast-in 0.2s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 20px rgba(255, 255, 255, 0.75),
+    0 0 40px rgba(255, 255, 255, 0.5);
 }
 
 @keyframes toast-in {

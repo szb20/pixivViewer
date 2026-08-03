@@ -9,13 +9,11 @@ const PAGE_SIZE = 24;
 
 export default function GalleryPage({ onOpen, registerRefresh }) {
   const [items, setItems] = useState([]);
-  const [thumbs, setThumbs] = useState({});
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState(null);
   const offsetRef = useRef(0);
   const sentinelRef = useRef(null);
-  const thumbsRef = useRef({});
   const loadRef = useRef(null);
 
   const load = useCallback(async (append) => {
@@ -28,15 +26,7 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
       offsetRef.current += list.length;
       setHasMore((r?.total || 0) > offsetRef.current);
       setItems(prev => (append ? [...prev, ...list] : list));
-      for (const item of list) {
-        const id = `${item.illustId}_${item.pageIndex ?? 0}`;
-        if (thumbsRef.current[id]) continue;
-        const local = await storageFacade.load(item.illustId, item.pageIndex ?? 0);
-        if (local?.localUrl) {
-          thumbsRef.current[id] = local.localUrl;
-          setThumbs(prev => ({ ...prev, [id]: local.localUrl }));
-        }
-      }
+      // 网格直接显示 250px 缩略图，不加载本地原图（避免大图刷屏）
     } catch (e) {
       log.warn('listLiked 失败:', e?.message || e);
       setError(e?.message || '加载失败');
@@ -53,6 +43,13 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
   }, [registerRefresh]);
 
   useEffect(() => { load(false); }, [load]);
+
+  // 喜欢状态变化（详情页点❤️/取消）→ 刷新列表
+  useEffect(() => {
+    const onLikedChanged = () => loadRef.current?.(false);
+    window.addEventListener('pixiv:liked-changed', onLikedChanged);
+    return () => window.removeEventListener('pixiv:liked-changed', onLikedChanged);
+  }, []);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -79,7 +76,7 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
       <div className="gallery-grid">
         {items.map(item => {
           const id = `${item.illustId}_${item.pageIndex ?? 0}`;
-          const src = thumbs[id] || pixivReUrl(String(item.illustId), item.pageIndex ?? 0);
+          const src = pixivReUrl(String(item.illustId), item.pageIndex ?? 0, 'thumb');
           return (
             <div key={id} className="gallery-item"
               onClick={() => onOpen?.({

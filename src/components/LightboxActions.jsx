@@ -12,7 +12,7 @@
  *   index         — 当前索引 (gallery 场景删除用)
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { getCompositeKey } from '../pixiv-assistant/core/utils.js';
 import { showToast } from '../utils/toast.js';
 import HeartIcon from './icons/HeartIcon.jsx';
@@ -26,13 +26,25 @@ const SCENE = {
 
 /**
  * 喜欢按钮 — 独立导出，用于灯箱左下角悬浮。
+ *
+ * 交互：
+ * - 点按：切换喜欢；单图/GIF 会顺带保存（喜欢=下载）；多图只切喜欢不下载
+ * - 长按：切换喜欢 + 下载全部页（图标会同步切换）
  */
-export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll }) {
+export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll, totalPages }) {
   const liked = cur?.illustId
     ? (pixivCache[getCompositeKey(cur)]?.liked || cur._liked || false)
     : false;
+  const multiPage = (Number(totalPages) || Number(cur?._totalPages) || Number(cur?.pageCount) || 1) > 1;
+  const longPressTimerRef = useRef(null);
+  const longPressTriggeredRef = useRef(false);
 
   const handleLike = useCallback(async (e) => {
+    // 长按已触发下载，本次合成的 click 不再切换喜欢
+    if (longPressTriggeredRef.current) {
+      longPressTriggeredRef.current = false;
+      return;
+    }
     e.stopPropagation();
     if (!cur?.illustId) return;
     const ck = getCompositeKey(cur);
@@ -63,15 +75,71 @@ export function LikeButton({ cur, pixivCache, setPixivCache, onLikeSaveAll }) {
       return;
     }
 
-    if (result.liked && typeof onLikeSaveAll === 'function') {
+    // 单图 / GIF：喜欢=下载；多图：喜欢只是喜欢，下载走长按或灯箱按钮
+    if (result.liked && !multiPage && typeof onLikeSaveAll === 'function') {
       onLikeSaveAll(cur).catch(() => {});
     }
+  }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage]);
+
+  // 长按 → 切换喜欢 + 下载全部页
+  const handleLongPressSaveAll = useCallback(async () => {
+    if (!cur?.illustId) return;
+    // 先切换喜欢
+    const ck = getCompositeKey(cur);
+    const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
+    if (!prevLiked) {
+      setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: Date.now() } }));
+      const sf = window.api?.storageFacade;
+      const toggle = sf?.toggleLike?.bind(sf) || window.api?.toggleLike;
+      if (typeof toggle === 'function') {
+        try {
+          const result = await toggle(cur.illustId, cur._pageIndex ?? 0);
+          if (result.success) {
+            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
+          } else {
+            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
+          }
+        } catch {
+          setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
+        }
+      }
+    }
+    // 再下载全部页
+    if (typeof onLikeSaveAll !== 'function') {
+      showToast('当前平台暂不支持下载');
+      return;
+    }
+    const count = await onLikeSaveAll(cur).catch(() => 0);
+    showToast(count > 0 ? `已保存 ${count} 页到相册` : '已在相册中');
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll]);
+
+  const startLongPress = useCallback((e) => {
+    e.stopPropagation();
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    longPressTriggeredRef.current = false;
+    clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTriggeredRef.current = true;
+      handleLongPressSaveAll();
+    }, 500);
+  }, [handleLongPressSaveAll]);
+
+  const cancelLongPress = useCallback(() => {
+    clearTimeout(longPressTimerRef.current);
+  }, []);
 
   if (!cur?.illustId) return null;
 
   return (
-    <button className="lightbox-dl-btn lightbox-icon-only" onClick={handleLike}>
+    <button
+      className="lightbox-dl-btn lightbox-icon-only"
+      onClick={handleLike}
+      onPointerDown={startLongPress}
+      onPointerUp={cancelLongPress}
+      onPointerLeave={cancelLongPress}
+      onPointerCancel={cancelLongPress}
+      title={multiPage ? '点按喜欢；长按喜欢+下载全部页' : '喜欢并保存'}
+    >
       <HeartIcon filled className={liked ? 'heart-icon--liked' : 'heart-icon--neutral'} />
     </button>
   );

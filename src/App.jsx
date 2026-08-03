@@ -4,6 +4,7 @@ import ToastHost from './components/ToastHost.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
+import AuthorWorksPage from './components/AuthorWorksPage.jsx';
 import DiscoverPage from './pages/DiscoverPage.jsx';
 import RankingPage from './pages/RankingPage.jsx';
 import BookmarksPage from './pages/BookmarksPage.jsx';
@@ -33,6 +34,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailImage, setDetailImage] = useState(null);
   const [searchSeed, setSearchSeed] = useState(null);
+  const [authorWorks, setAuthorWorks] = useState(null); // { authorId, authorName }
   // 各 tab 的滚动位置 / 已访问记录 / 刷新令牌（重点当前 tab 时 +1 触发强制刷新）
   const scrollPositions = useRef({});
   const visitedTabs = useRef(new Set(['ranking']));
@@ -47,6 +49,28 @@ export default function App() {
     const fn = refreshFnsRef.current[tab];
     if (fn) await fn();
   }, [tab]);
+  // 点击作者 → 打开全屏"作者作品"页
+  const handleAuthorWorks = useCallback((authorId, authorName) => {
+    if (!authorId) return;
+    setAuthorWorks({ authorId: String(authorId), authorName: authorName || '' });
+  }, []);
+  // 在作者作品页点某作品 → 关闭该页并打开详情
+  const handleAuthorImage = useCallback((item) => {
+    setAuthorWorks(null);
+    openDetail({
+      illustId: item.illustId,
+      title: item.title || '',
+      author: item.authorName || authorWorks?.authorName || '',
+      authorName: item.authorName || authorWorks?.authorName || '',
+      authorId: item.authorId || authorWorks?.authorId || '',
+      thumbnailUrl: item.thumbnailUrl,
+      mediumUrl: item.mediumUrl,
+      originalUrl: item.originalUrl || item.mediumUrl,
+      type: item.type || 'image',
+      illustType: item.illustType ?? 0,
+      _totalPages: item.pageCount || 1,
+    });
+  }, [authorWorks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openDetail = (img) => {
     const el = document.querySelector('.app-content');
@@ -217,6 +241,17 @@ export default function App() {
           setPixivCache={setPixivCache}
           onClose={closeDetail}
           onSearchTag={handleSearchTag}
+          onAuthorWorks={handleAuthorWorks}
+        />
+      )}
+
+      {/* 全屏"作者作品"页 — 叠加在详情页之上 */}
+      {authorWorks && (
+        <AuthorWorksPage
+          authorId={authorWorks.authorId}
+          authorName={authorWorks.authorName}
+          onClose={() => setAuthorWorks(null)}
+          onOpenImage={handleAuthorImage}
         />
       )}
 

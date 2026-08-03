@@ -10,6 +10,7 @@ import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
 import { safeFileName } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
+import { exportToGallery, deleteFromGallery, loadFromGallery } from './gallery.js';
 
 const log = createLogger('FileStore');
 
@@ -55,17 +56,22 @@ export class FileStore {
    */
   async save(entity, data, state) {
     try {
-      const FS = await getFS();
-      if (!FS) { log.error('[save] getFS 返回空 — Filesystem 不可用'); return false; }
       if (!data) { log.error('[save] data 为空'); return false; }
       if (!entity?.fileName) { log.error('[save] entity.fileName 为空', entity); return false; }
       const targetState = state || entity.state;
-      const { dir, dirType } = this._resolveDir(targetState);
-      await ensureDirectory(FS, dir, dirType);
-      await FS.plugin.writeFile({ path: `${dir}/${entity.fileName}`, data, directory: dirType });
-      return true;
+      if (targetState !== 'saved') {
+        // 非 saved（缓存）状态：写应用私有存储（旧逻辑保留，实际当前只有 saved 走这里）
+        const FS = await getFS();
+        if (!FS) { log.error('[save] getFS 返回空 — Filesystem 不可用'); return false; }
+        const { dir, dirType } = this._resolveDir(targetState);
+        await ensureDirectory(FS, dir, dirType);
+        await FS.plugin.writeFile({ path: `${dir}/${entity.fileName}`, data, directory: dirType });
+        return true;
+      }
+      // saved：只导出系统相册（MediaStore），不写私有副本（避免双写）
+      return await exportToGallery(data, entity.fileName);
     } catch (e) {
-      log.error('[save] writeFile 失败:', e?.message || e);
+      log.error('[save] 保存失败:', e?.message || e);
       return false;
     }
   }
@@ -77,15 +83,19 @@ export class FileStore {
    */
   async load(entity) {
     try {
+      if (!entity?.fileName) return null;
+      let data = '';
+      // 1. 旧数据：应用私有存储
       const FS = await getFS();
-      if (!FS || !entity.fileName) return null;
-      const { dir, dirType } = this._resolveDir(entity.state);
-      const raw = await FS.plugin.readFile({
-        path: `${dir}/${entity.fileName}`, directory: dirType,
-      }).catch(() => null);
-      if (!raw) return null;
-
-      const data = typeof raw === 'string' ? raw : raw.data || '';
+      if (FS) {
+        const { dir, dirType } = this._resolveDir(entity.state);
+        const raw = await FS.plugin.readFile({
+          path: `${dir}/${entity.fileName}`, directory: dirType,
+        }).catch(() => null);
+        if (raw) data = typeof raw === 'string' ? raw : raw.data || '';
+      }
+      // 2. 新数据：系统相册（MediaStore，读取需相册权限）
+      if (!data) data = await loadFromGallery(entity.fileName);
       if (!data) return null;
 
       const ext = (entity.fileName || '').split('.').pop()?.toLowerCase() || 'jpg';
@@ -121,6 +131,9 @@ export class FileStore {
       const data = typeof raw === 'string' ? raw : raw.data || '';
       await ensureDirectory(FS, dstDir, dstType);
       await FS.plugin.writeFile({ path: `${dstDir}/${entity.fileName}`, data, directory: dstType });
+      if (toState === 'saved') {
+        await exportToGallery(data, entity.fileName);
+      }
       return true;
     } catch (e) {
       log.debug('[copy] 复制失败:', e?.message || e);
@@ -141,6 +154,9 @@ export class FileStore {
       const targetState = state || entity.state;
       const { dir, dirType } = this._resolveDir(targetState);
       await FS.plugin.deleteFile({ path: `${dir}/${entity.fileName}`, directory: dirType }).catch(() => {});
+      if (targetState === 'saved') {
+        await deleteFromGallery(entity.fileName);
+      }
       return true;
     } catch (e) {
       log.debug('[delete] 删除失败:', e?.message || e);
@@ -224,15 +240,11 @@ export class FileStore {
 
   /**
    * 解析路径规则。
-   * cached → DATA/pixiv_cache
-   * saved  → DOCUMENTS/TeyvatWhisper
+   * 应用内文件统一存私有存储（Directory.Data，无需权限）；
+   * 「保存到相册」时通过 MediaStore 额外导出系统相册副本（gallery.js）。
    */
-  _resolveDir(state) {
-    if (state === 'saved') {
-      return { dir: CACHE_DIR, dirType: 'DOCUMENTS' };
-    }
-    // cached 状态统一走 DOCUMENTS（统一存储后不再区分）
-    return { dir: CACHE_DIR, dirType: 'DOCUMENTS' };
+  _resolveDir() {
+    return { dir: CACHE_DIR, dirType: 'DATA' };
   }
 
   async _base64ToBuf(raw) {

@@ -1,0 +1,96 @@
+/**
+ * 系统相册导出 — 通过原生 GallerySaver 插件走 MediaStore（无需存储权限）。
+ * 尽力而为：失败只记日志，不影响应用内保存主流程。
+ */
+import { Capacitor } from '@capacitor/core';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('gallery');
+
+const MIME_MAP = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+
+export function mimeFor(fileName) {
+  const ext = (fileName || '').split('.').pop()?.toLowerCase();
+  return MIME_MAP[ext] || 'image/jpeg';
+}
+
+/** 确保系统存储权限（Android ≤10 会弹系统申请框；10+ 直接放行） */
+export async function ensureGalleryPermission() {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver) return true;
+    const r = await saver.ensurePermission();
+    return r?.granted !== false;
+  } catch (e) {
+    log.warn('申请存储权限失败:', e?.message || e);
+    return false;
+  }
+}
+
+/** 确保读取相册权限（Android 13+ READ_MEDIA_IMAGES / 旧版 READ_EXTERNAL_STORAGE） */
+export async function ensureGalleryReadPermission() {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver) return true;
+    const r = await saver.ensureReadPermission();
+    return r?.granted !== false;
+  } catch (e) {
+    log.warn('申请相册读取权限失败:', e?.message || e);
+    return false;
+  }
+}
+
+/** 从系统相册按文件名读取图片（返回 base64，找不到返回 null） */
+export async function loadFromGallery(fileName) {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver || !fileName) return null;
+    const granted = await ensureGalleryReadPermission();
+    if (!granted) return null;
+    const r = await saver.read({ fileName });
+    return r?.data || null;
+  } catch (e) {
+    log.debug('读取相册失败:', e?.message || e);
+    return null;
+  }
+}
+
+/** 导出到系统相册（MediaStore / Pictures/TeyvatWhisper） */
+export async function exportToGallery(data, fileName, mimeType = mimeFor(fileName)) {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver) {
+      log.debug('GallerySaver 插件不可用（非原生环境）');
+      return false;
+    }
+    const granted = await ensureGalleryPermission();
+    if (!granted) {
+      log.warn('存储权限未授予，跳过相册导出');
+      return false;
+    }
+    await saver.save({ data, fileName, mimeType });
+    return true;
+  } catch (e) {
+    log.warn('导出系统相册失败:', e?.message || e);
+    return false;
+  }
+}
+
+/** 从系统相册删除副本（幂等） */
+export async function deleteFromGallery(fileName) {
+  try {
+    const saver = Capacitor?.Plugins?.GallerySaver;
+    if (!saver) return false;
+    await saver.delete({ fileName });
+    return true;
+  } catch (e) {
+    log.debug('删除相册副本失败:', e?.message || e);
+    return false;
+  }
+}

@@ -8,6 +8,53 @@
   background: var(--bg);
 }
 
+/* 全屏"作者作品"页 — 叠加在详情页之上 */
+.author-works-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.author-works-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: none;
+}
+
+.author-works-back {
+  font-size: 26px;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.author-works-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author-works-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 24px;
+}
+
 .char-state-bar {
   width: 100%;
   max-width: 560px;
@@ -174,6 +221,7 @@
   width: 100%;
   position: relative;
   cursor: pointer;
+  background: var(--bg-secondary);
 }
 
 .image-detail-bg {

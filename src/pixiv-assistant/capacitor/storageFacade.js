@@ -66,7 +66,7 @@ export class StorageFacade {
       showToast('已在相册中');
     } else if (result.success) {
       showToast('已保存到相册');
-    } else if (result.error !== 'gif_not_supported') {
+    } else {
       showToast(this._errorMessage(result.error), { type: 'error' });
     }
     return result;
@@ -179,6 +179,10 @@ export class StorageFacade {
       return { success: false, liked: false, likedAt: 0 };
     }
     const result = await this.service.toggleLike(illustId, pageIndex);
+    if (result.success) {
+      // 通知相册等页面：喜欢状态已变化，需要刷新
+      window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));
+    }
     if (!result.success) {
       showToast('操作失败', { type: 'error' });
     }

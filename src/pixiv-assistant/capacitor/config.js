@@ -31,11 +31,11 @@ export function getSettingsSync() {
     stored = {};
   }
   return {
+    ...stored,
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
     pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
     gridQuality: stored.gridQuality || 'thumb',       // 'mini' | 'thumb'
     detailQuality: stored.detailQuality || 'original', // 'regular' | 'original'
-    ...stored,
   };
 }
 

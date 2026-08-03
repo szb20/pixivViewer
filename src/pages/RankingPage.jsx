@@ -9,8 +9,8 @@ const MODES = [
   { key: 'daily', label: '日榜' },
   { key: 'weekly', label: '周榜' },
   { key: 'monthly', label: '月榜' },
-  { key: 'male', label: '男榜' },
-  { key: 'female', label: '女榜' },
+  { key: 'male', label: '男性向' },
+  { key: 'female', label: '女性向' },
   { key: 'rookie', label: '新人' },
   { key: 'original', label: '原创' },
   { key: 'r18g', label: 'R18G' },
@@ -56,7 +56,7 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
       setHasMore(nextHasMore);
       if (!append && !filtered.length) setError(r?.message || r?.error || '排行榜为空');
       // 持久化缓存（24h TTL）：重启 App 后直接恢复
-      saveTabCache(CACHE_KEY, { category, r18, items: nextItems, hasMore: nextHasMore, page }).catch(() => {});
+      saveTabCache(CACHE_KEY, { category, r18, items: nextItems, hasMore: nextHasMore, page }).catch(() => { });
     } catch (e) {
       setError(e.message);
     }
@@ -80,13 +80,13 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
         const cache = await loadTabCache(CACHE_KEY);
         if (cancelled || !cache?.items?.length) return;
         cacheUsedRef.current = true;
-          if (cache.category) setCategory(cache.category);
-          if (typeof cache.r18 === 'boolean') setR18(cache.r18);
-          itemsRef.current = cache.items;
-          setItems(cache.items);
-          setHasMore(!!cache.hasMore);
-          if (cache.page > 0) pageRef.current = cache.page;
-          setLoading(false);
+        if (cache.category) setCategory(cache.category);
+        if (typeof cache.r18 === 'boolean') setR18(cache.r18);
+        itemsRef.current = cache.items;
+        setItems(cache.items);
+        setHasMore(!!cache.hasMore);
+        if (cache.page > 0) pageRef.current = cache.page;
+        setLoading(false);
       } catch {
         /* 缓存不可用 → 走网络 */
       } finally {
@@ -169,16 +169,14 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
         {MODES.map(m => (
           <button
             key={m.key}
-            className={`chip${m.key === category ? ' active' : ''}`}
+            className={`chip${m.key === category ? ' active' : ''}${m.label.length > 2 ? ' chip--small' : ''}`}
             onClick={() => handleCategory(m.key)}
           >{m.label}</button>
         ))}
         <button
           className={`chip r18-toggle${r18 ? ' on' : ''}`}
           onClick={handleR18Toggle}
-          style={r18
-            ? { background: '#e88090', color: '#fff', borderColor: '#e88090', marginLeft: 'auto' }
-            : { marginLeft: 'auto' }}
+          style={{ marginLeft: 'auto' }}
         >{r18 ? 'R18' : '公开'}</button>
       </div>
     </div>

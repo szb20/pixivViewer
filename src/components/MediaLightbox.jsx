@@ -77,6 +77,7 @@ export default function MediaLightbox({
   initialIndex = 0,
   onClose,
   onIndexChange,
+  renderActions,
   disableZoom: forceDisableZoom,
   zIndex = 10000,
 }) {
@@ -369,6 +370,12 @@ export default function MediaLightbox({
             </div>
           ))}
         </div>
+        {/* 当前页操作按钮（消费者自定义，如下载） */}
+        {renderActions && cur && (
+          <div className="lightbox-actions">
+            {renderActions(cur, index)}
+          </div>
+        )}
       </div>
     </div>
   );

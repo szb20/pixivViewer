@@ -57,9 +57,10 @@ export function proxyThumb(url) {
  *
  * @param {string} baseUrl — Pixiv API 返回的 page 0 URL（任意尺寸）
  * @param {number} page — 目标页码
+ * @param {number} [size=1200] — master 尺寸（1200=regular，360=最小等比预览）
  * @returns {string}
  */
-export function pixivPageUrl(baseUrl, page) {
+export function pixivPageUrl(baseUrl, page, size = 1200) {
   if (!baseUrl) {
     log.debug('[pixivPageUrl] baseUrl is empty, returning empty');
     return '';
@@ -71,7 +72,7 @@ export function pixivPageUrl(baseUrl, page) {
   if (match) {
     const datePath = match[1];
     const illustId = match[2];
-    let result = `https://i.pixiv.re/img-master/img/${datePath}/${illustId}_p${page}_master1200.jpg`;
+    let result = `https://i.pixiv.re/img-master/img/${datePath}/${illustId}_p${page}_master${size}.jpg`;
     if (USE_PROXY) result = result.replace(/https:\/\/i\.pixiv\.re/, '/pixiv-img');
     return result;
   }

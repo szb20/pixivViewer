@@ -42,31 +42,6 @@ export class NetworkStore {
   }
 
   /**
-   * 下载 ZIP 包（动图帧），返回 ArrayBuffer。
-   * @param {string} url
-   * @param {function} [onProgress]
-   * @returns {Promise<ArrayBuffer>}
-   */
-  async downloadZip(url, onProgress) {
-    return await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', url);
-      xhr.responseType = 'arraybuffer';
-      xhr.timeout = 120000;
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
-        else reject(new Error(`XHR HTTP ${xhr.status}`));
-      };
-      xhr.onerror = () => reject(new Error('XHR error'));
-      xhr.ontimeout = () => reject(new Error('XHR timeout'));
-      xhr.onprogress = (e) => {
-        if (e.lengthComputable && onProgress) onProgress(Math.min(99, Math.round((e.loaded / e.total) * 100)));
-      };
-      xhr.send();
-    });
-  }
-
-  /**
    * 获取动图元数据（ugoira_meta + illust 详情）。
    * @param {string} illustId
    * @param {string} [cookie]

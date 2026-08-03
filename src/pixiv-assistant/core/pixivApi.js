@@ -40,7 +40,7 @@ function mapIllustItem(item) {
     thumbnailUrl: proxyThumb(item.url || item.thumbnailUrl || item.profileImageUrl || ''),
     mediumUrl: pixivReUrl(illustId),
     originalUrl: item.originalUrl || pixivReUrl(illustId),
-    tags: (item.tags || []).slice(0, 5).map(t => typeof t === 'string' ? t : (t.tag || t)),
+    tags: (item.tags || []).map(t => typeof t === 'string' ? t : (t.tag || t)),
     pixivUrl: `https://www.pixiv.net/artworks/${illustId}`,
     pageCount: parseInt(item.pageCount || item.illust_page_count) || 1,
     type: illustType === 2 ? 'gif' : 'image',
@@ -61,12 +61,16 @@ function mapRankingItem(item) {
 }
 
 /** 映射图片页面（从 API 详情响应提取），带 original 原图档 */
-function mapImagePages(basePage0Url, basePage0ThumbUrl, pageCount, baseOriginalUrl = '') {
+function mapImagePages(basePage0Url, basePage0ThumbUrl, pageCount, baseOriginalUrl = '', basePreviewUrl = '') {
   const images = [];
   for (let p = 0; p < pageCount; p++) {
     images.push({
       index: p,
       url: pixivPageUrl(basePage0Url, p),
+      // 详情页滚动视图用的等比预览图：直接用 API 的 small 档（c/540x540_70 → 540px 长边等比，约 45KB）
+      previewUrl: basePreviewUrl
+        ? proxyThumb(basePreviewUrl.replace(/_p0_/, `_p${p}_`))
+        : '',
       thumbnailUrl: p === 0 ? proxyThumb(basePage0ThumbUrl) : pixivPageUrl(basePage0Url, p),
       mediumUrl: pixivPageUrl(basePage0Url, p),
       originalUrl: baseOriginalUrl ? pixivOriginalUrl(baseOriginalUrl, p) : pixivPageUrl(basePage0Url, p),
@@ -228,6 +232,7 @@ export function createPixivApi(transport) {
         || body.url || userIllustUrl || '';
       const page0ThumbUrl = body.urls?.thumb || body.urls?.small || userIllustUrl || page0Url;
       const page0OriginalUrl = body.urls?.original || page0Url;
+      const page0PreviewUrl = body.urls?.small || body.urls?.regular || page0Url;
 
       const result = {
         illust: {
@@ -239,8 +244,8 @@ export function createPixivApi(transport) {
           authorId: String(body.userId || ''),
           pageCount,
           illustType: body.illustType ?? 0,
-          images: mapImagePages(page0Url, page0ThumbUrl, pageCount, page0OriginalUrl),
-          tags: (body.tags?.tags || []).map(t => t.tag || t).slice(0, 10),
+          images: mapImagePages(page0Url, page0ThumbUrl, pageCount, page0OriginalUrl, page0PreviewUrl),
+          tags: (body.tags?.tags || []).map(t => t.tag || t),
           pixivUrl: `https://www.pixiv.net/artworks/${illustId}`,
           width: body.width || 0,
           height: body.height || 0,
@@ -287,7 +292,7 @@ export function createPixivApi(transport) {
             url: pixivPageUrl(page0Url, p),
             thumbnailUrl: p === 0 ? proxyThumb(page0Url) : pixivPageUrl(page0Url, p),
           })),
-          tags: (r.tags || []).slice(0, 5),
+          tags: (r.tags || []),
           pixivUrl: `https://www.pixiv.net/artworks/${id}`,
         },
       };
@@ -312,9 +317,10 @@ export function createPixivApi(transport) {
 
       const rawIllusts = data?.body?.illusts || data?.body?.thumbnails?.illust || [];
       const illusts = rawIllusts.map(mapIllustItem);
+      log.warn('[discovery] start:', start, 'count:', illusts.length, 'apiError:', data?.error);
       return { illusts, recommendMethods: data?.body?.recommendMethods || [], hasCookie: true };
     } catch (e) {
-      log.error('[fetchDiscovery] 失败:', e.message);
+      log.error('[fetchDiscovery] 失败:', e?.message || e);
       return { illusts: [], error: classifyError(e, '每日推荐') };
     }
   }
@@ -334,25 +340,25 @@ export function createPixivApi(transport) {
         { headers }
       );
 
-      const illustIds = Object.keys(allData?.body?.illusts || {})
-        .sort((a, b) => Number(b) - Number(a))
-        .slice(0, limit);
-
-      const illusts = illustIds.map(id => ({
-        illustId: id,
-        title: '',
-        author: '',
-        authorName: '',
-        authorAccount: '',
-        authorId: String(userId),
-        thumbnailUrl: pixivReUrl(id, 0, 'thumb'),
-        mediumUrl: pixivReUrl(id),
-        tags: [],
-        pixivUrl: `https://www.pixiv.net/artworks/${id}`,
-        pageCount: 1,
-        type: 'image',
-        illustType: 0,
-      }));
+      const illusts = Object.entries(allData?.body?.illusts || {})
+        .sort((a, b) => Number(b[0]) - Number(a[0]))
+        .slice(0, limit)
+        .map(([id, item]) => ({
+          illustId: id,
+          title: item?.title || '',
+          author: '',
+          authorName: '',
+          authorAccount: '',
+          authorId: String(userId),
+          // 使用 API 返回的真实缩略图（profile/all 的 url 字段），避免 pixiv.re 短链对限制级作品 404
+          thumbnailUrl: proxyThumb(item?.url || pixivReUrl(id, 0, 'thumb')),
+          mediumUrl: pixivReUrl(id),
+          tags: [],
+          pixivUrl: `https://www.pixiv.net/artworks/${id}`,
+          pageCount: item?.pageCount || 1,
+          type: item?.illustType === 2 ? 'gif' : 'image',
+          illustType: item?.illustType ?? 0,
+        }));
       return { illusts, hasCookie: true };
     } catch (e) {
       log.error('[fetchUserIllusts] 失败:', e.message);
@@ -415,7 +421,7 @@ export function createPixivApi(transport) {
         thumbnailUrl: proxyThumb(item.url || ''),
         mediumUrl: pixivReUrl(String(item.id || item.illustId)),
         originalUrl: item.originalUrl || pixivReUrl(String(item.id || item.illustId)),
-        tags: (item.tags || []).slice(0, 5),
+        tags: (item.tags || []),
         pixivUrl: `https://www.pixiv.net/artworks/${item.id || item.illustId}`,
         pageCount: item.pageCount || 1,
         illustType: item.illustType ?? 0,

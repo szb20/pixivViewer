@@ -3,9 +3,11 @@ import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
+import { createLogger } from '../utils/logger.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
+const log = createLogger('Discover');
 
 export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, savedSet, registerRefresh, refreshToken = 0 }) {
   const [items, setItems] = useState([]);
@@ -32,13 +34,19 @@ export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, savedSe
     try {
       const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
       const rawList = r?.illusts || [];
-      // 过滤已保存到相册的（saved 是异步加载，有值才过滤避免闪空）
-      const filtered = savedRef.current?.size ? rawList.filter(img => !savedRef.current.has(`${img.illustId}_0`)) : rawList;
+      log.warn('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawList.length, 'err:', r?.error || '');
+      // 过滤已保存到相册的 + 去重（discovery 可能重复返回同一批）
+      const seen = new Set(itemsRef.current.map(i => i.illustId));
+      const filtered = rawList.filter(img => {
+        if (savedRef.current?.size && savedRef.current.has(`${img.illustId}_0`)) return false;
+        return !seen.has(img.illustId);
+      });
       startRef.current += rawList.length;
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;
       setItems(nextItems);
-      const nextHasMore = rawList.length >= PAGE_SIZE;
+      // 有返回且本页有新内容才继续加载（避免 discovery 返回数量不足 20 时过早停止）
+      const nextHasMore = rawList.length > 0 && filtered.length > 0;
       setHasMore(nextHasMore);
       if (!append && !filtered.length) setError(r?.message || r?.error || '推荐为空（需要 Cookie）');
       saveTabCache(CACHE_KEY, { items: nextItems, hasMore: nextHasMore, start: startRef.current }).catch(() => {});
@@ -63,8 +71,10 @@ export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, savedSe
     (async () => {
       try {
         const cache = await loadTabCache(CACHE_KEY);
+        log.warn('[discover-mount] cache items:', cache?.items?.length, 'hasMore:', cache?.hasMore, 'start:', cache?.start);
         if (cancelled || !cache?.items?.length) return;
-        cacheUsedRef.current = true;
+        // 缓存 hasMore=false（可能是不足一页的旧缓存）时不跳过网络请求，确保能继续加载
+        cacheUsedRef.current = !!cache.hasMore;
           itemsRef.current = cache.items;
           setItems(cache.items);
           setHasMore(!!cache.hasMore);

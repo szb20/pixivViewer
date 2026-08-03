@@ -9,7 +9,7 @@ const log = createLogger('DetailView');
  * 详情页包装 — 管理"当前作品"切换栈：
  * 相关推荐点图 → 压栈切换；返回键 → 弹栈，栈空则关闭详情页。
  */
-export default function DetailView({ image: initialImage, pixivCache, setPixivCache, onClose, onSearchTag }) {
+export default function DetailView({ image: initialImage, pixivCache, setPixivCache, onClose, onSearchTag, onAuthorWorks }) {
   const [image, setImage] = useState(initialImage);
   const [restoreScroll, setRestoreScroll] = useState(0);
   const stackRef = useRef([initialImage]);
@@ -73,6 +73,7 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
         onBack={handleBack}
         onSelectImage={handleSelect}
         onSearchTag={onSearchTag}
+        onAuthorWorks={onAuthorWorks}
         pixivCache={pixivCache}
         setPixivCache={setPixivCache}
         restoreScroll={restoreScroll}
