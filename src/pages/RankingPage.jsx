@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import ImageGrid from '../components/ImageGrid.jsx';
-import useSavedSet from '../hooks/useSavedSet.js';
 
 const CACHE_KEY = 'ranking';
 
@@ -20,7 +19,7 @@ const MODES = [
 // 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
 const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
 
-export default function RankingPage({ onOpen, likedSet, refreshToken = 0 }) {
+export default function RankingPage({ onOpen, likedSet, savedSet, registerRefresh, refreshToken = 0 }) {
   const [category, setCategory] = useState('daily');
   const [r18, setR18] = useState(true);
   const [items, setItems] = useState([]);
@@ -36,7 +35,9 @@ export default function RankingPage({ onOpen, likedSet, refreshToken = 0 }) {
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadRef = useRef(null);
-  const saved = useSavedSet();
+  const saved = savedSet;
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   const mode = r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category;
 
   const load = useCallback(async (append) => {
@@ -46,7 +47,7 @@ export default function RankingPage({ onOpen, likedSet, refreshToken = 0 }) {
     try {
       const r = await pixivApi.fetchRanking({ mode, page });
       const rawList = r?.illusts || [];
-      const filtered = saved?.size ? rawList.filter(img => !saved.has(`${img.illustId}_0`)) : rawList;
+      const filtered = savedRef.current?.size ? rawList.filter(img => !savedRef.current.has(`${img.illustId}_0`)) : rawList;
       pageRef.current = page;
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;
@@ -64,6 +65,12 @@ export default function RankingPage({ onOpen, likedSet, refreshToken = 0 }) {
   }, [mode, category, r18]);
 
   loadRef.current = load;
+
+  // 注册下拉刷新入口（当前 tab 有效）
+  useEffect(() => {
+    if (!registerRefresh) return;
+    return registerRefresh('ranking', () => loadRef.current?.(false));
+  }, [registerRefresh]);
 
   // 挂载时先尝试恢复缓存；缓存命中则跳过首次请求
   useEffect(() => {
@@ -146,8 +153,13 @@ export default function RankingPage({ onOpen, likedSet, refreshToken = 0 }) {
 
   return (
     <div className="page">
-      {error && <div className="error-box">{error}</div>}
-      <ImageGrid items={items} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+      {error && (
+        <div className="error-box">
+          {error}
+          <button className="error-retry" onClick={() => load(false)}>重试</button>
+        </div>
+      )}
+      <ImageGrid items={items} likedSet={likedSet} onOpen={onOpen} />
       {!loading && hasMore && (
         <div ref={sentinelRef} style={{ height: 1 }} />
       )}

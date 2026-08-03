@@ -2,7 +2,13 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import GifPlayer from './GifPlayer.jsx';
 import { useTouchGesture } from '../hooks/useTouchGesture.js';
+import { createLogger } from '../utils/logger.js';
 import '../styles/lightbox.css';
+
+const log = createLogger('Lightbox');
+
+/** 图片加载失败的最大重试次数，超过后停止自动重试并显示占位 */
+const MAX_IMG_RETRY = 3;
 
 /**
  * 统一媒体灯箱 — 支持图片、Ugoira 动图、视频（抖音/iwara/B站/通用嵌入）。
@@ -80,12 +86,11 @@ export default function MediaLightbox({
 
   const {
     overlayRef, trackRef, slideRefs,
-    index, closing, hideUI,
+    index, closing,
     swipeOff, pinchScale, pinchPan, zoomTrans,
-    cur, isGif, hasPrev, hasNext,
+    cur, isGif,
     handleTouchStart, handleTouchMove, handleTouchEnd,
-    handleClose, handleOverlayClick,
-    nav, navPage, findAdjacentPage,
+    handleClose,
   } = useTouchGesture({
     images: items,
     initialIndex,
@@ -95,7 +100,6 @@ export default function MediaLightbox({
   });
 
   const isVideoType = (t) => t === 'douyin' || t === 'iwara' || t === 'bilibili' || t === 'video';
-  const isImage = cur?.type === 'image';
   const isVideo = isVideoType(cur?.type);
 
   // ── 切换 slide 时暂停非当前视频 ──
@@ -135,15 +139,6 @@ export default function MediaLightbox({
       img.src = item.src;
     }
   }, [index, items]);
-
-  // ── 下载（仅图片） ──
-  const handleDownload = useCallback(() => {
-    if (!cur || !isImage) return;
-    const link = document.createElement('a');
-    link.href = cur.src;
-    link.download = cur.title || 'image';
-    link.click();
-  }, [cur, isImage]);
 
   if (!cur) return null;
 
@@ -269,6 +264,21 @@ export default function MediaLightbox({
 
     // ── 图片类 ──
     if (item.type === 'image') {
+      const failed = (retryMap[idx] || 0) >= MAX_IMG_RETRY;
+      if (failed) {
+        return (
+          <div
+            ref={el => slideRefs.current[idx] = el}
+            className="lightbox-slide-placeholder"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRetryMap(prev => ({ ...prev, [idx]: 0 }));
+            }}
+          >
+            图片加载失败，点击重试
+          </div>
+        );
+      }
       return (
         <img
           ref={el => slideRefs.current[idx] = el}
@@ -276,7 +286,13 @@ export default function MediaLightbox({
           src={item.src + (retryMap[idx] ? `?r=${retryMap[idx]}` : '')}
           alt={item.title || ''}
           draggable={false}
-          onError={() => setRetryMap(prev => ({ ...prev, [idx]: (prev[idx] || 0) + 1 }))}
+          onError={() => {
+            const next = (retryMap[idx] || 0) + 1;
+            if (next >= MAX_IMG_RETRY) {
+              log.warn('图片加载失败，已停止自动重试:', item.src, 'retry:', next);
+            }
+            setRetryMap(prev => ({ ...prev, [idx]: next }));
+          }}
           loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
       fetchPriority={idx === index ? 'high' : 'auto'}
           style={{

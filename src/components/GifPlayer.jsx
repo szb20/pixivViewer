@@ -1,7 +1,32 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('GIF');
 
 // 全局下载缓存：illustId → { promise, result, loading }
 const downloadCache = new Map();
+/** 播放器侧下载缓存上限 — 超限淘汰最旧条目并回收其帧 blob URL */
+const MAX_DOWNLOAD_CACHE = 12;
+
+/** 回收帧序列里的 blob URL（幂等，已回收的无副作用） */
+function releaseFrames(frames) {
+  if (!Array.isArray(frames)) return;
+  for (const f of frames) {
+    if (f?.path?.startsWith('blob:')) URL.revokeObjectURL(f.path);
+  }
+}
+
+/** 写入下载缓存（带容量上限，淘汰时回收 blob URL） */
+function cacheDownload(id, value) {
+  if (downloadCache.has(id)) downloadCache.delete(id);
+  downloadCache.set(id, value);
+  if (downloadCache.size > MAX_DOWNLOAD_CACHE) {
+    const oldestId = downloadCache.keys().next().value;
+    const entry = downloadCache.get(oldestId);
+    downloadCache.delete(oldestId);
+    releaseFrames(entry?.result?.frames);
+  }
+}
 
 /** 圆环进度条 — SVG 环形，白色描边，百分比驱动 */
 function CircularProgress({ pct = 0, size = 56, stroke = 3 }) {
@@ -54,6 +79,7 @@ export default function GifPlayer({
   const mountedRef = useRef(true);
   const lastToggleRef = useRef(0);
   const touchStartRef = useRef({ x: 0, y: 0 });
+  const preloadRetriedRef = useRef(false); // 帧加载失败自动重拉一次，避免死循环
 
   const [frames, setFrames] = useState(initialFrames);
   const [playing, setPlaying] = useState(false);
@@ -62,7 +88,6 @@ export default function GifPlayer({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [progress, setProgress] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
-  const [loadDone, setLoadDone] = useState(false); // 加载完成后的短暂动画
   const [error, setError] = useState(null);
   const restoringRef = useRef(false); // 缓存恢复中，跳过加载态
   const autoLoadRef = useRef(false);   // 防止重复自动加载
@@ -77,6 +102,11 @@ export default function GifPlayer({
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  // 切换作品时重置预加载重试标记
+  useEffect(() => {
+    preloadRetriedRef.current = false;
+  }, [illustId]);
 
   // 挂载时检查缓存：直接恢复帧，跳过 loading 态
   useEffect(() => {
@@ -95,7 +125,7 @@ export default function GifPlayer({
       autoLoadRef.current = true;
       loadFrames();
     }
-  }, [compact, needsFetch]);
+  }, [compact, needsFetch]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守卫
 
   // 懒加载：点击时下载完整 GIF 帧（支持后台下载不中断）
   const loadFrames = async (retry = false) => {
@@ -146,12 +176,12 @@ export default function GifPlayer({
     const promise = (async () => {
       const result = await window.api.fetchGif(illustId, (pct) => {
         if (mountedRef.current) setLoadProgress(pct);
-      });
-      downloadCache.set(illustId, { result });
+      }, retry ? { force: true } : undefined);
+      cacheDownload(illustId, { result });
       return result;
     })();
 
-    downloadCache.set(illustId, { promise });
+    cacheDownload(illustId, { promise });
 
     try {
       const result = await promise;
@@ -164,11 +194,11 @@ export default function GifPlayer({
       } else {
         // 有 result 但没有 frames → 设置错误信息
         const errMsg = result?.error || '未知错误';
-        console.warn('[GIF] 加载失败:', errMsg);
+        log.warn('加载失败:', errMsg);
         if (mountedRef.current) setError(errMsg);
       }
     } catch (e) {
-      console.warn('[GIF] 加载失败:', e.message);
+      log.warn('加载失败:', e.message);
       if (mountedRef.current) setError(e.message);
     } finally {
       if (mountedRef.current) setLoading(false);
@@ -183,6 +213,7 @@ export default function GifPlayer({
     let cancelled = false;
     const images = [];
     let loadedCount = 0;
+    let failedCount = 0;
 
     frames.forEach((frame, i) => {
       const img = new Image();
@@ -204,6 +235,12 @@ export default function GifPlayer({
           }
         }
         if (loadedCount >= frames.length) {
+          // 有帧加载失败：可能是缓存里的 blob URL 已被回收 → 自动重拉一次
+          if (failedCount > 0 && !preloadRetriedRef.current) {
+            preloadRetriedRef.current = true;
+            loadFrames(true);
+            return;
+          }
           imagesRef.current = images;
           loadedRef.current = true;
           restoringRef.current = false;
@@ -221,14 +258,21 @@ export default function GifPlayer({
       img.onerror = () => {
         if (cancelled) return;
         loadedCount++;
+        failedCount++;
         if (loadedCount >= frames.length) {
+          // 有帧加载失败：可能是缓存里的 blob URL 已被回收 → 自动重拉一次
+          if (failedCount > 0 && !preloadRetriedRef.current) {
+            preloadRetriedRef.current = true;
+            loadFrames(true);
+            return;
+          }
           requestAnimationFrame(() => setLoaded(true));
         }
       };
     });
 
     return () => { cancelled = true; };
-  }, [frames, illustId]);
+  }, [frames, illustId]); // eslint-disable-line react-hooks/exhaustive-deps -- playFrame 定义在后，frames 变化时自动重建
 
   // 播放动画 — 用 rAF + 累计时间驱动，比 setTimeout 更流畅
   const lastProgressRef = useRef(0);

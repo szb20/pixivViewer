@@ -2,8 +2,11 @@
  * Pixiv Tab 结果缓存 — IndexedDB 持久化，带 TTL 过期。
  *
  * 用于 Tab 间切换时避免重复请求，App 重启后仍可恢复。
- * 用户可通过下拉刷新或点击当前 Tab 强制重新请求。
+ * 用户可点击当前 Tab 强制重新请求。
  */
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('tabCache');
 
 const DB_NAME = 'teyvat_pixiv_tabs';
 const DB_VERSION = 1;
@@ -62,8 +65,9 @@ export async function saveTabCache(key, data) {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-  } catch {
+  } catch (e) {
     // IndexedDB 不可用时静默失败
+    log.debug('saveTabCache 失败:', e?.message || e);
   }
 }
 
@@ -92,7 +96,8 @@ export async function loadTabCache(key) {
       };
       req.onerror = () => reject(req.error);
     });
-  } catch {
+  } catch (e) {
+    log.debug('loadTabCache 失败:', e?.message || e);
     return null;
   }
 }
@@ -129,7 +134,8 @@ export async function loadAllTabCaches() {
       };
       req.onerror = () => reject(req.error);
     });
-  } catch {
+  } catch (e) {
+    log.debug('loadAllTabCaches 失败:', e?.message || e);
     return {};
   }
 }
@@ -145,8 +151,8 @@ export async function deleteTabCache(key) {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-  } catch {
-    // 静默失败
+  } catch (e) {
+    log.debug('deleteTabCache 失败:', e?.message || e);
   }
 }
 
@@ -163,7 +169,7 @@ async function cleanupExpired(keys) {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
-  } catch {
-    // 静默失败
+  } catch (e) {
+    log.debug('cleanupExpired 失败:', e?.message || e);
   }
 }

@@ -3,12 +3,11 @@ import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
-import useSavedSet from '../hooks/useSavedSet.js';
 
 const PAGE_SIZE = 48;
 const CACHE_KEY = 'bookmarks';
 
-export default function BookmarksPage({ onOpen, onOpenSettings, likedSet, refreshToken = 0 }) {
+export default function BookmarksPage({ onOpen, onOpenSettings, likedSet, registerRefresh, refreshToken = 0 }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -21,10 +20,10 @@ export default function BookmarksPage({ onOpen, onOpenSettings, likedSet, refres
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadRef = useRef(null);
-  const saved = useSavedSet();
   const needCookie = !!error && /cookie|no_cookie|需要 Cookie/i.test(error);
 
   const load = useCallback(async (append) => {
+    if (!append) offsetRef.current = 0;
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); }
     try {
@@ -47,6 +46,12 @@ export default function BookmarksPage({ onOpen, onOpenSettings, likedSet, refres
   }, []);
 
   loadRef.current = load;
+
+  // 注册下拉刷新入口（当前 tab 有效）
+  useEffect(() => {
+    if (!registerRefresh) return;
+    return registerRefresh('bookmarks', () => loadRef.current?.(false));
+  }, [registerRefresh]);
 
   // 挂载时先尝试恢复缓存；缓存命中则跳过首次请求
   useEffect(() => {
@@ -98,8 +103,13 @@ export default function BookmarksPage({ onOpen, onOpenSettings, likedSet, refres
     <div className="page">
       {needCookie
         ? <NeedCookieNotice onOpenSettings={onOpenSettings} />
-        : (error && <div className="error-box">{error}</div>)}
-      <ImageGrid items={items} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+        : (error && (
+          <div className="error-box">
+            {error}
+            <button className="error-retry" onClick={() => load(false)}>重试</button>
+          </div>
+        ))}
+      <ImageGrid items={items} likedSet={likedSet} onOpen={onOpen} />
       {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
       {loadingMore && <div className="hint">加载中...</div>}
       {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}

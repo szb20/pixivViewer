@@ -1,7 +1,32 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('Ugoira');
 
 // 全局下载缓存：illustId → { promise, result, loading }
 const downloadCache = new Map();
+/** 播放器侧下载缓存上限 — 超限淘汰最旧条目并回收其帧 blob URL */
+const MAX_DOWNLOAD_CACHE = 12;
+
+/** 回收帧序列里的 blob URL（幂等，已回收的无副作用） */
+function releaseFrames(frames) {
+  if (!Array.isArray(frames)) return;
+  for (const f of frames) {
+    if (f?.path?.startsWith('blob:')) URL.revokeObjectURL(f.path);
+  }
+}
+
+/** 写入下载缓存（带容量上限，淘汰时回收 blob URL） */
+function cacheDownload(id, value) {
+  if (downloadCache.has(id)) downloadCache.delete(id);
+  downloadCache.set(id, value);
+  if (downloadCache.size > MAX_DOWNLOAD_CACHE) {
+    const oldestId = downloadCache.keys().next().value;
+    const entry = downloadCache.get(oldestId);
+    downloadCache.delete(oldestId);
+    releaseFrames(entry?.result?.frames);
+  }
+}
 
 /**
  * Ugoira 动图播放器 — Canvas 逐帧动画。
@@ -38,10 +63,12 @@ export default function UgoiraPlayer({
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [progress, setProgress] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
+  const [error, setError] = useState(null);
   const restoringRef = useRef(false); // 缓存恢复中，跳过加载态
   const autoLoadRef = useRef(false);   // 防止重复自动加载
   const startTimeRef = useRef(null);   // rAF 播放起始时间
   const lastFrameTimeRef = useRef(null); // 上一帧切换的时间戳
+  const preloadRetriedRef = useRef(false); // 帧加载失败自动重拉一次，避免死循环
 
   const totalFrames = frames?.length || 0;
   const needsFetch = _lazy && totalFrames === 0;
@@ -57,12 +84,14 @@ export default function UgoiraPlayer({
     loadedRef.current = false;
     autoLoadRef.current = false;
     restoringRef.current = false;
+    preloadRetriedRef.current = false;
     setFrames(initialFrames);
     setLoaded(false);
     setPlaying(false);
     setLoadProgress(0);
+    setError(null);
     cancelAnimationFrame(timerRef.current);
-  }, [illustId]);
+  }, [illustId, initialFrames]);
 
   // 检查缓存：直接恢复帧，跳过 loading 态
   useEffect(() => {
@@ -81,11 +110,15 @@ export default function UgoiraPlayer({
       autoLoadRef.current = true;
       loadFrames();
     }
-  }, [compact, needsFetch]);
+  }, [compact, needsFetch]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守卫
 
   // 懒加载：点击时下载完整 Ugoira 帧（支持后台下载不中断）
-  const loadFrames = async () => {
+  const loadFrames = async (retry = false) => {
     if (loading || loaded) return;
+
+    // 重试时清除失败缓存，避免一直复用失败的 promise
+    if (retry) downloadCache.delete(illustId);
+    setError(null);
 
     // 已有缓存结果 → 直接恢复，不显示加载态
     const cached = downloadCache.get(illustId);
@@ -113,6 +146,10 @@ export default function UgoiraPlayer({
           setLoadProgress(100);
         }
       }
+      if (mountedRef.current) {
+        const err = updated?.result?.error;
+        if (err) setError(err);
+      }
       return;
     }
 
@@ -122,12 +159,12 @@ export default function UgoiraPlayer({
     const promise = (async () => {
       const result = await window.api.fetchUgoira(illustId, (pct) => {
         if (mountedRef.current) setLoadProgress(pct);
-      });
-      downloadCache.set(illustId, { result });
+      }, retry ? { force: true } : undefined);
+      cacheDownload(illustId, { result });
       return result;
     })();
 
-    downloadCache.set(illustId, { promise });
+    cacheDownload(illustId, { promise });
 
     try {
       const result = await promise;
@@ -136,9 +173,17 @@ export default function UgoiraPlayer({
         if (mountedRef.current) {
           setFrames(result.frames);
         }
+      } else if (mountedRef.current) {
+        // 有 result 但没有 frames → 记录错误并清掉缓存，便于重试
+        const errMsg = result?.error || '未知错误';
+        log.warn('加载失败:', errMsg);
+        downloadCache.delete(illustId);
+        setError(errMsg);
       }
     } catch (e) {
-      console.warn('[Ugoira] 加载失败:', e.message);
+      log.warn('加载失败:', e.message);
+      downloadCache.delete(illustId);
+      if (mountedRef.current) setError(e.message);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -152,6 +197,7 @@ export default function UgoiraPlayer({
     let cancelled = false;
     const images = [];
     let loadedCount = 0;
+    let failedCount = 0;
 
     frames.forEach((frame, i) => {
       const img = new Image();
@@ -173,6 +219,12 @@ export default function UgoiraPlayer({
           }
         }
         if (loadedCount >= frames.length) {
+          // 有帧加载失败：可能是缓存里的 blob URL 已被回收 → 自动重拉一次
+          if (failedCount > 0 && !preloadRetriedRef.current) {
+            preloadRetriedRef.current = true;
+            loadFrames(true);
+            return;
+          }
           imagesRef.current = images;
           loadedRef.current = true;
           restoringRef.current = false;
@@ -190,14 +242,21 @@ export default function UgoiraPlayer({
       img.onerror = () => {
         if (cancelled) return;
         loadedCount++;
+        failedCount++;
         if (loadedCount >= frames.length) {
+          // 有帧加载失败：可能是缓存里的 blob URL 已被回收 → 自动重拉一次
+          if (failedCount > 0 && !preloadRetriedRef.current) {
+            preloadRetriedRef.current = true;
+            loadFrames(true);
+            return;
+          }
           requestAnimationFrame(() => setLoaded(true));
         }
       };
     });
 
     return () => { cancelled = true; };
-  }, [frames, illustId]);
+  }, [frames, illustId]); // eslint-disable-line react-hooks/exhaustive-deps -- playFrame 定义在后，frames 变化时自动重建
 
   // 播放动画 — 用 rAF + 累计时间驱动，比 setTimeout 更流畅
   const lastProgressRef = useRef(0);
@@ -281,7 +340,7 @@ export default function UgoiraPlayer({
       const ctx = canvas.getContext('2d');
       ctx.drawImage(imagesRef.current[0], 0, 0, canvas.width, canvas.height);
     }
-  }, [illustId]);
+  }, [illustId]); // eslint-disable-line react-hooks/exhaustive-deps -- frames 到达时会打断自动播放，仅按作品重置
 
   const hasValidSize = canvasSize.width > 0 && canvasSize.height > 0;
   const maxW = maxWidthProp ?? (compact ? 240 : window.innerWidth);
@@ -295,7 +354,7 @@ export default function UgoiraPlayer({
       ref={containerRef}
       className={`ugoira-player ${playing ? 'playing' : ''} ${loaded ? 'loaded' : 'loading'} ${compact ? 'compact' : ''} ${className}`}
       style={{ width: displayWidth, maxWidth: '100%', ...style }}
-      onClick={loaded ? undefined : loadFrames}
+      onClick={loaded ? togglePlay : () => loadFrames()}
     >
       <div className="ugoira-canvas-wrap" style={{ width: displayWidth, height: displayHeight }}>
         {/* 缩略图兜底：帧加载完成前始终显示卡片同款缩略图 */}
@@ -325,6 +384,17 @@ export default function UgoiraPlayer({
             <div className="ugoira-progress-bar ugoira-progress-bar--loading">
               <div className="ugoira-progress-fill" style={{ width: `${Math.max(0, loadProgress)}%`, transition: 'width 0.15s ease' }} />
             </div>
+          </div>
+        )}
+
+        {/* 错误提示 + 点击重试 */}
+        {error && !loading && (
+          <div className="ugoira-loading-overlay"
+            style={{ flexDirection: 'column', gap: 8, cursor: 'pointer' }}
+            onClick={(e) => { e.stopPropagation(); loadFrames(true); }}>
+            <span style={{ fontSize: 32 }}>⚠️</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', textAlign: 'center', padding: '0 12px', lineHeight: 1.4 }}>{error}</span>
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>点击重试</span>
           </div>
         )}
 

@@ -10,6 +10,9 @@
  * - 下载进度回调
  */
 import { CapacitorHttp } from '@capacitor/core';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('NetworkStore');
 
 export class NetworkStore {
   /**
@@ -25,15 +28,15 @@ export class NetworkStore {
   async downloadImage(url) {
     if (!url) return null;
     const abs = this._absUrl(url);
-    console.log('[NetworkStore] downloadImage:', { raw: url, abs });
+    log.debug('downloadImage:', { raw: url, abs });
     try {
       const resp = await fetch(abs, { headers: { Referer: 'https://www.pixiv.net/' } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
-      console.log('[NetworkStore] fetch OK, size:', blob.size);
+      log.debug('fetch OK, size:', blob.size);
       return await this._blobToBase64(blob);
     } catch (e) {
-      console.log('[NetworkStore] fetch failed, fallback CapacitorHttp:', e.message);
+      log.info('fetch 失败，降级 CapacitorHttp:', e.message);
       return await this._downloadWithCapacitor(url);
     }
   }
@@ -100,7 +103,7 @@ export class NetworkStore {
           meta.userId = illustDetail.userId || meta.userId;
           meta.tags = illustDetail.tags || meta.tags || [];
         }
-      } catch { /* illust 详情解析失败不影响主流程 */ }
+      } catch (e) { log.debug('illust 详情解析失败（不影响主流程）:', e?.message || e); }
     }
 
     return meta;
@@ -132,7 +135,8 @@ export class NetworkStore {
         return raw.data.includes(',') ? raw.data.split(',')[1] : raw.data;
       }
       return null;
-    } catch {
+    } catch (e) {
+      log.debug('CapacitorHttp 下载失败:', e?.message || e);
       return null;
     }
   }

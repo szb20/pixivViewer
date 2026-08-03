@@ -4,6 +4,9 @@
  * 纯函数，无 Node/Browser 依赖，Electron 主进程 + React 前端共用。
  */
 import { PIXIV_RE } from './constants.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('pixivUtils');
 
 /** 运行在浏览器环境（包括 Capacitor WebView）时走 Vite 代理避免 CORS */
 const USE_PROXY = typeof window !== 'undefined' && typeof import.meta !== 'undefined' && import.meta.env?.DEV;
@@ -58,7 +61,7 @@ export function proxyThumb(url) {
  */
 export function pixivPageUrl(baseUrl, page) {
   if (!baseUrl) {
-    console.log('[pixivPageUrl] baseUrl is empty, returning empty');
+    log.debug('[pixivPageUrl] baseUrl is empty, returning empty');
     return '';
   }
 
@@ -77,7 +80,7 @@ export function pixivPageUrl(baseUrl, page) {
   const parts = baseUrl.match(/\/(\d{7,})(?:_|\.|$)/);
   const idMatch = parts ? parts[1] : baseUrl.match(/(\d+)/)?.[1];
   const fallback = pixivReUrl(idMatch || '', page);
-  if (!idMatch) console.log('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
+  if (!idMatch) log.debug('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
   return fallback;
 }
 
@@ -159,7 +162,6 @@ export function safeFileName(s) {
 export function parseCacheFileName(name) {
   const extMatch = name.match(/\.(jpg|jpeg|png|gif|webp|zip)$/i);
   if (!extMatch) return null;
-  const ext = extMatch[1].toLowerCase();
   const base = name.slice(0, -extMatch[0].length);
 
   // 新格式动图：{source}_{illustId}_g{page}_[{authorName}]_[{title}].gif

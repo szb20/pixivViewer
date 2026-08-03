@@ -10,19 +10,46 @@ import { browserFetch } from './pixiv.js';
 import {
   PixivEntity, PixivRepository, getFS, getSettings, safeFileName, CACHE_DIR, ensureDirectory,
 } from '../pixiv-assistant/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('gif');
 
 const cache = new Map(); // illustId -> { frames, meta }
+/** 帧缓存上限 — 超限淘汰最旧条目并回收其 blob URL，避免会话内无限累积 */
+const MAX_CACHE = 12;
 const repo = new PixivRepository();
+
+/** 回收帧序列里的 blob URL（幂等，已回收的无副作用） */
+function releaseFrames(frames) {
+  if (!Array.isArray(frames)) return;
+  for (const f of frames) {
+    if (f?.path?.startsWith('blob:')) URL.revokeObjectURL(f.path);
+  }
+}
+
+/** 淘汰最旧缓存条目并回收其帧 blob URL */
+function evictOldest() {
+  const oldestKey = cache.keys().next().value;
+  if (!oldestKey) return;
+  const entry = cache.get(oldestKey);
+  releaseFrames(entry?.frames);
+  cache.delete(oldestKey);
+}
 
 async function getPixivCookie() {
   const s = await getSettings();
   return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
 }
 
-export async function fetchUgoiraFrames(illustId, onProgress) {
+export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
   const id = String(illustId);
   const cached = cache.get(id);
-  if (cached) return cached;
+  if (cached) {
+    if (!opts.force) return cached;
+    // 强制刷新：释放旧帧并重新下载（旧的 blob URL 可能已被播放器侧淘汰回收）
+    releaseFrames(cached.frames);
+    cache.delete(id);
+  }
 
   const cookie = await getPixivCookie();
   const h = {};
@@ -65,6 +92,7 @@ export async function fetchUgoiraFrames(illustId, onProgress) {
 
   onProgress?.(100);
   const result = { frames, meta: body };
+  if (cache.size >= MAX_CACHE) evictOldest();
   cache.set(id, result);
   return result;
 }
@@ -188,7 +216,7 @@ export async function saveGifToAlbum(item, onProgress) {
     onProgress?.(100);
     return { success: true, cached: true, fileName: gifFileName, entity };
   } catch (e) {
-    console.error('[saveGifToAlbum] 失败:', e.message);
+    log.error('[saveGifToAlbum] 失败:', e.message);
     return { error: `GIF 保存失败: ${e.message}` };
   }
 }

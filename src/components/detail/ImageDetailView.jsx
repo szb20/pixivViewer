@@ -8,10 +8,13 @@ import { parsePixivResults, allMediaFromRelated } from './helpers.js';
 import { getSettingsSync } from '../../pixiv-assistant/index.js';
 import { gridThumbUrl } from '../../utils/quality.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('ImageDetail');
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
- * 进入视口时触发自动保存并懒加载原图（本地相册优先 → 网络原图），
+ * 进入视口时懒加载原图（本地相册优先 → 网络原图），
  * 原图就绪前用缩略图模糊铺底；点击打开灯箱。
  */
 function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSavePage, onPageLoaded, onOpenLightbox, illustDataReady }) {
@@ -20,8 +23,7 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
   const [failed, setFailed] = useState(false);
   const loadedRef = useRef(false); // 已成功加载过则跳过重试
 
-  // 进入视口 → 自动保存该页 + 懒加载原图
-  // illustDataReady 变化时重试未成功加载的页面（本地文件缺失 + 网络 URL 需 illustData）
+  // 进入视口 → 自动保存该页（仅单图时由外层传入 onSavePage）+ 懒加载原图
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -30,9 +32,9 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
     let saved = false;
     const io = new IntersectionObserver(([e]) => {
       if (!e.isIntersecting) return;
-      if (!saved) {
+      if (!saved && onSavePage) {
         saved = true;
-        onSavePage?.(page);
+        onSavePage(page);
       }
       const illustId = image?.illustId;
       const entryPage = image?._pageIndex ?? 0;
@@ -41,7 +43,10 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
         loadOriginal(illustId, page).then(res => {
           if (cancelled) return;
           if (res?.url) { setEntry(res); setFailed(false); loadedRef.current = true; onPageLoaded?.(illustId, page, res); }
-          else if (illustDataReady) setFailed(true);
+          else if (illustDataReady) {
+            setFailed(true);
+            log.warn('原图加载失败:', illustId, 'page:', page);
+          }
         });
       };
       if (page === entryPage) {
@@ -54,16 +59,12 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
     }, { root: rootRef?.current || null, rootMargin: '400px 0px' });
     io.observe(el);
     return () => { cancelled = true; io.disconnect(); };
-  }, [image?.illustId, page, rootRef, loadOriginal, onSavePage, onPageLoaded, illustDataReady]);
+  }, [image?.illustId, image?._pageIndex, page, rootRef, loadOriginal, onSavePage, onPageLoaded, illustDataReady]);
 
   // 第 0 页：直接用列表传来的真缩略图；其它页：等 illustData 就绪后再显示
   const thumb = page === 0
     ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0, 'thumb'))
     : '';
-  if (page === 0) {
-    console.log('[DetailBlock]', image?.illustId, 'thumb:', thumb, 'entry:', entry?.url);
-  }
-
   return (
     <div
       ref={(node) => { wrapRef.current = node; registerRef?.(page, node); }}
@@ -98,7 +99,7 @@ function DetailPageBlock({ page, image, rootRef, registerRef, loadOriginal, onSa
  * 点击图片进入，往下滑看推荐，点推荐图片切换详情。
  */
 export default function ImageDetailView({
-  image, onBack, onSelectImage, onAuthorWorks, onSearchTag,
+  image, onSelectImage, onAuthorWorks, onSearchTag,
   pixivCache, setPixivCache, restoreScroll = 0,
 }) {
   const [related, setRelated] = useState([]);
@@ -154,8 +155,7 @@ export default function ImageDetailView({
         const node = pageRefs.current[target];
         if (node) { node.scrollIntoView({ block: 'start' }); return; }
       }
-      console.log('[ImageDetail] scrollTo:', restoreScroll || 0, 'illustId:', image?.illustId);
-      console.log('[ImageDetail] scrollTo:', restoreScroll, 'target:', target);
+      log.info('scrollTo:', restoreScroll, 'target:', target, 'illustId:', image?.illustId);
       contentRef.current?.scrollTo({ top: restoreScroll || 0, behavior: 'instant' });
     }, 100);
     return () => clearTimeout(t);
@@ -169,8 +169,9 @@ export default function ImageDetailView({
       try {
         const result = await window.api.fetchIllust(image.illustId);
         if (!cancelled) setIllustData(result);
-      } catch {
+      } catch (e) {
         // fetchIllust 失败 → illustData 保持 null，后续按页从 URL 推导
+        log.warn('fetchIllust 失败:', image.illustId, e?.message || e);
       }
     })();
     return () => { cancelled = true; };
@@ -199,7 +200,7 @@ export default function ImageDetailView({
           probe.src = local.localUrl;
           return entry;
         }
-      } catch { /* 本地读取失败 → 回退网络下载 */ }
+      } catch (e) { log.debug('本地读取失败 → 回退网络下载:', e?.message || e); }
     }
 
     // 2. 网络图片：必须等当前作品的 illustData 就绪
@@ -235,7 +236,7 @@ export default function ImageDetailView({
     });
     if (loaded) originalCacheRef.current[cacheKey] = loaded;
     return loaded;
-  }, [illustData, image?.thumbnailUrl, image?.mediumUrl]);
+  }, [illustData]);
 
   // 页面进入视口时自动保存该页（静默，每页本次会话只保存一次）
   const savePage = useCallback(async (page) => {
@@ -275,7 +276,8 @@ export default function ImageDetailView({
           // 保存失败（缺地址/下载失败）：释放 key，等下次触发时重试
           autoSavedKeysRef.current.delete(saveKey);
         }
-      } catch {
+      } catch (e) {
+        log.warn('自动保存失败:', saveKey, e?.message || e);
         autoSavedKeysRef.current.delete(saveKey);
       }
     } else {
@@ -283,7 +285,7 @@ export default function ImageDetailView({
     }
   }, [image, illustData, setPixivCache, isGif]);
 
-  // GIF 动图进入详情页时自动保存（旧逻辑：看图即缓存动图）
+  // GIF 动图进入详情页时自动保存（单图作品，与旧行为一致）
   useEffect(() => {
     if (isGif) savePage(0);
   }, [isGif, savePage]);
@@ -306,7 +308,7 @@ export default function ImageDetailView({
         const r = await window.api.fetchIllust(image.illustId);
         imgs = r?.illust?.images || [];
         total = Math.max(r?.illust?.pageCount || 0, imgs.length || 0);
-      } catch { /* 保持当前页数 */ }
+      } catch (e) { log.debug('补拉详情失败，保持当前页数:', e?.message || e); }
     }
     total = Math.max(total, image?._totalPages || 1);
     for (let p = 0; p < total; p++) {
@@ -342,10 +344,21 @@ export default function ImageDetailView({
         } else {
           await window.api.cachePixivImage?.(item).catch(() => {});
         }
-      } catch { /* 单页失败不阻塞后续页 */ }
+      } catch (e) { log.warn('批量保存单页失败:', ck, e?.message || e); }
     }
     // 不在结尾弹 "已保存" toast — toggleLike 已经弹了 "❤️ 已喜欢"，避免 toast 轰炸
   }, [image, pageCount, illustData, pixivCache, setPixivCache, isGif]);
+
+  // 点击图片进入灯箱 → 保存全部页（静默），然后打开灯箱
+  const handleLightboxOpen = useCallback((page) => {
+    // 先保存全部页（静默，不弹 toast）
+    const total = Math.max(pageCount, image?._totalPages || 1);
+    for (let p = 0; p < total; p++) {
+      savePage(p);
+    }
+    // 再打开灯箱
+    setLightboxIndex(page);
+  }, [pageCount, image, savePage]);
 
   // 灯箱媒体项：点击大图弹出全屏预览。
   // 原图未就绪时用当前可见图兜底，保证点击立即有响应；多图作品包含全部页面，支持灯箱内翻页。
@@ -421,7 +434,7 @@ export default function ImageDetailView({
         relatedCacheRef.current[image.illustId] = { related: parsed };
       } catch (e) {
         if (cancelled) return;
-        console.warn('[ImageDetail] fetchRelated failed:', e);
+        log.warn('fetchRelated failed:', e);
       }
       if (!cancelled) setLoadingRelated(false);
     })();
@@ -454,9 +467,10 @@ export default function ImageDetailView({
                   rootRef={contentRef}
                   registerRef={(page, node) => { pageRefs.current[page] = node; }}
                   loadOriginal={loadPageOriginal}
-                  onSavePage={savePage}
+                  // 单图：进入视口自动保存；多图：仅灯箱/喜欢时保存
+                  onSavePage={pageCount <= 1 ? savePage : undefined}
                   onPageLoaded={handlePageLoaded}
-                  onOpenLightbox={(page) => setLightboxIndex(page)}
+                  onOpenLightbox={handleLightboxOpen}
                   illustDataReady={illustData !== null && String(illustData.illust?.illustId) === String(image.illustId)}
                 />
               ))}

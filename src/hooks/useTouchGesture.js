@@ -398,7 +398,7 @@ export function useTouchGesture({
 
       springBack(curScale, pinchRef.current.x, pinchRef.current.y, toScale, clamped.x, clamped.y);
     }
-  }, [zoomDisabled, isGif, cancelSpring, springBack, getCurSlideEl, hardClamp]);
+  }, [zoomDisabled, cancelSpring, springBack, getCurSlideEl, hardClamp, getDisplaySize]);
 
   // ── 触摸事件 ─────────────────────────────────────────────
   const handleTouchStart = useCallback((e) => {
@@ -454,7 +454,7 @@ export function useTouchGesture({
       pinchRef.current.midX = midX;
       pinchRef.current.midY = midY;
     }
-  }, [zoomDisabled, disableSwipe, isGif, cancelSpring, setOverlayOpacity, getCurSlideEl, resetTrackDOM]);
+  }, [zoomDisabled, disableSwipe, cancelSpring, setOverlayOpacity, getCurSlideEl, resetTrackDOM]);
 
   const handleTouchMove = useCallback((e) => {
     e.stopPropagation();
@@ -565,7 +565,7 @@ export function useTouchGesture({
       touchRef.current.x = t.clientX;
       touchRef.current.y = t.clientY;
     }
-  }, [zoomDisabled, disableSwipe, isGif, getMaxPan, applyDrag, applyTransform, rubberBand, setOverlayOpacity, getCurSlideEl, applyTrackSwipe]);
+  }, [zoomDisabled, disableSwipe, getMaxPan, applyDrag, applyTransform, rubberBand, applyTrackSwipe]);
 
   const handleTouchEnd = useCallback((e) => {
     e.stopPropagation();
@@ -696,7 +696,7 @@ export function useTouchGesture({
     }
 
     pinchRef.current.fingers = 0;
-  }, [zoomDisabled, disableSwipe, isGif, handleDoubleTap, nav, springBack, hardClamp, startInertia, getCurSlideEl, setOverlayOpacity, onClose, animateNavSwipe, index]);
+  }, [zoomDisabled, disableSwipe, handleDoubleTap, nav, springBack, hardClamp, startInertia, animateNavSwipe, index]);
 
   // ── 点击遮罩 ─────────────────────────────────────────────
   const handleOverlayClick = useCallback((e) => {

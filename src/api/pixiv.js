@@ -3,6 +3,9 @@
  */
 import { CapacitorHttp } from '@capacitor/core';
 import { createPixivApi, getSettings } from '../pixiv-assistant/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('pixivFetch');
 
 const IS_DEV = import.meta.env.DEV;
 const PIXIV_BASE = 'https://www.pixiv.net';
@@ -55,6 +58,7 @@ async function prodFetch(pathname, { headers = {}, timeout } = {}) {
   } catch (e) {
     if (e.message?.includes('HTTP')) throw e;
     // CapacitorHttp 失败时回退 fetch（可能直接走 WIFI 绕过代理）
+    log.info('CapacitorHttp 请求失败，降级 fetch:', pathname, e.message);
     const ctrl = new AbortController();
     const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
     try {

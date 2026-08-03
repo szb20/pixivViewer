@@ -10,7 +10,6 @@
  */
 
 import https from 'node:https';
-import http from 'node:http';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Socket } from 'node:net';
 

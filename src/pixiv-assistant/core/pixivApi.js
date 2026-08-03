@@ -11,6 +11,9 @@
  */
 
 import { pixivReUrl, pixivPageUrl, pixivOriginalUrl, proxyThumb, extractUserIdFromCookie } from './utils.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('pixivApi');
 
 // ── 常量 ──
 
@@ -179,7 +182,7 @@ export function createPixivApi(transport) {
       const images = illusts.slice(0, count).map(mapIllustItem);
       return { images, query: query.trim(), total: data?.body?.illust?.total || illusts.length };
     } catch (e) {
-      console.error('[searchPixiv] 失败:', e.message);
+      log.error('[searchPixiv] 失败:', e.message);
       return { images: [], query: query.trim(), error: classifyError(e, '搜索') };
     }
   }
@@ -202,7 +205,7 @@ export function createPixivApi(transport) {
       }));
       return { users };
     } catch (e) {
-      console.error('[searchPixivUser] 失败:', e.message);
+      log.error('[searchPixivUser] 失败:', e.message);
       return { users: [], error: classifyError(e, '搜索用户') };
     }
   }
@@ -248,7 +251,7 @@ export function createPixivApi(transport) {
       setCachedIllust(illustId, result);
       return result;
     } catch (e) {
-      console.error('[fetchIllust] 失败:', e.message);
+      log.error('[fetchIllust] 失败:', e.message);
       return { illust: null, error: classifyError(e, '作品详情') };
     }
   }
@@ -289,7 +292,7 @@ export function createPixivApi(transport) {
         },
       };
     } catch (e) {
-      console.error('[randomIllust] 失败:', e.message);
+      log.error('[randomIllust] 失败:', e.message);
       return { illust: null, error: classifyError(e, '随机作品') };
     }
   }
@@ -311,7 +314,7 @@ export function createPixivApi(transport) {
       const illusts = rawIllusts.map(mapIllustItem);
       return { illusts, recommendMethods: data?.body?.recommendMethods || [], hasCookie: true };
     } catch (e) {
-      console.error('[fetchDiscovery] 失败:', e.message);
+      log.error('[fetchDiscovery] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '每日推荐') };
     }
   }
@@ -352,7 +355,7 @@ export function createPixivApi(transport) {
       }));
       return { illusts, hasCookie: true };
     } catch (e) {
-      console.error('[fetchUserIllusts] 失败:', e.message);
+      log.error('[fetchUserIllusts] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '作者作品') };
     }
   }
@@ -379,7 +382,7 @@ export function createPixivApi(transport) {
       const illusts = rawIllusts.map(mapRankingItem);
       return { illusts, mode: safeMode, page, rankTotal: illusts.length };
     } catch (e) {
-      console.error('[fetchRanking] 失败:', e.message);
+      log.error('[fetchRanking] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '排行榜') };
     }
   }
@@ -425,7 +428,7 @@ export function createPixivApi(transport) {
         works,
       };
     } catch (e) {
-      console.error('[fetchBookmarks] 失败:', e.message);
+      log.error('[fetchBookmarks] 失败:', e.message);
       return { error: 'fetch_failed', message: classifyError(e, '收藏夹') };
     }
   }
@@ -435,7 +438,7 @@ export function createPixivApi(transport) {
     const cookieCheck = await ensureCookie();
     if (cookieCheck.error) return { error: cookieCheck.error, message: cookieCheck.message };
 
-    const { page = 1, limit = 48 } = opts;
+    const { page = 1 } = opts;
     try {
       const headers = { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` };
       const data = await apiFetch(
@@ -449,7 +452,7 @@ export function createPixivApi(transport) {
         illusts: rawIllusts.map(mapIllustItem),
       };
     } catch (e) {
-      console.error('[fetchFollowing] 失败:', e.message);
+      log.error('[fetchFollowing] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '关注列表') };
     }
   }
@@ -473,7 +476,7 @@ export function createPixivApi(transport) {
       const illusts = rawIllusts.map(mapIllustItem);
       return { illusts, start, limit };
     } catch (e) {
-      console.error('[fetchRelated] 失败:', e.message);
+      log.error('[fetchRelated] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '相似推荐') };
     }
   }

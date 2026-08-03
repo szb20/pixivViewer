@@ -29,7 +29,7 @@ function GridItem({ img, isLiked, onOpen }) {
 /**
  * 双列图片网格 — 单条目（一个作品一格）。
  */
-export default function ImageGrid({ items, savedSet, likedSet, onOpen }) {
+export default function ImageGrid({ items, likedSet, onOpen }) {
   if (!items?.length) return null;
   return (
     <div className="grid">

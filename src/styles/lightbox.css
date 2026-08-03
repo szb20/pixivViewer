@@ -132,6 +132,19 @@
   flex-shrink: 0;
 }
 
+.lightbox-slide-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40vh;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  text-align: center;
+  padding: 0 24px;
+  cursor: pointer;
+}
+
 .lightbox-slide--ugoira {
   overflow: visible;
 }

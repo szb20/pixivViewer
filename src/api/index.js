@@ -11,8 +11,8 @@ window.api = {
   fetchIllust: (illustId) => pixivApi.fetchIllust(illustId),
   fetchRelated: (illustId, opts) => pixivApi.fetchRelated(illustId, opts),
   toggleLike: (illustId, pageIndex) => storageFacade.toggleLike(illustId, pageIndex),
-  fetchGif: (illustId, onProgress) => fetchUgoiraFrames(illustId, onProgress),
-  fetchUgoira: (illustId, onProgress) => fetchUgoiraFrames(illustId, onProgress),
+  fetchGif: (illustId, onProgress, opts) => fetchUgoiraFrames(illustId, onProgress, opts),
+  fetchUgoira: (illustId, onProgress, opts) => fetchUgoiraFrames(illustId, onProgress, opts),
   // 旧版图片缓存接口：GIF 走动图编码保存，静态图走 storageFacade
   cachePixivImage: (item) => {
     if (item?.type === 'gif' || Number(item?.illustType) === 2) {

@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import ImageGrid from '../components/ImageGrid.jsx';
-import useSavedSet from '../hooks/useSavedSet.js';
 
 const PAGE_SIZE = 20;
 const HISTORY_KEY = 'pixiv_search_history';
 const CACHE_KEY = 'search:last';
 
-export default function SearchPage({ onOpen, likedSet, refreshToken = 0, searchSeed = null }) {
+export default function SearchPage({ onOpen, likedSet, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -24,7 +23,6 @@ export default function SearchPage({ onOpen, likedSet, refreshToken = 0, searchS
   const queryRef = useRef('');
   const resultsRef = useRef([]);
   const doSearchRef = useRef(null);
-  const saved = useSavedSet();
 
   const doSearch = useCallback(async (q, append) => {
     const trimmed = q.trim();
@@ -48,7 +46,11 @@ export default function SearchPage({ onOpen, likedSet, refreshToken = 0, searchS
       const nextResults = append ? [...resultsRef.current, ...list] : list;
       resultsRef.current = nextResults;
       setResults(nextResults);
-      const nextHasMore = list.length >= PAGE_SIZE;
+      // 有服务器 total 时用它收敛边界，避免最后一页恰好满页时多请求一次空数据
+      const serverTotal = r?.total;
+      const hasServerTotal = Number.isFinite(serverTotal) && serverTotal > list.length;
+      const nextHasMore = list.length >= PAGE_SIZE
+        && (!hasServerTotal || page * PAGE_SIZE < serverTotal);
       setHasMore(nextHasMore);
       if (!append && !list.length) setError(r?.error || '没有找到结果');
       // 持久化最近一次搜索结果（24h TTL），重启后恢复
@@ -68,6 +70,12 @@ export default function SearchPage({ onOpen, likedSet, refreshToken = 0, searchS
 
   const submit = (e) => { e.preventDefault(); doSearch(query, false); };
   doSearchRef.current = doSearch;
+
+  // 注册下拉刷新入口（当前 tab 有效）：重新搜索当前关键词
+  useEffect(() => {
+    if (!registerRefresh) return;
+    return registerRefresh('search', () => doSearchRef.current(queryRef.current, false));
+  }, [registerRefresh]);
 
   // 挂载时恢复最近一次搜索（不自动发起请求）
   useEffect(() => {
@@ -138,8 +146,13 @@ export default function SearchPage({ onOpen, likedSet, refreshToken = 0, searchS
         </div>
       )}
 
-      {error && <div className="error-box">{error}</div>}
-      <ImageGrid items={results} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+      {error && (
+        <div className="error-box">
+          {error}
+          <button className="error-retry" onClick={() => doSearch(queryRef.current || query, false)}>重试</button>
+        </div>
+      )}
+      <ImageGrid items={results} likedSet={likedSet} onOpen={onOpen} />
       {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
       {loadingMore && <div className="hint">加载中...</div>}
       {!loading && !hasMore && results.length > 0 && <div className="hint">没有更多了</div>}

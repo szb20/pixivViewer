@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
 import DiscoverPage from './pages/DiscoverPage.jsx';
 import RankingPage from './pages/RankingPage.jsx';
@@ -10,8 +11,11 @@ import SearchPage from './pages/SearchPage.jsx';
 import GalleryPage from './pages/GalleryPage.jsx';
 import { storageFacade, getCompositeKey } from './pixiv-assistant/index.js';
 import { runBackHandlers } from './utils/backHandler.js';
+import { createLogger } from './utils/logger.js';
 import './index.css';
 import './styles/detail.css';
+
+const log = createLogger('App');
 
 // 开发期调试入口
 window.__pixivViewer = window.__pixivViewer || { storageFacade };
@@ -33,6 +37,16 @@ export default function App() {
   const scrollPositions = useRef({});
   const visitedTabs = useRef(new Set(['ranking']));
   const [tabTokens, setTabTokens] = useState({});
+  // 各 tab 的刷新函数注册表（下拉刷新用），按当前 tab 分派
+  const refreshFnsRef = useRef({});
+  const registerRefresh = useCallback((key, fn) => {
+    refreshFnsRef.current[key] = fn;
+    return () => { if (refreshFnsRef.current[key] === fn) delete refreshFnsRef.current[key]; };
+  }, []);
+  const handlePullRefresh = useCallback(async () => {
+    const fn = refreshFnsRef.current[tab];
+    if (fn) await fn();
+  }, [tab]);
 
   const openDetail = (img) => {
     const el = document.querySelector('.app-content');
@@ -111,7 +125,7 @@ export default function App() {
           };
         }
         setPixivCache(patch);
-      } catch { /* 忽略 */ }
+      } catch (e) { log.warn('启动扫描缓存元数据失败:', e?.message || e); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -120,6 +134,14 @@ export default function App() {
     const s = new Set();
     for (const [key, val] of Object.entries(pixivCache)) {
       if (val?.liked) s.add(key);
+    }
+    return s;
+  }, [pixivCache]);
+
+  const savedSet = useMemo(() => {
+    const s = new Set();
+    for (const [key, val] of Object.entries(pixivCache)) {
+      if (val?.saved) s.add(key);
     }
     return s;
   }, [pixivCache]);
@@ -134,13 +156,21 @@ export default function App() {
               onOpen={openDetail}
               onOpenSettings={() => setSettingsOpen(true)}
               likedSet={likedSet}
+              savedSet={savedSet}
+              registerRefresh={registerRefresh}
               refreshToken={tabTokens.discover || 0}
             />
           )}
         </div>
         <div style={{ display: tab === 'ranking' ? undefined : 'none' }}>
           {visitedTabs.current.has('ranking') && (
-            <RankingPage onOpen={openDetail} likedSet={likedSet} refreshToken={tabTokens.ranking || 0} />
+            <RankingPage
+              onOpen={openDetail}
+              likedSet={likedSet}
+              savedSet={savedSet}
+              registerRefresh={registerRefresh}
+              refreshToken={tabTokens.ranking || 0}
+            />
           )}
         </div>
         <div style={{ display: tab === 'bookmarks' ? undefined : 'none' }}>
@@ -149,6 +179,7 @@ export default function App() {
               onOpen={openDetail}
               onOpenSettings={() => setSettingsOpen(true)}
               likedSet={likedSet}
+              registerRefresh={registerRefresh}
               refreshToken={tabTokens.bookmarks || 0}
             />
           )}
@@ -158,15 +189,21 @@ export default function App() {
             <SearchPage
               onOpen={openDetail}
               likedSet={likedSet}
+              registerRefresh={registerRefresh}
               refreshToken={tabTokens.search || 0}
               searchSeed={searchSeed}
             />
           )}
         </div>
         <div style={{ display: tab === 'gallery' ? undefined : 'none' }}>
-          {visitedTabs.current.has('gallery') && <GalleryPage onOpen={openDetail} likedSet={likedSet} />}
+          {visitedTabs.current.has('gallery') && (
+            <GalleryPage onOpen={openDetail} likedSet={likedSet} registerRefresh={registerRefresh} />
+          )}
         </div>
       </main>
+
+      {/* 下拉刷新指示器 — 仅当前 tab 生效 */}
+      <PullToRefresh onRefresh={handlePullRefresh} />
 
       <TabBar tabs={TABS} active={tab} onChange={handleTabChange} />
 

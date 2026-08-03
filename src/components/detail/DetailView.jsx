@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import ImageDetailView from './ImageDetailView.jsx';
 import { registerBackHandler } from '../../utils/backHandler.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('DetailView');
 
 /**
  * 详情页包装 — 管理"当前作品"切换栈：
@@ -20,7 +23,7 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
       setImage(initialImage);
       setRestoreScroll(0);
     }
-  }, [initialImage?.illustId]);
+  }, [initialImage]);
 
   const getCurrentScroll = () => {
     const el = document.querySelector('.char-state-content');
@@ -32,7 +35,7 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
     const cur = stackRef.current[stackRef.current.length - 1];
     const s = getCurrentScroll();
     if (cur?.illustId) scrollMapRef.current[cur.illustId] = s;
-    console.log('[DetailView] push:', cur?.illustId, 'stack:', stackRef.current.length, '→', img.illustId);
+    log.info('push:', cur?.illustId, 'stack:', stackRef.current.length, '→', img.illustId);
     stackRef.current.push(img);
     setImage(img);
   };
@@ -41,15 +44,15 @@ export default function DetailView({ image: initialImage, pixivCache, setPixivCa
     const cur = stackRef.current[stackRef.current.length - 1];
     const s = getCurrentScroll();
     if (cur?.illustId) scrollMapRef.current[cur.illustId] = s;
-    console.log('[DetailView] pop:', cur?.illustId, 'stack:', stackRef.current.length, 'scroll:', s);
+    log.info('pop:', cur?.illustId, 'stack:', stackRef.current.length, 'scroll:', s);
     stackRef.current.pop();
     const prev = stackRef.current[stackRef.current.length - 1];
     if (prev) {
       setRestoreScroll(scrollMapRef.current[prev.illustId] || 0);
-      console.log('[DetailView] restore:', prev.illustId);
+      log.info('restore:', prev.illustId);
       setImage(prev);
     } else {
-      console.log('[DetailView] close');
+      log.info('close');
       onClose();
     }
   };

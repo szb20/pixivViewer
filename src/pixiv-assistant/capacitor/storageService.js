@@ -11,7 +11,10 @@ import { PixivRepository } from './repository.js';
 import { FileStore } from './fileStore.js';
 import { TransitionEngine } from './transitionEngine.js';
 import { NetworkStore } from './networkStore.js';
-import { pixivReUrl, pixivOriginalUrl, proxyThumb } from '../core/utils.js';
+import { pixivReUrl } from '../core/utils.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('storageService');
 
 export class PixivStorageService {
   constructor() {
@@ -281,6 +284,6 @@ export function buildDownloadUrls(item) {
       candidates.push(`https://i.pixiv.re/img-original/img/${datePath}/${id}_p${page}.jpg`);
     }
   }
-  console.log('[buildDownloadUrls] illustId:', item.illustId, 'page:', page, '→', candidates);
+  log.debug('[buildDownloadUrls] illustId:', item.illustId, 'page:', page, '→', candidates);
   return [...new Set(candidates)].filter(Boolean);
 }

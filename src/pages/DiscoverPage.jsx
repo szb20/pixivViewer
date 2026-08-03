@@ -3,12 +3,11 @@ import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
-import useSavedSet from '../hooks/useSavedSet.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
 
-export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, refreshToken = 0 }) {
+export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, savedSet, registerRefresh, refreshToken = 0 }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -21,17 +20,20 @@ export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, refresh
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadRef = useRef(null);
-  const saved = useSavedSet();
+  const saved = savedSet;
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   const needCookie = !!error && /cookie|no_cookie|需要 Cookie/i.test(error);
 
   const load = useCallback(async (append) => {
+    if (!append) startRef.current = 0;
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); }
     try {
       const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
       const rawList = r?.illusts || [];
       // 过滤已保存到相册的（saved 是异步加载，有值才过滤避免闪空）
-      const filtered = saved?.size ? rawList.filter(img => !saved.has(`${img.illustId}_0`)) : rawList;
+      const filtered = savedRef.current?.size ? rawList.filter(img => !savedRef.current.has(`${img.illustId}_0`)) : rawList;
       startRef.current += rawList.length;
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;
@@ -48,6 +50,12 @@ export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, refresh
   }, []);
 
   loadRef.current = load;
+
+  // 注册下拉刷新入口（当前 tab 有效）
+  useEffect(() => {
+    if (!registerRefresh) return;
+    return registerRefresh('discover', () => loadRef.current?.(false));
+  }, [registerRefresh]);
 
   // 挂载时先尝试恢复缓存；缓存命中则跳过首次请求
   useEffect(() => {
@@ -99,8 +107,13 @@ export default function DiscoverPage({ onOpen, onOpenSettings, likedSet, refresh
     <div className="page">
       {needCookie
         ? <NeedCookieNotice onOpenSettings={onOpenSettings} />
-        : (error && <div className="error-box">{error}</div>)}
-      <ImageGrid items={items} savedSet={saved} likedSet={likedSet} onOpen={onOpen} />
+        : (error && (
+          <div className="error-box">
+            {error}
+            <button className="error-retry" onClick={() => load(false)}>重试</button>
+          </div>
+        ))}
+      <ImageGrid items={items} likedSet={likedSet} onOpen={onOpen} />
       {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
       {loadingMore && <div className="hint">加载中...</div>}
       {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}

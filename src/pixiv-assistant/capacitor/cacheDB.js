@@ -8,6 +8,9 @@
  *
  * v2 新增：tags multiEntry 索引、author 索引、分页查询、缓存统计、批量写入
  */
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('cacheDB');
 
 const DB_NAME = 'teyvat_pixiv_cache';
 const DB_VERSION = 10;
@@ -202,7 +205,8 @@ export async function getMeta(cacheKey) {
       req.onsuccess = () => resolve(req.result || null);
       req.onerror = () => resolve(null);
     });
-  } catch {
+  } catch (e) {
+    log.debug('getMeta 失败:', e?.message || e);
     return null;
   }
 }
@@ -220,8 +224,9 @@ export async function putMeta(meta) {
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
-  } catch {
+  } catch (e) {
     // silent fail
+    log.debug('putMeta 失败:', e?.message || e);
   }
 }
 
@@ -242,8 +247,8 @@ export async function putMetaBatch(metas) {
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
     });
-  } catch {
-    // silent
+  } catch (e) {
+    log.debug('putMetaBatch 失败:', e?.message || e);
   }
 }
 
@@ -259,8 +264,8 @@ export async function deleteMeta(cacheKey) {
       req.onsuccess = () => resolve();
       req.onerror = () => resolve();
     });
-  } catch {
-    // silent
+  } catch (e) {
+    log.debug('deleteMeta 失败:', e?.message || e);
   }
 }
 
@@ -276,7 +281,8 @@ export async function getAllMeta() {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => resolve([]);
     });
-  } catch {
+  } catch (e) {
+    log.debug('getAllMeta 失败:', e?.message || e);
     return [];
   }
 }
@@ -424,7 +430,8 @@ export async function getLikedMetaPaginated(offset = 0, limit = 50) {
     });
 
     return { items, total };
-  } catch {
+  } catch (e) {
+    log.debug('getByStatePaginated 失败:', e?.message || e);
     return { items: [], total: 0 };
   }
 }
@@ -444,7 +451,8 @@ export async function getByIllustId(illustId) {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => resolve([]);
     });
-  } catch {
+  } catch (e) {
+    log.debug('getByIllustId 失败:', e?.message || e);
     return [];
   }
 }
@@ -464,7 +472,8 @@ export async function searchByTag(tag) {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => resolve([]);
     });
-  } catch {
+  } catch (e) {
+    log.debug('searchByTag 失败:', e?.message || e);
     return [];
   }
 }
@@ -511,7 +520,8 @@ export async function getCacheStats() {
     }
 
     return { total, saved, auto: total - saved, totalSize };
-  } catch {
+  } catch (e) {
+    log.debug('getCacheStats 失败:', e?.message || e);
     return { total: 0, saved: 0, auto: 0, totalSize: 0 };
   }
 }
@@ -542,7 +552,10 @@ export async function importDBFromJSON(json) {
       }
     }
     return count;
-  } catch { return 0; }
+  } catch (e) {
+    log.debug('importDBFromJSON 失败:', e?.message || e);
+    return 0;
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -570,8 +583,8 @@ export async function importDBFromJSON(json) {
       }
     }
     await new Promise((resolve) => { tx.oncomplete = resolve; tx.onerror = resolve; });
-    console.log('%c[cleanTitles] 已清理 ' + count + ' 条标题页码后缀', 'color:green;font-weight:bold');
+    log.info(`[cleanTitles] 已清理 ${count} 条标题页码后缀`);
   } catch (e) {
-    console.warn('[cleanTitles] 失败:', e.message);
+    log.warn('[cleanTitles] 失败:', e.message);
   }
 })();

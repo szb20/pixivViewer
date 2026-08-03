@@ -9,6 +9,9 @@
 import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
 import { safeFileName } from '../core/utils.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('FileStore');
 
 /** 本会话已确认存在的目录（directoryType:dir），避免每次保存都重复 mkdir */
 const ensuredDirs = new Set();
@@ -37,7 +40,7 @@ export async function ensureDirectory(FS, dir, dirType) {
       ensuredDirs.add(key);
       return true;
     }
-    console.warn('[ensureDirectory] 无法创建目录，继续尝试写入:', dir, message);
+    log.warn('[ensureDirectory] 无法创建目录，继续尝试写入:', dir, message);
     return false;
   }
 }
@@ -53,16 +56,16 @@ export class FileStore {
   async save(entity, data, state) {
     try {
       const FS = await getFS();
-      if (!FS) { console.error('[FileStore.save] getFS 返回空 — Filesystem 不可用'); return false; }
-      if (!data) { console.error('[FileStore.save] data 为空'); return false; }
-      if (!entity?.fileName) { console.error('[FileStore.save] entity.fileName 为空', entity); return false; }
+      if (!FS) { log.error('[save] getFS 返回空 — Filesystem 不可用'); return false; }
+      if (!data) { log.error('[save] data 为空'); return false; }
+      if (!entity?.fileName) { log.error('[save] entity.fileName 为空', entity); return false; }
       const targetState = state || entity.state;
       const { dir, dirType } = this._resolveDir(targetState);
       await ensureDirectory(FS, dir, dirType);
       await FS.plugin.writeFile({ path: `${dir}/${entity.fileName}`, data, directory: dirType });
       return true;
     } catch (e) {
-      console.error('[FileStore.save] writeFile 失败:', e?.message || e);
+      log.error('[save] writeFile 失败:', e?.message || e);
       return false;
     }
   }
@@ -90,7 +93,8 @@ export class FileStore {
       const mimeType = mimeMap[ext] || 'image/jpeg';
       const blob = new Blob([new Uint8Array(await this._base64ToBuf(data))], { type: mimeType });
       return { localUrl: URL.createObjectURL(blob), data };
-    } catch {
+    } catch (e) {
+      log.debug('[load] 读取失败:', e?.message || e);
       return null;
     }
   }
@@ -118,7 +122,8 @@ export class FileStore {
       await ensureDirectory(FS, dstDir, dstType);
       await FS.plugin.writeFile({ path: `${dstDir}/${entity.fileName}`, data, directory: dstType });
       return true;
-    } catch {
+    } catch (e) {
+      log.debug('[copy] 复制失败:', e?.message || e);
       return false;
     }
   }
@@ -137,7 +142,8 @@ export class FileStore {
       const { dir, dirType } = this._resolveDir(targetState);
       await FS.plugin.deleteFile({ path: `${dir}/${entity.fileName}`, directory: dirType }).catch(() => {});
       return true;
-    } catch {
+    } catch (e) {
+      log.debug('[delete] 删除失败:', e?.message || e);
       return false;
     }
   }
@@ -171,7 +177,8 @@ export class FileStore {
       }).catch(() => null);
       if (!raw) return null;
       return typeof raw === 'string' ? raw : raw.data || '';
-    } catch {
+    } catch (e) {
+      log.debug('[readData] 读取失败:', e?.message || e);
       return null;
     }
   }
@@ -190,7 +197,8 @@ export class FileStore {
         path: `${dir}/${entity.fileName}`, directory: dirType,
       }).catch(() => null);
       return !!raw;
-    } catch {
+    } catch (e) {
+      log.debug('[exists] 检查失败:', e?.message || e);
       return false;
     }
   }

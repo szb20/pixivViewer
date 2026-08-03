@@ -14,6 +14,9 @@
  *   → deleted      (不存在 deleted 状态)
  */
 // 无额外导入 — PixivEntity 仅用于 JSDoc 类型标注
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('TransitionEngine');
 
 /**
  * Saga 日志 — 记录已执行的步骤，失败时用于补偿。
@@ -144,7 +147,7 @@ export class TransitionEngine {
         }
         // cleanup 步骤失败不需要补偿（源文件还在）
       } catch (compErr) {
-        console.error('[TransitionEngine] 补偿失败:', step, compErr.message);
+        log.error('补偿失败:', step, compErr.message);
       }
     }
   }
