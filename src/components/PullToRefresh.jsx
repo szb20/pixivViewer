@@ -95,7 +95,7 @@ export default function PullToRefresh({ onRefresh }) {
   const label = state === 'refreshing' ? '刷新中...' : (distance >= THRESHOLD ? '松开刷新' : '下拉刷新');
   return (
     <div
-      className="ptr-indicator"
+      className="ptr-indicator bar-frosted"
       style={{ transform: `translateX(-50%) translateY(${distance}px)` }}
     >
       {state === 'refreshing'
