@@ -131,7 +131,6 @@ button {
   background: rgba(15, 17, 21, 0.72);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tab-bar {
@@ -145,6 +144,7 @@ button {
   height: 48px;
   display: flex;
   z-index: 10;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .tab-btn {
