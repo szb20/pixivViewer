@@ -38,7 +38,11 @@ export const downloadMonitor = {
       setProgress(pct) {
         const j = jobs.get(key);
         if (!j || j.status === 'done' || j.status === 'error') return;
-        j.progress = pct;
+        const value = Number(pct);
+        if (!Number.isFinite(value)) return;
+        // 进度只增不减：模拟进度/真实进度/写相册阶段混用时不回退
+        if (j.progress != null && value < j.progress) return;
+        j.progress = value;
         emit();
       },
       setStatus(status, message = '') {

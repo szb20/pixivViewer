@@ -34,9 +34,10 @@
   inset: 0;
   z-index: 70;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: 20px;
+  padding-top: max(20px, env(safe-area-inset-top, 0px));
 }
 
 @supports (backdrop-filter: blur()) {
@@ -50,23 +51,14 @@
   max-width: 480px;
   max-height: 78vh;
   overflow-y: auto;
-  border-radius: 24px;
+  border-radius: 32px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(22, 25, 32, 0.62);
   backdrop-filter: blur(40px) saturate(180%);
-  padding: 12px 18px 24px;
+  padding: 16px 18px 20px;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.06),
     0 24px 60px rgba(0, 0, 0, 0.45);
-}
-
-/* 顶部抓取条 */
-.download-sheet-handle {
-  width: 36px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
-  margin: 0 auto 14px;
 }
 
 /* ── 列表 ── */
@@ -74,7 +66,7 @@
 .download-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .download-empty {
@@ -88,24 +80,14 @@
 
 .download-row {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-radius: 18px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 24px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.download-row-main {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.download-row-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .download-row-title {
@@ -140,47 +122,32 @@
   flex: none;
 }
 
-/* ── 进度条 ── */
+/* ── 圆环进度 ── */
 
-.download-row-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-}
-
-.download-bar {
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.download-bar-fill {
+.download-row-ring {
   position: relative;
-  height: 100%;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
-  transition: width 0.2s ease;
-  overflow: hidden;
-}
-
-.download-bar-indeterminate {
-  width: 40% !important;
-  animation: download-slide 1.2s ease-in-out infinite;
-}
-
-@keyframes download-slide {
-  0% { margin-left: -40%; }
-  100% { margin-left: 100%; }
-}
-
-.download-pct {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-  width: 36px;
-  text-align: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
+  margin-left: auto;
+  margin-right: -6px;
+}
+
+.download-ring-track {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+
+.download-ring-fill {
+  stroke: #fff;
+  transition: stroke-dashoffset 0.25s ease;
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+}
+
+.download-ring-pct {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1;
 }

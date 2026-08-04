@@ -4,7 +4,7 @@
  * 订阅全局 downloadMonitor（见 utils/downloadMonitor.js），
  * 有下载任务时显示悬浮按钮（角标=进行中数量），点击展开全屏毛玻璃任务列表。
  */
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, useEffect } from 'react';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
 import '../styles/download.css';
 
@@ -15,27 +15,40 @@ function DownloadRow({ job }) {
   else if (job.status === 'error') statusText = job.error || '失败';
   else statusText = job.message || (job.status === 'writing' ? '写入相册' : '下载中');
 
+  // 圆环进度：半径 16，周长 ≈ 100.53
+  const r = 16;
+  const circumference = 2 * Math.PI * r;
+  const offset = pct != null ? circumference * (1 - pct / 100) : circumference;
+
   return (
     <div className={`download-row download-row--${job.status}`}>
-      <div className="download-row-main">
-        <div className="download-row-top">
-          <span className="download-row-title">{job.title || job.illustId}</span>
-          <span className="download-row-status">{job.kind === 'gif' ? '动图 · ' : ''}{statusText}</span>
-          {job.status === 'done' && <span className="download-row-done">✓</span>}
-          {job.status === 'error' && <span className="download-row-err">✕</span>}
-        </div>
-        {(job.status === 'downloading' || job.status === 'writing') && (
-          <div className="download-row-progress">
-            <div className="download-bar">
-              <div
-                className={`download-bar-fill${pct == null ? ' download-bar-indeterminate' : ''}`}
-                style={pct != null ? { width: `${pct}%` } : undefined}
-              />
-            </div>
-            {pct != null && <span className="download-pct">{pct}%</span>}
-          </div>
-        )}
-      </div>
+      <span className="download-row-title">{job.title || job.illustId}</span>
+      <span className="download-row-status">{job.kind === 'gif' ? '动图 · ' : ''}{statusText}</span>
+      {(job.status === 'downloading' || job.status === 'writing') && (
+        <span className="download-row-ring">
+          <svg width="36" height="36" viewBox="0 0 36 36">
+            <circle
+              className="download-ring-track"
+              cx="18" cy="18" r={r}
+              fill="none"
+              strokeWidth="2"
+            />
+            <circle
+              className="download-ring-fill"
+              cx="18" cy="18" r={r}
+              fill="none"
+              strokeWidth="2"
+              strokeDasharray={circumference}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+              transform="rotate(-90 18 18)"
+            />
+          </svg>
+          {pct != null && <span className="download-ring-pct">{pct}%</span>}
+        </span>
+      )}
+      {job.status === 'done' && <span className="download-row-done">✓</span>}
+      {job.status === 'error' && <span className="download-row-err">✕</span>}
     </div>
   );
 }
@@ -43,7 +56,15 @@ function DownloadRow({ job }) {
 export default function DownloadMonitorButton() {
   const jobs = useSyncExternalStore(downloadMonitor.subscribe, downloadMonitor.getSnapshot);
   const [open, setOpen] = useState(false);
-  const active = jobs.filter(j => j.status === 'downloading' || j.status === 'writing').length;
+  // 角标显示总任务数（含已完成的暂存任务），多图批量下载时就是本次的页数
+  const total = jobs.length;
+
+  // 任务全部完成后自动关闭弹窗
+  useEffect(() => {
+    if (open && jobs.length > 0 && jobs.every(j => j.status === 'done' || j.status === 'error')) {
+      setOpen(false);
+    }
+  }, [jobs, open]);
 
   // 没有任务时不显示悬浮按钮
   if (!jobs.length) return null;
@@ -60,14 +81,12 @@ export default function DownloadMonitorButton() {
           <polyline points="7 10 12 15 17 10" />
           <line x1="12" y1="3" x2="12" y2="15" />
         </svg>
-        {active > 0 && <span className="download-fab-badge">{active}</span>}
+        {total > 0 && <span className="download-fab-badge">{total}</span>}
       </button>
 
       {open && (
         <div className="download-overlay" onClick={() => setOpen(false)}>
           <div className="download-sheet" onClick={e => e.stopPropagation()}>
-            {/* 顶部抓取条 */}
-            <div className="download-sheet-handle" />
             {/* 列表 */}
             <div className="download-list">
               {jobs.length === 0 ? (
