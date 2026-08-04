@@ -12,6 +12,7 @@ import android.provider.MediaStore;
 import android.util.Base64;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -47,6 +48,8 @@ public class GallerySaverPlugin extends Plugin {
     private static final String RELATIVE_PATH = "Pictures/TeyvatWhisper/";
     // 应用元数据备份（JSON）存到「下载」集合：任意 MIME 都接受，卸载后保留
     private static final String META_RELATIVE_PATH = "Download/TeyvatWhisper/";
+    // 通用 Files 集合：接受任意 MIME（无损 ZIP 副本用，与图片/动图同目录 Pictures/TeyvatWhisper）
+    private static final Uri FILES_URI = MediaStore.Files.getContentUri("external");
 
     /**
      * 确保存储权限。
@@ -357,6 +360,83 @@ public class GallerySaverPlugin extends Plugin {
                 new String[]{fileName, META_RELATIVE_PATH});
             JSObject ret = new JSObject();
             ret.put("deleted", deleted);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 写入任意二进制文件到相册目录（Pictures/TeyvatWhisper，与图片/动图同目录，卸载后保留）。
+     * 用于 ugoira 原版无损 ZIP 的持久副本。图片集合拒绝非 image/* MIME，故走通用 Files 集合。
+     */
+    @PluginMethod
+    public void saveDownload(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String data = call.getString("data"); // base64
+        String mimeType = call.getString("mimeType", "application/octet-stream");
+        if (fileName == null || data == null) {
+            call.reject("fileName 与 data 不能为空");
+            return;
+        }
+        try {
+            byte[] bytes = Base64.decode(data, Base64.DEFAULT);
+            ContentResolver cr = getContext().getContentResolver();
+            // 先删除同名旧文件（幂等）
+            cr.delete(FILES_URI,
+                MediaStore.MediaColumns.DISPLAY_NAME + " = ? AND "
+                    + MediaStore.MediaColumns.RELATIVE_PATH + " = ?",
+                new String[]{fileName, RELATIVE_PATH});
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, RELATIVE_PATH);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = cr.insert(FILES_URI, values);
+            if (uri == null) {
+                call.reject("MediaStore 插入失败");
+                return;
+            }
+            try (OutputStream os = cr.openOutputStream(uri)) {
+                if (os == null) {
+                    call.reject("打开输出流失败");
+                    return;
+                }
+                os.write(bytes);
+            }
+            values.clear();
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            cr.update(uri, values, null, null);
+
+            JSObject ret = new JSObject();
+            ret.put("uri", uri.toString());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 列出相册目录（Pictures/TeyvatWhisper）内所有文件名，供启动时相册对账 */
+    @PluginMethod
+    public void listFiles(PluginCall call) {
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            JSArray files = new JSArray();
+            try (Cursor c = cr.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media.DISPLAY_NAME},
+                    MediaStore.Images.Media.RELATIVE_PATH + " = ?",
+                    new String[]{RELATIVE_PATH},
+                    null)) {
+                if (c != null) {
+                    while (c.moveToNext()) {
+                        String name = c.getString(0);
+                        if (name != null && !name.isEmpty()) files.put(name);
+                    }
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("files", files);
             call.resolve(ret);
         } catch (Exception e) {
             call.reject(e.getMessage(), e);

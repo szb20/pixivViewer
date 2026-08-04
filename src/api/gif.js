@@ -7,7 +7,7 @@
  */
 import JSZip from 'jszip';
 import { Unzip } from 'fflate';
-import { CapacitorHttp } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { browserFetch, prodFetch } from './pixiv.js';
 import {
   PixivEntity, PixivRepository, getSettings, safeFileName, getFS, CACHE_DIR,
@@ -267,6 +267,33 @@ async function deleteZipFromDisk(id) {
     await fs.plugin.deleteFile({ path: zipCachePath(id), directory: 'DATA' }).catch(() => {});
     await fs.plugin.deleteFile({ path: metaCachePath(id), directory: 'DATA' }).catch(() => {});
   } catch { /* ignore */ }
+}
+
+/**
+ * 把原版无损 ZIP 从磁盘缓存复制到相册目录（Pictures/TeyvatWhisper/，与保存的图片/动图同目录），
+ * 作为卸载后仍保留的无损副本（尽力而为：缓存被 LRU 淘汰或读取失败就跳过）。
+ */
+async function saveLosslessZipToGallery(sid) {
+  try {
+    const isNative = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
+    const S = isNative ? Capacitor?.Plugins?.GallerySaver : null;
+    if (!S) return;
+    const fs = await getFS();
+    if (!fs?.plugin) return;
+    const zipPath = zipCachePath(sid);
+    const raw = await fs.plugin.readFile({ path: zipPath, directory: 'DATA' }).catch(() => null);
+    if (!raw) return;
+    const base64 = typeof raw === 'string' ? raw : raw.data || '';
+    if (!base64) return;
+    await S.saveDownload({
+      fileName: `pixiv_${sid}_ugoira.zip`,
+      data: base64,
+      mimeType: 'application/zip',
+    });
+    log.info(`[gif] 已备份无损 ZIP: ${sid}`);
+  } catch (e) {
+    log.debug('[gif] 备份无损 ZIP 失败:', e?.message || e);
+  }
 }
 
 /**
@@ -630,7 +657,11 @@ export async function saveGifToAlbum(item, onProgress) {
     onProgress?.(pct);
   };
   const promise = doSaveGifToAlbum(item, wrapped).then(
-    (r) => { mon.finish(!!r?.success, r?.error || ''); return r; },
+    (r) => {
+      mon.finish(!!r?.success, r?.error || '');
+      if (r?.success) saveLosslessZipToGallery(sid).catch(() => {});
+      return r;
+    },
     (e) => { mon.finish(false, e?.message || '动图保存失败'); throw e; },
   );
   saveInFlight.set(sid, promise);

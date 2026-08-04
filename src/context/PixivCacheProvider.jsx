@@ -9,7 +9,11 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { storageFacade, getCompositeKey } from '../pixiv-assistant/index.js';
-import { restoreMetaBackupIfNeeded, ensureMetaBackup } from '../pixiv-assistant/capacitor/metaBackup.js';
+import {
+  restoreMetaBackupIfNeeded,
+  ensureMetaBackup,
+  reconcileGallery,
+} from '../pixiv-assistant/capacitor/metaBackup.js';
 import { createLogger } from '../utils/logger.js';
 import {
   PixivCacheContext,
@@ -48,6 +52,8 @@ export function PixivCacheProvider({ children }) {
         await restoreMetaBackupIfNeeded();
         // 已有数据但还没备份文件 → 立即补一份（升级后无需等下一次点赞/保存）
         await ensureMetaBackup();
+        // 相册对账：为「有文件但无元数据」的保存图补建 已保存 标记
+        await reconcileGallery();
         const all = await storageFacade.getAll();
         if (cancelled || !Array.isArray(all)) return;
         const patch = {};
