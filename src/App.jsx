@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
@@ -10,13 +10,10 @@ import RankingPage from './pages/RankingPage.jsx';
 import BookmarksPage from './pages/BookmarksPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
 import GalleryPage from './pages/GalleryPage.jsx';
-import { storageFacade, getCompositeKey } from './pixiv-assistant/index.js';
+import { storageFacade } from './pixiv-assistant/index.js';
 import { runBackHandlers } from './utils/backHandler.js';
-import { createLogger } from './utils/logger.js';
 import './index.css';
 import './styles/detail.css';
-
-const log = createLogger('App');
 
 // 开发期调试入口
 window.__pixivViewer = window.__pixivViewer || { storageFacade };
@@ -107,8 +104,6 @@ export default function App() {
     setTab('search');
     setSearchSeed({ tag, seq: Date.now() });
   };
-  const [pixivCache, setPixivCache] = useState({});
-
   // Android 系统返回（边缘滑动/返回键）：先走应用内层级，最后才退出 App
   useEffect(() => {
     if (!window.Capacitor?.isNativePlatform?.()) return;
@@ -131,45 +126,6 @@ export default function App() {
     return () => { cleanup?.(); };
   }, []);
 
-  // 启动时扫描相册/缓存元数据，用于"已保存绿点"与喜欢状态
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const all = await storageFacade.getAll();
-        if (cancelled || !Array.isArray(all)) return;
-        const patch = {};
-        for (const e of all) {
-          const ck = getCompositeKey({ illustId: e.illustId, _pageIndex: e.pageIndex ?? 0 });
-          patch[ck] = {
-            cached: e.state === 'cached' || e.state === 'saved',
-            saved: e.isSaved,
-            liked: e.isLiked,
-            illustId: e.illustId,
-          };
-        }
-        setPixivCache(patch);
-      } catch (e) { log.warn('启动扫描缓存元数据失败:', e?.message || e); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  const likedSet = useMemo(() => {
-    const s = new Set();
-    for (const [key, val] of Object.entries(pixivCache)) {
-      if (val?.liked) s.add(key);
-    }
-    return s;
-  }, [pixivCache]);
-
-  const savedSet = useMemo(() => {
-    const s = new Set();
-    for (const [key, val] of Object.entries(pixivCache)) {
-      if (val?.saved) s.add(key);
-    }
-    return s;
-  }, [pixivCache]);
-
   return (
     <div className="app">
       <main className="app-content">
@@ -179,8 +135,6 @@ export default function App() {
             <DiscoverPage
               onOpen={openDetail}
               onOpenSettings={() => setSettingsOpen(true)}
-              likedSet={likedSet}
-              savedSet={savedSet}
               registerRefresh={registerRefresh}
               refreshToken={tabTokens.discover || 0}
             />
@@ -190,8 +144,6 @@ export default function App() {
           {visitedTabs.current.has('ranking') && (
             <RankingPage
               onOpen={openDetail}
-              likedSet={likedSet}
-              savedSet={savedSet}
               registerRefresh={registerRefresh}
               refreshToken={tabTokens.ranking || 0}
             />
@@ -202,7 +154,6 @@ export default function App() {
             <BookmarksPage
               onOpen={openDetail}
               onOpenSettings={() => setSettingsOpen(true)}
-              likedSet={likedSet}
               registerRefresh={registerRefresh}
               refreshToken={tabTokens.bookmarks || 0}
             />
@@ -212,7 +163,6 @@ export default function App() {
           {visitedTabs.current.has('search') && (
             <SearchPage
               onOpen={openDetail}
-              likedSet={likedSet}
               registerRefresh={registerRefresh}
               refreshToken={tabTokens.search || 0}
               searchSeed={searchSeed}
@@ -221,7 +171,7 @@ export default function App() {
         </div>
         <div style={{ display: tab === 'gallery' ? undefined : 'none' }}>
           {visitedTabs.current.has('gallery') && (
-            <GalleryPage onOpen={openDetail} likedSet={likedSet} registerRefresh={registerRefresh} />
+            <GalleryPage onOpen={openDetail} registerRefresh={registerRefresh} />
           )}
         </div>
       </main>
@@ -240,8 +190,6 @@ export default function App() {
       {detailImage && (
         <DetailView
           image={detailImage}
-          pixivCache={pixivCache}
-          setPixivCache={setPixivCache}
           onClose={closeDetail}
           onSearchTag={handleSearchTag}
           onAuthorWorks={handleAuthorWorks}

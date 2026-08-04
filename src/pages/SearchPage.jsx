@@ -1,161 +1,140 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
-import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
+import { useTabFeed } from '../hooks/useTabFeed.js';
+import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import SearchIcon from '../components/icons/SearchIcon.jsx';
+import '../styles/search.css';
 
 const PAGE_SIZE = 20;
 const HISTORY_KEY = 'pixiv_search_history';
 const CACHE_KEY = 'search:last';
 
-export default function SearchPage({ onOpen, likedSet, registerRefresh, refreshToken = 0, searchSeed = null }) {
+export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
+  const likedSet = useLikedSet();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
   const [searched, setSearched] = useState(false);
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
   });
-  const pageRef = useRef(1);
-  const sentinelRef = useRef(null);
   const queryRef = useRef('');
-  const resultsRef = useRef([]);
-  const doSearchRef = useRef(null);
+  const pageRef = useRef(1);
 
-  const doSearch = useCallback(async (q, append) => {
-    const trimmed = q.trim();
-    if (!trimmed) return;
-    if (!append) {
-      queryRef.current = trimmed;
-      pageRef.current = 1;
-      setHistory(prev => {
-        const next = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 12);
-        try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
-        return next;
-      });
-    }
-    const page = append ? pageRef.current + 1 : 1;
-    if (append) setLoadingMore(true);
-    else { setLoading(true); setError(null); setSearched(true); }
-    try {
-      const r = await pixivApi.searchPixiv(queryRef.current, { page, count: PAGE_SIZE });
+  const feed = useTabFeed({
+    cacheKey: CACHE_KEY,
+    registerRefresh,
+    refreshToken,
+    // 搜索不自动首拉，只有用户提交 / 点历史 / 详情页点 Tag 时才发起
+    autoLoad: false,
+    hydrate: (cache) => {
+      const items = cache?.items || cache?.results || [];
+      if (!items.length) return null;
+      queryRef.current = cache.query || '';
+      setQuery(cache.query || '');
+      if (cache.page > 0) pageRef.current = cache.page;
+      if (cache.searched) setSearched(true);
+      return { items, hasMore: !!cache.hasMore };
+    },
+    fetchPage: async (append) => {
+      const q = queryRef.current.trim();
+      if (!q) return null;
+      const page = append ? pageRef.current + 1 : 1;
+      const r = await pixivApi.searchPixiv(q, { page, count: PAGE_SIZE });
       const list = r?.images || [];
       pageRef.current = page;
-      const nextResults = append ? [...resultsRef.current, ...list] : list;
-      resultsRef.current = nextResults;
-      setResults(nextResults);
-      // 有服务器 total 时用它收敛边界，避免最后一页恰好满页时多请求一次空数据
+      // 有服务端 total 时用它收敛边界，避免最后一页恰好满页时多请求一次空数据
       const serverTotal = r?.total;
       const hasServerTotal = Number.isFinite(serverTotal) && serverTotal > list.length;
-      const nextHasMore = list.length >= PAGE_SIZE
+      const hasMore = list.length >= PAGE_SIZE
         && (!hasServerTotal || page * PAGE_SIZE < serverTotal);
-      setHasMore(nextHasMore);
-      if (!append && !list.length) setError(r?.error || '没有找到结果');
-      // 持久化最近一次搜索结果（24h TTL），重启后恢复
-      saveTabCache(CACHE_KEY, {
-        query: queryRef.current,
-        results: nextResults,
-        hasMore: nextHasMore,
-        page,
-        searched: true,
-      }).catch(() => {});
-    } catch (e) {
-      setError(e.message);
-    }
-    setLoading(false);
-    setLoadingMore(false);
+      return {
+        list,
+        hasMore,
+        emptyMessage: r?.error || '没有找到结果',
+        cacheExtra: { query: q, page, searched: true },
+      };
+    },
+  });
+  const { load: reload } = feed;
+
+  const runSearch = useCallback((q) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    queryRef.current = trimmed;
+    setQuery(trimmed);
+    setHistory(prev => {
+      const next = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 12);
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setSearched(true);
+    reload(false);
+  }, [reload]);
+
+  const clearHistory = useCallback(() => {
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+    setHistory([]);
   }, []);
 
-  const submit = (e) => { e.preventDefault(); doSearch(query, false); };
-  doSearchRef.current = doSearch;
+  const submit = (e) => { e.preventDefault(); runSearch(query); };
 
-  // 注册下拉刷新入口（当前 tab 有效）：重新搜索当前关键词
-  useEffect(() => {
-    if (!registerRefresh) return;
-    return registerRefresh('search', () => doSearchRef.current(queryRef.current, false));
-  }, [registerRefresh]);
-
-  // 挂载时恢复最近一次搜索（不自动发起请求）
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const cache = await loadTabCache(CACHE_KEY);
-        if (cancelled || !cache?.results?.length) return;
-        queryRef.current = cache.query || '';
-        resultsRef.current = cache.results;
-        setQuery(cache.query || '');
-        setResults(cache.results);
-        setHasMore(!!cache.hasMore);
-        if (cache.page > 0) pageRef.current = cache.page;
-        if (cache.searched) setSearched(true);
-        setLoading(false);
-      } catch {
-        /* 缓存不可用 */
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // 重点当前 tab → 重搜当前关键词
-  useEffect(() => {
-    if (refreshToken > 0 && queryRef.current) doSearchRef.current(queryRef.current, false);
-  }, [refreshToken]);
-
-  // 外部触发（详情页点 Tag）→ 直接搜索该 tag
+  // 详情页点 Tag → 关闭详情并切到搜索 tab 后直接搜索该 tag
   useEffect(() => {
     if (!searchSeed?.tag) return;
-    setQuery(searchSeed.tag);
-    doSearchRef.current(searchSeed.tag, false);
-  }, [searchSeed]);
-
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore || loading) return;
-    const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && hasMore && !loadingMore) doSearch(queryRef.current, true);
-    }, { rootMargin: '200px 0px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [hasMore, loading, loadingMore, doSearch]);
+    runSearch(searchSeed.tag);
+  }, [searchSeed, runSearch]);
 
   return (
-    <div className="page">
-      <form className="search-bar" onSubmit={submit}>
-        <input
-          className="search-input"
-          type="text"
-          value={query}
-          placeholder="搜索 Pixiv 图片..."
-          onChange={e => setQuery(e.target.value)}
-        />
-        <button className="btn-primary" type="submit" disabled={loading}>搜索</button>
-      </form>
+    <div className="page search-page">
+      <div className="search-head">
+        {/* 搜索栏：毛玻璃 + 聚焦蓝色光晕 */}
+        <form className="search-bar search-bar--glass" onSubmit={submit}>
+          <SearchIcon className="search-icon" />
+          <input
+            className="search-input"
+            type="text"
+            value={query}
+            placeholder="搜索 Pixiv 图片..."
+            enterKeyHint="search"
+            onChange={e => setQuery(e.target.value)}
+          />
+          <button className="search-submit" type="submit" disabled={feed.loading}>
+            {feed.loading ? <span className="search-submit-spinner" /> : <span>搜索</span>}
+          </button>
+        </form>
 
-      {!searched && history.length > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          {history.map(h => (
-            <button
-              key={h}
-              className="history-tag"
-              onClick={() => { setQuery(h); doSearch(h, false); }}
-            >{h}</button>
-          ))}
-        </div>
-      )}
+        {/* 历史搜索：毛玻璃 chips */}
+        {!searched && history.length > 0 && (
+          <div className="search-history">
+            <div className="search-history-head">
+              <span className="search-history-label">最近搜索</span>
+              <button type="button" className="search-history-clear" onClick={clearHistory}>清空</button>
+            </div>
+            <div className="search-history-tags">
+              {history.map(h => (
+                <button
+                  key={h}
+                  type="button"
+                  className="search-history-tag"
+                  onClick={() => runSearch(h)}
+                >{h}</button>
+              ))}
+            </div>
+          </div>
+        )}
 
-      {error && (
-        <div className="error-box">
-          {error}
-          <button className="error-retry" onClick={() => doSearch(queryRef.current || query, false)}>重试</button>
-        </div>
-      )}
-      <ImageGrid items={results} likedSet={likedSet} onOpen={onOpen} />
-      {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
-      {loadingMore && <div className="hint">加载中...</div>}
-      {!loading && !hasMore && results.length > 0 && <div className="hint">没有更多了</div>}
+        {feed.error && (
+          <div className="error-box">
+            {feed.error}
+            <button type="button" className="error-retry" onClick={() => runSearch(queryRef.current || query)}>重试</button>
+          </div>
+        )}
+      </div>
+
+      <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
+      {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
+      {feed.loadingMore && <div className="hint">加载中...</div>}
+      {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
     </div>
   );
 }

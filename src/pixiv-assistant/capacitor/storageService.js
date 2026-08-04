@@ -193,7 +193,7 @@ export class PixivStorageService {
    */
   async saveFromNetwork(item) {
     if (!item?.illustId) return { success: false, error: 'invalid_item' };
-    // 动图统一由 window.api.saveItem 分发到 saveGifToAlbum，本层只处理静态图
+    // 动图统一由 api/index.js 的 saveItem 分发到 saveGifToAlbum，本层只处理静态图
 
     const id = PixivEntity.makeId(item.illustId, item._pageIndex ?? 0);
     let entity = await this.repository.find(id);

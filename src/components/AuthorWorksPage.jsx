@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { pixivApi } from '../api/pixiv.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import { gridThumbUrl } from '../utils/quality.js';
 import { createLogger } from '../utils/logger.js';
@@ -31,7 +32,7 @@ export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenI
       setLoading(true);
       setError(null);
       try {
-        const r = await window.api.fetchUserIllusts?.(authorId, { limit: PAGE_LIMIT });
+        const r = await pixivApi.fetchUserIllusts(authorId, { limit: PAGE_LIMIT });
         if (cancelled) return;
         const list = (r?.illusts || []).map(it => ({
           ...it,

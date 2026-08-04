@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
+import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 
 const CACHE_KEY = 'ranking';
@@ -19,7 +20,8 @@ const MODES = [
 // 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
 const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
 
-export default function RankingPage({ onOpen, likedSet, savedSet, registerRefresh, refreshToken = 0 }) {
+export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 }) {
+  const likedSet = useLikedSet();
   const [category, setCategory] = useState('daily');
   const [r18, setR18] = useState(true);
   const [items, setItems] = useState([]);
@@ -38,9 +40,6 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
   const cacheRef = useRef(new Map()); // mode → { items, hasMore, page } 内存缓存
   const fetchSeqRef = useRef(0); // 防止快速切档时旧响应覆盖新内容
   const loadedModeRef = useRef(null); // 当前 items 属于哪个 mode
-  const saved = savedSet;
-  const savedRef = useRef(saved);
-  savedRef.current = saved;
   const mode = r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category;
 
   const load = useCallback(async (append) => {
@@ -71,7 +70,7 @@ export default function RankingPage({ onOpen, likedSet, savedSet, registerRefres
       const r = await pixivApi.fetchRanking({ mode, page });
       if (seq !== fetchSeqRef.current) return; // 用户已切走，丢弃过期响应
       const rawList = r?.illusts || [];
-      const filtered = savedRef.current?.size ? rawList.filter(img => !savedRef.current.has(`${img.illustId}_0`)) : rawList;
+      const filtered = rawList;
       pageRef.current = page;
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;

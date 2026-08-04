@@ -54,7 +54,8 @@
 #### 组件树
 
 ```
-App.jsx
+main.jsx ── <PixivCacheProvider>（2 个 context：pixivCache 读写层 / likedSet）
+└─ App.jsx
 ├─ PullToRefresh        (下拉刷新)
 ├─ <main>.app-content
 │  ├─ [discover] DiscoverPage
@@ -67,8 +68,10 @@ App.jsx
 ├─ DetailView           (详情页)
 │  └─ ImageDetailView   (大图+信息+推荐)
 │     ├─ DetailPageBlock (单页块，懒加载)
-│     ├─ UgoiraPlayer    (动图播放器)
+│     ├─ FrameAnimPlayer (动图播放器，GifPlayer/UgoiraPlayer 薄包装)
 │     └─ MediaLightbox   (全屏灯箱)
+├─ Hooks
+│  └─ useTabFeed        (Tab 页公共骨架：水合/无限滚动/刷新)
 └─ ToastHost            (Toast 渲染)
 ```
 
@@ -77,9 +80,8 @@ App.jsx
 | 状态 | 位置 | 说明 |
 |------|------|------|
 | `tab` | App | 当前 Tab |
-| `pixivCache` | App | 全量缓存状态 `{ [compositeKey]: { cached, saved, liked } }` |
-| `likedSet` | App (useMemo) | 从 pixivCache 派生的喜欢 Set |
-| `savedSet` | App (useMemo) | 从 pixivCache 派生的已保存 Set |
+| `pixivCache` | PixivCacheContext | 全量缓存状态 `{ [compositeKey]: { saved, liked } }`（读写层：详情/点赞） |
+| `likedSet` | PixivLikedSetContext | 从 pixivCache 派生的喜欢 Set（只读，网格红心） |
 | `tabTokens` | App | 强制刷新令牌 |
 | `visitedTabs` | App (ref) | 已访问 Tab 记录 |
 | `scrollPositions` | App (ref) | 各 Tab 滚动位置 |
@@ -92,8 +94,10 @@ App.jsx
 
 - **Tab 懒挂载**：`visitedTabs` 记录已访问 Tab，切换到新 Tab 时挂载，切回不卸载
 - **`display: none` 隐藏非当前 Tab**：保持 DOM 状态，切回时滚动位置保留
-- **Props 穿透**：`likedSet`/`savedSet`/`onOpen` 等从 App 穿透到各 Page
+- **Props 穿透**：`onOpen`/`registerRefresh` 等仍从 App 传入；`likedSet`/`pixivCache` 已改为 Context 订阅
 - **下拉刷新**：通过 `registerRefresh` 回调注册，App 统一分派
+- **Tab 公共骨架**：`useTabFeed` hook 收敛缓存水合/无限滚动/刷新令牌，页面只提供 `fetchPage` + `hydrate`
+- **按子集订阅**：Context 拆分 + Set 结构相等缓存——只有喜欢成员真正变化才更新 likedSet 引用，无关的 pixivCache 变化（如保存动作）不触发网格重渲染
 
 ---
 
@@ -107,7 +111,7 @@ App.jsx
 api/
 ├── pixiv.js      ← 传输适配层（dev fetch / prod CapacitorHttp）
 ├── gif.js        ← 动图下载链路（ZIP → 解帧 → GIF 编码）
-└── index.js      ← window.api 兼容层（组装上层）
+└── index.js      ← 统一保存入口（saveItem 动图/静图分发）
        │
        ▼
 pixiv-assistant/core/pixivApi.js  ← API 工厂（纯逻辑，无平台依赖）
@@ -206,8 +210,9 @@ interface Transport {
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  StorageFacade (UI 门面)                                  │
-│  职责：参数校验、错误转换、Toast 提示                      │
+│  职责：参数校验、错误转换、并发去重（无 UI 依赖）          │
 │  特点：单例，并发去重（_saveInFlight Map）                  │
+│  提示由 UI 层按返回值决定（utils/storageFeedback.js）       │
 ├──────────────────────────────────────────────────────────┤
 │  PixivStorageService (业务编排层)                          │
 │  职责：业务规则编排，不执行具体操作                        │
@@ -269,6 +274,7 @@ delete = 删除 file + 删除 meta（无 deleted 状态）
 |------|------|
 | `backHandler.js` | 系统返回键处理器注册表（后进先出） |
 | `toast.js` | CustomEvent 广播 Toast |
+| `storageFeedback.js` | 存储操作结果 → Toast 文案（toastSaveResult / toastUnsaveResult / toastDeleteResult） |
 | `logger.js` | 带前缀的日志工具（dev 输出、prod 静默） |
 | `quality.js` | 画质档位切换（thumb/mini/original/regular） |
 
@@ -378,19 +384,20 @@ DetailPageBlock      → IntersectionObserver 进入视口
 | **幂等设计** | save/unsave/toggleLike 全部幂等，避免重复操作 |
 | **并发去重** | `_saveInFlight` 自动保存 + 手动保存共享同一个 Promise |
 | **乐观更新** | 喜欢/保存先更新 UI，再异步确认，体验流畅 |
+| **按子集订阅** | 3 个 Context 拆分 + Set 结构相等缓存，点赞/保存只重渲染关心该子集的组件 |
 | **代理故障恢复** | `createAgentHolder` 支持重置，连接失败自动重试 |
 
 ### 4.2 可改进点
 
 | 问题 | 说明 |
 |------|------|
-| **StorageFacade 混入 Toast** | UI 门面层不应该直接依赖 Toast，应抛错误让 UI 层 catch |
-| **pixivCache 扁平状态** | 大对象 + setState 穿透多层 → 级联重渲染 |
-| **window.api 全局对象** | 不利于类型检查和测试 mock |
-| **动图/静图保存分流** | `saveFromNetwork` 返回 `gif_not_supported`，调用方再转 `saveGifToAlbum`，流程不够内聚 |
-| **FileStore cached/saved 同目录** | `_resolveDir` 对 cached 和 saved 返回同一路径，状态分离失去物理意义 |
-| **Tab 页面重复模式** | 缓存水合、无限滚动、刷新令牌在 4 个页面中重复实现 |
-| **GifPlayer/UgoiraPlayer 重复** | 两个组件几乎相同，应合并 |
+| ~~**StorageFacade 混入 Toast**~~ | ✅ 已解耦：Toast 移至 `utils/storageFeedback.js`，UI 层按返回值提示；`toggleLike` 事件广播归 `LightboxActions` |
+| ~~**pixivCache 扁平状态**~~ | ✅ 已收敛：状态移入 `PixivCacheProvider`（读写层 / likedSet 两个 context），详情链路不再逐层穿透；Set 结构不变时复用引用 → 无关变化不触发网格重渲染 |
+| ~~**window.api 全局对象**~~ | ✅ 已收敛：所有消费方改为直接 import（`pixivApi` / `storageFacade` / `fetchUgoiraFrames` / `saveItem`），全局对象已删除 |
+| **动图/静图保存分流** | ⏳ 待办：`saveFromNetwork` 返回 `gif_not_supported`，调用方再转 `saveGifToAlbum`，流程不够内聚 |
+| **FileStore cached/saved 同目录** | ⏳ 待办：`_resolveDir` 对 cached 和 saved 返回同一路径，状态分离失去物理意义（涉及存量数据迁移） |
+| **Tab 页面重复模式** | ✅ 部分解决：Discover/Bookmarks/Search 已收敛到 `useTabFeed`；Ranking 因分档/竞态守卫保留原实现 |
+| **GifPlayer/UgoiraPlayer 重复** | ✅ 已合并：共享 `FrameAnimPlayer`，两组件为薄包装 |
 
 ---
 
@@ -409,9 +416,10 @@ App.jsx
   ├─ ► DetailView ── ImageDetailView ────────────────│
   │    ├─ pixivApi.fetchIllust                       │
   │    ├─ storageFacade.saveFromNetwork              │
-  │    └─ MediaLightbox ── GifPlayer / UgoiraPlayer  │
+  │    └─ MediaLightbox ── FrameAnimPlayer           │
   │                                                  │
-  ├─ ► utils/ (backHandler, toast, logger, quality)  │
+  ├─ ► utils/ (backHandler, toast, storageFeedback,  │
+  │            logger, quality)                      │
   │                                                  │
   └─ ► pixiv-assistant/ (核心存储层) ────────────────┘
        │
@@ -419,7 +427,7 @@ App.jsx
        ├─ core/utils.js      ← 纯函数
        │
        └─ capacitor/         ← 平台依赖（IndexedDB + Filesystem）
-            ├─ storageFacade.js ← 依赖 showToast (utils/)
+            ├─ storageFacade.js ← 纯逻辑，不依赖 UI
             ├─ storageService.js ← 依赖 NetworkStore + FileStore + Repository
             ├─ transitionEngine.js ← 依赖 Repository + FileStore
             ├─ repository.js   ← 依赖 cacheDB.js
@@ -442,4 +450,5 @@ App.jsx
 4. **StorageFacade** 作为 UI 门面隔离 UI 和存储层
 5. **TransitionEngine** 的 Saga 模式是亮点，保证数据一致性
 
-整体架构清晰，分层合理，主要优化空间在**表现层的代码重复**和**状态管理的性能**上。
+整体架构清晰，分层合理。Tab 页重复骨架与动图播放器已收敛，主要剩余优化空间在
+**FileStore 目录物理分离**与 **动图/静图保存分流**上。

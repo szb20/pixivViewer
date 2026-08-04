@@ -419,27 +419,6 @@ button {
   padding: 8px 0 4px;
 }
 
-.search-bar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.search-input {
-  flex: 1;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 14px;
-  outline: none;
-}
-
-.search-input:focus {
-  border-color: var(--accent);
-}
-
 .btn-primary {
   padding: 0 16px;
   border: none;
@@ -448,18 +427,6 @@ button {
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
-}
-
-.history-tag {
-  display: inline-block;
-  margin: 0 6px 6px 0;
-  padding: 4px 10px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
   cursor: pointer;
 }
 

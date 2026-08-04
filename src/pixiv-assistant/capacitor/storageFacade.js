@@ -1,18 +1,16 @@
 /**
  * StorageFacade — UI 门面。
  *
- * 给 UI 组件调用的最外层。
- * 职责：参数校验、错误转换、Toast 提示。
- *
- * 当前先保留 Toast，后续再改为抛 StorageError 由 UI 层 catch。
+ * 职责：参数校验、错误转换、并发去重。
+ * 不再混入 Toast —— 提示由 UI 层根据返回值自行决定
+ * （见 src/utils/storageFeedback.js 的 toastSaveResult / toastUnsaveResult / toastDeleteResult）。
  */
 import { PixivStorageService } from './storageService.js';
-import { showToast } from '../../../src/utils/toast.js';
 
 export class StorageFacade {
   constructor() {
     this.service = new PixivStorageService();
-    // 进行中的保存请求（按 作品ID_页码 去重），避免并发重复下载/重复 toast
+    // 进行中的保存请求（按 作品ID_页码 去重），避免并发重复下载/重复提示
     this._saveInFlight = new Map();
   }
 
@@ -23,32 +21,18 @@ export class StorageFacade {
    * @returns {Promise<{success: boolean, idempotent?: boolean, error?: string}>}
    */
   async save(illustId, pageIndex = 0) {
-    if (!illustId) {
-      showToast('无法识别作品 ID', { type: 'error' });
-      return { success: false };
-    }
-    const result = await this.service.save(illustId, pageIndex);
-    if (result.idempotent) {
-      showToast('已在相册中');
-    } else if (result.success) {
-      showToast('已保存到相册');
-    } else {
-      showToast(this._errorMessage(result.error), { type: 'error' });
-    }
-    return result;
+    if (!illustId) return { success: false, error: 'invalid_item' };
+    return await this.service.save(illustId, pageIndex);
   }
 
   /**
-   * 下载并保存到相册（原图优先）— UI 层「保存」的唯一入口。
+   * 下载并保存到相册（原图优先）——UI 层「保存」的入口。
    * @param {object} item — 图片条目（含 illustId / _pageIndex / originalUrl / mediumUrl / title 等）
    * @returns {Promise<{success: boolean, entity?: import('./entity.js').PixivEntity, error?: string, idempotent?: boolean}>}
    */
   async saveFromNetwork(item) {
-    if (!item?.illustId) {
-      if (!item?._silent) showToast('无法识别作品 ID', { type: 'error' });
-      return { success: false };
-    }
-    // 同一张图并发保存（自动保存 + 点♥等）共享同一个 promise：只下载一次、只弹一次 toast
+    if (!item?.illustId) return { success: false, error: 'invalid_item' };
+    // 同一张图并发保存（自动保存 + 点♡等）共享同一个 promise：只下载一次
     const id = `${item.illustId}_${item._pageIndex ?? 0}`;
     const inFlight = this._saveInFlight.get(id);
     if (inFlight) return inFlight;
@@ -59,17 +43,7 @@ export class StorageFacade {
   }
 
   async _doSaveFromNetwork(item) {
-    const result = await this.service.saveFromNetwork(item);
-    // 静默模式（点♥后台批量保存 / 自动保存重复触发）不弹 toast
-    if (item._silent) return result;
-    if (result.idempotent) {
-      showToast('已在相册中');
-    } else if (result.success) {
-      showToast('已保存到相册');
-    } else {
-      showToast(this._errorMessage(result.error), { type: 'error' });
-    }
-    return result;
+    return await this.service.saveFromNetwork(item);
   }
 
   /**
@@ -79,19 +53,8 @@ export class StorageFacade {
    * @returns {Promise<{success: boolean, idempotent?: boolean, error?: string}>}
    */
   async unsave(illustId, pageIndex = 0) {
-    if (!illustId) {
-      showToast('无法识别作品 ID', { type: 'error' });
-      return { success: false };
-    }
-    const result = await this.service.unsave(illustId, pageIndex);
-    if (result.idempotent) {
-      showToast('已在缓存中');
-    } else if (result.success) {
-      showToast('已移回缓存');
-    } else {
-      showToast(this._errorMessage(result.error), { type: 'error' });
-    }
-    return result;
+    if (!illustId) return { success: false, error: 'invalid_item' };
+    return await this.service.unsave(illustId, pageIndex);
   }
 
   /**
@@ -102,11 +65,7 @@ export class StorageFacade {
    */
   async delete(illustId, pageIndex = 0) {
     if (!illustId) return { success: false };
-    const result = await this.service.delete(illustId, pageIndex);
-    if (result.success) {
-      showToast('已删除');
-    }
-    return result;
+    return await this.service.delete(illustId, pageIndex);
   }
 
   /**
@@ -169,24 +128,14 @@ export class StorageFacade {
 
   /**
    * 切换喜欢状态。
+   * 成功后的事件广播（pixiv:liked-changed）由 UI 层负责派发，本层保持纯逻辑。
    * @param {string} illustId
    * @param {number} [pageIndex=0]
    * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
    */
   async toggleLike(illustId, pageIndex = 0) {
-    if (!illustId) {
-      showToast('无法识别作品 ID', { type: 'error' });
-      return { success: false, liked: false, likedAt: 0 };
-    }
-    const result = await this.service.toggleLike(illustId, pageIndex);
-    if (result.success) {
-      // 通知相册等页面：喜欢状态已变化，需要刷新
-      window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));
-    }
-    if (!result.success) {
-      showToast('操作失败', { type: 'error' });
-    }
-    return result;
+    if (!illustId) return { success: false, liked: false, likedAt: 0 };
+    return await this.service.toggleLike(illustId, pageIndex);
   }
 
   /**
@@ -195,22 +144,6 @@ export class StorageFacade {
    */
   async getAll() {
     return await this.service.getAll();
-  }
-
-  _errorMessage(code) {
-    const map = {
-      'not_found': '未找到缓存',
-      'file_copy_failed': '文件操作失败',
-      'invalid_state': '状态异常，请刷新后重试',
-      'no_url': '缺少图片地址',
-      'download_failed': '图片下载失败',
-      'file_write_failed': '文件写入失败',
-      'invalid_item': '无法识别作品',
-    };
-    if (code?.startsWith('invalid_state:')) {
-      return '状态异常，请刷新后重试';
-    }
-    return map[code] || '操作失败，请重试';
   }
 }
 

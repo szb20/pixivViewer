@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { pixivApi } from '../../api/pixiv.js';
+import { saveItem } from '../../api/index.js';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
+import { usePixivCache } from '../../context/pixivCacheContext.js';
 import { parsePixivResults, allMediaFromRelated } from './helpers.js';
 import { getSettingsSync } from '../../pixiv-assistant/index.js';
 import { gridThumbUrl } from '../../utils/quality.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
-import { showToast } from '../../utils/toast.js';
 
 const log = createLogger('ImageDetail');
 /** 批量保存时的最大并发页数 */
@@ -74,8 +76,9 @@ function DetailPageBlock({ page, image, previewUrl, defaultRatio, registerRef, o
  */
 export default function ImageDetailView({
   image, onSelectImage, onAuthorWorks, onSearchTag,
-  pixivCache, setPixivCache, restoreScroll = 0,
+  restoreScroll = 0,
 }) {
+  const { pixivCache, setPixivCache } = usePixivCache();
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const relatedCacheRef = useRef({}); // illustId → { related, loadedPages }
@@ -130,7 +133,7 @@ export default function ImageDetailView({
     let cancelled = false;
     (async () => {
       try {
-        const result = await window.api.fetchIllust(image.illustId);
+        const result = await pixivApi.fetchIllust(image.illustId);
         if (!cancelled) setIllustData(result);
       } catch (e) {
         // fetchIllust 失败 → illustData 保持 null，后续按页从 URL 推导
@@ -164,9 +167,9 @@ export default function ImageDetailView({
     let imgs = illustData?.illust?.images || [];
     let total = pageCount;
     // illustData 未就绪时先拉一次详情，确保拿到完整页数
-    if (imgs.length === 0 && window.api?.fetchIllust) {
+    if (imgs.length === 0) {
       try {
-        const r = await window.api.fetchIllust(image.illustId);
+        const r = await pixivApi.fetchIllust(image.illustId);
         imgs = r?.illust?.images || [];
         total = Math.max(r?.illust?.pageCount || 0, imgs.length || 0);
       } catch (e) { log.debug('补拉详情失败，保持当前页数:', e?.message || e); }
@@ -183,7 +186,7 @@ export default function ImageDetailView({
     for (let i = 0; i < pages.length; i += SAVE_BATCH_SIZE) {
       const batch = pages.slice(i, i + SAVE_BATCH_SIZE);
       const results = await Promise.allSettled(batch.map(async ({ item, ck }) => {
-        const r = await window.api.saveItem?.(item);
+        const r = await saveItem(item);
         if (r?.success || r?.cached) {
           setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
           return 1;
@@ -264,7 +267,7 @@ export default function ImageDetailView({
       setRelated([]);
       setLoadingRelated(true);
       try {
-        const result = await window.api.fetchRelated(image.illustId, { limit: 30 });
+        const result = await pixivApi.fetchRelated(image.illustId, { limit: 30 });
         if (cancelled) return;
         const rawList = result?.illusts || [];
         const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
@@ -405,8 +408,6 @@ export default function ImageDetailView({
         <div className="detail-floating-like">
           <LikeButton
             cur={image}
-            pixivCache={pixivCache}
-            setPixivCache={setPixivCache}
             onLikeSaveAll={saveAllPages}
             totalPages={pageCount}
           />

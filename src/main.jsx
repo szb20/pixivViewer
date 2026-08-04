@@ -1,8 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import './api/index.js'
 import App from './App.jsx'
+import { PixivCacheProvider } from './context/PixivCacheProvider.jsx'
 import { createLogger } from './utils/logger.js'
 
 // 设置透明状态栏 + 白色文字/图标（适配深色背景）
@@ -22,6 +22,8 @@ window.addEventListener('unhandledrejection', (e) => {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <PixivCacheProvider>
+      <App />
+    </PixivCacheProvider>
   </StrictMode>,
 )
