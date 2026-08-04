@@ -145,29 +145,36 @@ export class PixivRepository {
   }
 
   /**
-   * 回填 tags（浏览时把详情接口的 tags 写回已保存/喜欢的记录）。
-   * 幂等：已有 tags 或新 tags 为空则跳过。
+   * 回填展示元数据（浏览时把完整缩略图 URL / 标题 / 作者 / tags 写回已保存/喜欢的记录）。
+   * 幂等：只填充当前为空的字段，不覆盖已有值。
    * @param {string} id
-   * @param {string[]} tags
-   * @returns {Promise<{updated: boolean, count: number}>}
+   * @param {object} meta — { thumbnailUrl?, title?, author?, authorName?, authorId?, type?, tags? }
+   * @returns {Promise<{updated: boolean}>}
    */
-  async updateTags(id, tags) {
+  async fillMeta(id, meta = {}) {
     const record = await getMeta(id);
-    if (!record) return { updated: false, count: 0 };
-    const clean = Array.isArray(tags) ? tags.filter(Boolean) : [];
-    if (clean.length === 0) return { updated: false, count: 0 };
-    if (Array.isArray(record.tags) && record.tags.length > 0) return { updated: false, count: 0 };
-    record.tags = clean;
-    await putMeta(record);
-    return { updated: true, count: clean.length };
+    if (!record) return { updated: false };
+    let changed = false;
+    for (const key of ['thumbnailUrl', 'title', 'author', 'authorName', 'authorId', 'type']) {
+      const val = meta[key];
+      if (val && !record[key]) { record[key] = val; changed = true; }
+    }
+    const tags = Array.isArray(meta.tags) ? meta.tags.filter(Boolean) : [];
+    if (tags.length > 0 && !(Array.isArray(record.tags) && record.tags.length > 0)) {
+      record.tags = tags;
+      changed = true;
+    }
+    if (changed) await putMeta(record);
+    return { updated: changed };
   }
 
   /**
    * 切换喜欢状态。
    * @param {string} id
+   * @param {object} [meta] — 喜欢时附带的展示元数据（完整缩略图 URL / 标题 / 作者等）
    * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
    */
-  async toggleLike(id) {
+  async toggleLike(id, meta = {}) {
     const record = await getMeta(id);
     if (!record) {
       // 不存在 → 建轻记录
@@ -182,6 +189,12 @@ export class PixivRepository {
         state: 'cached',
         likedAt: now,
         cachedAt: now,
+        type: meta.type || 'image',
+        title: meta.title || '',
+        author: meta.author || '',
+        authorName: meta.authorName || meta.author || '',
+        authorId: meta.authorId || '',
+        thumbnailUrl: meta.thumbnailUrl || '',
       };
       await putMeta(lightRecord);
       return { success: true, liked: true, likedAt: now };
@@ -189,6 +202,11 @@ export class PixivRepository {
 
     const wasLiked = (record.likedAt || 0) > 0;
     record.likedAt = wasLiked ? 0 : Date.now();
+    // 填充缺失的展示元数据（不覆盖已有值）
+    for (const key of ['thumbnailUrl', 'title', 'author', 'authorName', 'authorId', 'type']) {
+      const val = meta[key];
+      if (val && !record[key]) record[key] = val;
+    }
     await putMeta(record);
     return { success: true, liked: !wasLiked, likedAt: record.likedAt };
   }

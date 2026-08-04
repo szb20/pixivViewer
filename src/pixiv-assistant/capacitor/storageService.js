@@ -182,23 +182,23 @@ export class PixivStorageService {
    * @param {number} [pageIndex=0]
    * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
    */
-  async toggleLike(illustId, pageIndex = 0) {
+  async toggleLike(illustId, pageIndex = 0, meta = {}) {
     const id = PixivEntity.makeId(illustId, pageIndex);
-    const result = await this.repository.toggleLike(id);
+    const result = await this.repository.toggleLike(id, meta);
     if (result.success) scheduleMetaBackup();
     return result;
   }
 
   /**
-   * 回填 tags（浏览时把详情接口的 tags 写回已保存/喜欢的记录）。
+   * 回填展示元数据（浏览时把完整缩略图 URL / 标题 / 作者 / tags 写回已保存/喜欢的记录）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]
-   * @param {string[]} tags
-   * @returns {Promise<{updated: boolean, count: number}>}
+   * @param {object} meta
+   * @returns {Promise<{updated: boolean}>}
    */
-  async updateTags(illustId, pageIndex = 0, tags = []) {
+  async fillMeta(illustId, pageIndex = 0, meta = {}) {
     const id = PixivEntity.makeId(illustId, pageIndex);
-    const result = await this.repository.updateTags(id, tags);
+    const result = await this.repository.fillMeta(id, meta);
     if (result?.updated) scheduleMetaBackup();
     return result;
   }

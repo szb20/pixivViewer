@@ -539,6 +539,22 @@ button {
   display: block;
 }
 
+.gallery-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

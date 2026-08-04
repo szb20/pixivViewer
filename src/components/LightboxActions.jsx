@@ -30,6 +30,16 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
     window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));
   }, []);
 
+  // 点赞时附带的展示元数据：存完整缩略图 URL（避免依赖 pixiv.re 短链反查）+ 标题/作者
+  const likeMeta = useCallback((img) => ({
+    thumbnailUrl: img.thumbnailUrl || img.mediumUrl || '',
+    title: img.title || '',
+    author: img.author || '',
+    authorName: img.authorName || img.author || '',
+    authorId: img.authorId || '',
+    type: img.type === 'gif' ? 'gif' : 'image',
+  }), []);
+
   const handleLike = useCallback(async (e) => {
     // 长按已触发下载，本次合成的 click 不再切换喜欢
     if (longPressTriggeredRef.current) {
@@ -50,7 +60,7 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
 
     let result;
     try {
-      result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0);
+      result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, likeMeta(cur));
     } catch {
       showToast('操作失败');
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
@@ -72,7 +82,7 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
         showToast(n > 0 ? `已保存 ${n} 页到相册` : '已在相册中');
       }).catch(() => {});
     }
-  }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged]);
+  }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged, likeMeta]);
 
   // 长按 → 切换喜欢 + 下载全部页
   const handleLongPressSaveAll = useCallback(async () => {
@@ -82,9 +92,9 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
     const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
     if (!prevLiked) {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: Date.now() } }));
-      if (typeof storageFacade.toggleLike === 'function') {
-        try {
-          const result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0);
+          if (typeof storageFacade.toggleLike === 'function') {
+            try {
+              const result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, likeMeta(cur));
           if (result.success) {
             setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
             notifyLikedChanged();
@@ -103,7 +113,7 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
     }
     const count = await onLikeSaveAll(cur).catch(() => 0);
     showToast(count > 0 ? `已保存 ${count} 页到相册` : '已在相册中');
-  }, [cur, pixivCache, setPixivCache, onLikeSaveAll, notifyLikedChanged]);
+  }, [cur, pixivCache, setPixivCache, onLikeSaveAll, notifyLikedChanged, likeMeta]);
 
   const startLongPress = useCallback((e) => {
     e.stopPropagation();

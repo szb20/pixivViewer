@@ -1,13 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { storageFacade } from '../pixiv-assistant/index.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { pixivReUrl } from '../pixiv-assistant/core/utils.js';
+import { gridThumbUrl } from '../utils/quality.js';
 
 const PAGE_SIZE = 24;
 const CACHE_KEY = 'gallery';
 
 export default function GalleryPage({ onOpen, registerRefresh }) {
   const offsetRef = useRef(0);
+  // 加载失败的缩略图 key 集合 → 显示占位，点击重试
+  const [failed, setFailed] = useState({});
 
   // 本地数据源（IndexedDB 喜欢列表），分页 + 哨兵 + 刷新统一由 useTabFeed 处理
   const feed = useTabFeed({
@@ -47,7 +50,9 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
       <div className="gallery-grid">
         {feed.items.map(item => {
           const id = `${item.illustId}_${item.pageIndex ?? 0}`;
-          const src = pixivReUrl(String(item.illustId), item.pageIndex ?? 0, 'thumb');
+          // 优先用点赞时存下的完整缩略图 URL（不依赖 pixiv.re 短链反查），缺省再回退短链
+          const src = gridThumbUrl(item.thumbnailUrl)
+            || pixivReUrl(String(item.illustId), item.pageIndex ?? 0, 'thumb');
           return (
             <div key={id} className="gallery-item"
               onClick={() => onOpen?.({
@@ -59,11 +64,17 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
                 author: item.author,
                 authorId: item.authorId,
                 authorName: item.authorName,
-                thumbnailUrl: pixivReUrl(String(item.illustId), 0, 'thumb'),
+                thumbnailUrl: item.thumbnailUrl || pixivReUrl(String(item.illustId), 0, 'thumb'),
               })}
             >
-              <img className="gallery-thumb" src={src} alt={item.title || ''} loading="lazy"
-                onError={e => { e.target.style.display = 'none'; }} />
+              {failed[id] ? (
+                <div className="gallery-thumb-fallback" onClick={e => { e.stopPropagation(); setFailed(p => ({ ...p, [id]: false })); }}>
+                  加载失败<br />点此重试
+                </div>
+              ) : (
+                <img className="gallery-thumb" src={src} alt={item.title || ''} loading="lazy"
+                  onError={() => setFailed(p => ({ ...p, [id]: true }))} />
+              )}
             </div>
           );
         })}
