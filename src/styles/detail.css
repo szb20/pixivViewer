@@ -53,6 +53,11 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding-bottom: 24px;
+  scrollbar-width: none;
+}
+
+.author-works-content::-webkit-scrollbar {
+  display: none;
 }
 
 .char-state-bar {
@@ -79,6 +84,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
+  scrollbar-width: none;
 }
 
 /* 与 .app-content::before 一致的顶部安全区 */

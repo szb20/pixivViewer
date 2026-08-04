@@ -38,10 +38,30 @@
 * {
   box-sizing: border-box;
   scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-*::-webkit-scrollbar { display: none; }
 
-html, body, #root {
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html,
+body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow: hidden;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+}
+
+html,
+body,
+#root {
   height: 100%;
   margin: 0;
 }
@@ -74,7 +94,10 @@ button {
   scrollbar-width: none;
   padding-bottom: 32px;
 }
-.app-content::-webkit-scrollbar { display: none; }
+
+.app-content::-webkit-scrollbar {
+  display: none;
+}
 
 /* 滚动式顶部安全区：初始时内容避开状态栏，滚动时可滑入状态栏下（沉浸式） */
 .app-content::before {
@@ -99,12 +122,10 @@ button {
   pointer-events: none;
   overflow: hidden;
   /* 稳定玻璃质感：自身半透明渐变定义圆盘，边框清晰不受背后内容影响 */
-  background: linear-gradient(
-    150deg,
-    rgba(255, 255, 255, 0.26) 0%,
-    rgba(255, 255, 255, 0.13) 45%,
-    rgba(255, 255, 255, 0.07) 100%
-  );
+  background: linear-gradient(150deg,
+      rgba(255, 255, 255, 0.26) 0%,
+      rgba(255, 255, 255, 0.13) 45%,
+      rgba(255, 255, 255, 0.07) 100%);
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
   border: 1.5px solid rgba(255, 255, 255, 0.6);
@@ -127,10 +148,10 @@ button {
   margin-left: -13px;
   border-radius: 50%;
   background: radial-gradient(circle,
-    #fff 0%,
-    rgba(255, 255, 255, 0.9) 18%,
-    rgba(255, 255, 255, 0.4) 45%,
-    rgba(255, 255, 255, 0) 70%);
+      #fff 0%,
+      rgba(255, 255, 255, 0.9) 18%,
+      rgba(255, 255, 255, 0.4) 45%,
+      rgba(255, 255, 255, 0) 70%);
   will-change: transform;
 }
 
@@ -139,12 +160,16 @@ button {
 }
 
 @keyframes ptr-orbit {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 搜索按钮等小 spinner 共用的旋转动画 */
 @keyframes ptr-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── 毛玻璃通用样式 ── */
@@ -255,6 +280,7 @@ button {
   height: 18px;
   color: #ff4757;
 }
+
 .grid-like .heart-icon {
   display: block;
   width: 100%;
@@ -286,7 +312,10 @@ button {
   scrollbar-width: none;
   z-index: 5;
 }
-.chips-bottom::-webkit-scrollbar { display: none; }
+
+.chips-bottom::-webkit-scrollbar {
+  display: none;
+}
 
 .chips-hidden {
   opacity: 0;
@@ -310,6 +339,7 @@ button {
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
   transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
+
 .chips-bottom .chip.active {
   background: transparent;
   color: #fff;
@@ -343,6 +373,7 @@ button {
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
   transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
+
 .chips-bottom .r18-toggle.on {
   border-color: #e6a6fa;
   color: #e6a6fa;
@@ -636,34 +667,45 @@ button {
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* GIF/Ugoira 播放器通用样式 */
-.gif-canvas-wrap, .ugoira-canvas-wrap {
+.gif-canvas-wrap,
+.ugoira-canvas-wrap {
   position: relative;
   overflow: hidden;
   background: var(--bg-secondary);
 }
 
-.gif-progress-bar, .ugoira-progress-bar {
+.gif-progress-bar,
+.ugoira-progress-bar {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   height: 3px;
-  background: rgba(255,255,255,0.15);
+  background: rgba(255, 255, 255, 0.15);
   z-index: 3;
 }
 
-.gif-progress-fill, .ugoira-progress-fill {
+.gif-progress-fill,
+.ugoira-progress-fill {
   height: 100%;
-  background: rgba(255,255,255,0.7);
+  background: rgba(255, 255, 255, 0.7);
   transition: none;
 }
 
-.gif-loading-overlay, .ugoira-loading-overlay {
+.gif-loading-overlay,
+.ugoira-loading-overlay {
   position: absolute;
   inset: 0;
   z-index: 2;
@@ -672,7 +714,8 @@ button {
   justify-content: center;
 }
 
-.gif-play-overlay, .ugoira-play-overlay {
+.gif-play-overlay,
+.ugoira-play-overlay {
   position: absolute;
   inset: 0;
   z-index: 2;
