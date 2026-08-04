@@ -27,14 +27,14 @@ const TABS = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('ranking');
+  const [tab, setTab] = useState('discover');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [detailImage, setDetailImage] = useState(null);
   const [searchSeed, setSearchSeed] = useState(null);
   const [authorWorks, setAuthorWorks] = useState(null); // { authorId, authorName }
   // 各 tab 的滚动位置 / 已访问记录 / 刷新令牌（重点当前 tab 时 +1 触发强制刷新）
   const scrollPositions = useRef({});
-  const visitedTabs = useRef(new Set(['ranking']));
+  const visitedTabs = useRef(new Set(['discover']));
   const [tabTokens, setTabTokens] = useState({});
   // 各 tab 的刷新函数注册表（下拉刷新用），按当前 tab 分派
   const refreshFnsRef = useRef({});

@@ -87,22 +87,6 @@ export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, 
   return (
     <div className="page search-page">
       <div className="search-head">
-        {/* 搜索栏：毛玻璃 + 聚焦蓝色光晕 */}
-        <form className="search-bar search-bar--glass" onSubmit={submit}>
-          <SearchIcon className="search-icon" />
-          <input
-            className="search-input"
-            type="text"
-            value={query}
-            placeholder="搜索 Pixiv 图片..."
-            enterKeyHint="search"
-            onChange={e => setQuery(e.target.value)}
-          />
-          <button className="search-submit" type="submit" disabled={feed.loading}>
-            {feed.loading ? <span className="search-submit-spinner" /> : <span>搜索</span>}
-          </button>
-        </form>
-
         {/* 历史搜索：毛玻璃 chips */}
         {!searched && history.length > 0 && (
           <div className="search-history">
@@ -135,6 +119,22 @@ export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, 
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
+
+      {/* 搜索栏：固定在底部、白色 */}
+      <form className="search-bar search-bar--bottom" onSubmit={submit}>
+        <SearchIcon className="search-icon" />
+        <input
+          className="search-input"
+          type="text"
+          value={query}
+          placeholder="搜索 Pixiv 图片..."
+          enterKeyHint="search"
+          onChange={e => setQuery(e.target.value)}
+        />
+        <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
+          {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
+        </button>
+      </form>
     </div>
   );
 }

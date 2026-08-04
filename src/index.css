@@ -88,41 +88,61 @@ button {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 8px);
   left: 50%;
+  transform: translateX(-50%);
   z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 4px 14px;
-  line-height: 1;
-  border-radius: 16px;
-  color: #fff;
-  font-size: 13px;
   pointer-events: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-top: none;
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.95),
-    0 0 20px rgba(255, 255, 255, 0.75),
-    0 0 40px rgba(255, 255, 255, 0.5);
+  overflow: hidden;
+  /* 稳定玻璃质感：自身半透明渐变定义圆盘，边框清晰不受背后内容影响 */
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.26) 0%,
+    rgba(255, 255, 255, 0.13) 45%,
+    rgba(255, 255, 255, 0.07) 100%
+  );
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.12);
 }
 
-.ptr-arrow {
-  display: inline-block;
-  font-size: 16px;
-  line-height: 1;
+.ptr-orbit {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  transform-origin: center;
 }
 
-.ptr-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+.ptr-dot {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
   border-radius: 50%;
-  animation: ptr-spin 0.8s linear infinite;
+  background: radial-gradient(circle,
+    #fff 0%,
+    rgba(255, 255, 255, 0.9) 18%,
+    rgba(255, 255, 255, 0.4) 45%,
+    rgba(255, 255, 255, 0) 70%);
+  will-change: transform;
 }
 
+.ptr-refreshing .ptr-orbit {
+  animation: ptr-orbit 1s linear infinite;
+}
+
+@keyframes ptr-orbit {
+  to { transform: rotate(360deg); }
+}
+
+/* 搜索按钮等小 spinner 共用的旋转动画 */
 @keyframes ptr-spin {
   to { transform: rotate(360deg); }
 }

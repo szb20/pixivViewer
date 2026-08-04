@@ -335,34 +335,52 @@ export function createPixivApi(transport) {
 
     try {
       const headers = { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` };
-      const allData = await apiFetch(
-        `/ajax/user/${userId}/profile/all?lang=zh`,
+      // profile/all 只返回作品 ID（值多为 null），无法拿到可加载的缩略图；
+      // profile/top 返回带真实 url/title 的近期作品，缩略图可正常加载（经实测）
+      const data = await apiFetch(
+        `/ajax/user/${userId}/profile/top?lang=zh`,
         { headers }
       );
 
-      const illusts = Object.entries(allData?.body?.illusts || {})
+      const illusts = Object.entries(data?.body?.illusts || {})
+        .filter(([, item]) => item && item.url)
         .sort((a, b) => Number(b[0]) - Number(a[0]))
         .slice(0, limit)
         .map(([id, item]) => ({
-          illustId: id,
-          title: item?.title || '',
-          author: '',
-          authorName: '',
-          authorAccount: '',
+          illustId: String(item.id || id),
+          title: item.title || '',
+          author: item.userName || '',
+          authorName: item.userName || '',
+          authorAccount: item.userAccount || '',
           authorId: String(userId),
-          // 使用 API 返回的真实缩略图（profile/all 的 url 字段），避免 pixiv.re 短链对限制级作品 404
-          thumbnailUrl: proxyThumb(item?.url || pixivReUrl(id, 0, 'thumb')),
-          mediumUrl: pixivReUrl(id),
-          tags: [],
-          pixivUrl: `https://www.pixiv.net/artworks/${id}`,
-          pageCount: item?.pageCount || 1,
-          type: item?.illustType === 2 ? 'gif' : 'image',
-          illustType: item?.illustType ?? 0,
+          thumbnailUrl: proxyThumb(item.url),
+          mediumUrl: proxyThumb(item.url),
+          originalUrl: pixivReUrl(String(item.id || id)),
+          tags: item.tags || [],
+          pixivUrl: `https://www.pixiv.net/artworks/${item.id || id}`,
+          pageCount: item.pageCount || 1,
+          type: item.illustType === 2 ? 'gif' : 'image',
+          illustType: item.illustType ?? 0,
         }));
       return { illusts, hasCookie: true };
     } catch (e) {
       log.error('[fetchUserIllusts] 失败:', e.message);
       return { illusts: [], error: classifyError(e, '作者作品') };
+    }
+  }
+
+  /** 作者全部作品 ID（profile/all 只返回 ID，元数据需另行取，供分页/无限滚动用） */
+  async function fetchUserIllustIds(userId) {
+    if (!userId) return { illustIds: [], error: '缺少 userId' };
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) return { illustIds: [], error: cookieCheck.error, message: cookieCheck.message };
+    try {
+      const headers = { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` };
+      const data = await apiFetch(`/ajax/user/${userId}/profile/all?lang=zh`, { headers });
+      return { illustIds: Object.keys(data?.body?.illusts || {}) };
+    } catch (e) {
+      log.error('[fetchUserIllustIds] 失败:', e.message);
+      return { illustIds: [], error: classifyError(e, '作者作品') };
     }
   }
 
@@ -492,9 +510,10 @@ export function createPixivApi(transport) {
     searchPixivUser,
     fetchIllust,
     randomIllust,
-    fetchDiscovery,
-    fetchUserIllusts,
-    fetchRanking,
+      fetchDiscovery,
+      fetchUserIllusts,
+      fetchUserIllustIds,
+      fetchRanking,
     fetchBookmarks,
     fetchFollowing,
     fetchRelated,

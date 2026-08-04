@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 /** 触发刷新的下拉距离阈值（px） */
 const THRESHOLD = 64;
 /** 下拉指示器最大位移（px），超出后按比例阻尼 */
-const MAX_DISTANCE = 110;
+const MAX_DISTANCE = 70;
 
 /**
  * 下拉刷新 — 监听 .app-content 滚动容器，在 scrollTop=0 时向下拖动触发 onRefresh。
- * 只在页面内容区可见时生效；刷新中显示 spinner，完成后自动回弹。
+ * 纯动画指示器（无文字）：一个白色光点，下拉时随进度放大，刷新时呼吸闪烁。
  *
  * @param {Function} onRefresh — () => Promise，刷新完成后指示器收起
  */
@@ -19,7 +19,7 @@ export default function PullToRefresh({ onRefresh }) {
   const refreshingRef = useRef(false);
   const rafRef = useRef(null);
 
-  /** 动画回弹到目标位移 */
+  /** 动画回弹到目标位置 */
   const animateTo = (target, onDone) => {
     cancelAnimationFrame(rafRef.current);
     const from = distanceRef.current;
@@ -56,7 +56,7 @@ export default function PullToRefresh({ onRefresh }) {
       if (el.scrollTop > 0) return;
       const delta = e.touches[0].clientY - startYRef.current;
       // 带阻尼的下拉位移，避免过度拉伸
-      const d = Math.max(0, Math.min(MAX_DISTANCE, delta * 0.5));
+      const d = Math.max(0, Math.min(MAX_DISTANCE, delta * 0.6));
       if (Math.abs(d - distanceRef.current) < 1) return;
       distanceRef.current = d;
       setDistance(d);
@@ -92,16 +92,20 @@ export default function PullToRefresh({ onRefresh }) {
   }, [onRefresh]);
 
   if (state === 'idle') return null;
-  const label = state === 'refreshing' ? '刷新中...' : (distance >= THRESHOLD ? '松开刷新' : '下拉刷新');
+
+  const refreshing = state === 'refreshing';
+  const progress = Math.min(1, distance / THRESHOLD);
+  // 下拉时光点从 0.5 放大到 1；刷新时小光点沿轨道旋转
+  const dotScale = refreshing ? 1 : 0.5 + progress * 0.5;
+
   return (
     <div
-      className="ptr-indicator frosted"
+      className={`ptr-indicator ${refreshing ? 'ptr-refreshing' : ''}`}
       style={{ transform: `translateX(-50%) translateY(${distance}px)` }}
     >
-      {state === 'refreshing'
-        ? <span className="ptr-spinner" />
-        : <span className="ptr-arrow">↓</span>}
-      <span>{label}</span>
+      <div className="ptr-orbit">
+        <span className="ptr-dot" style={{ transform: `scale(${dotScale})` }} />
+      </div>
     </div>
   );
 }

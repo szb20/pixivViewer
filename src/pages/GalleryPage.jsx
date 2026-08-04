@@ -86,6 +86,7 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
                 type: item.isGif ? 'gif' : 'image',
                 title: item.title,
                 author: item.author,
+                authorId: item.authorId,
                 authorName: item.authorName,
                 thumbnailUrl: pixivReUrl(String(item.illustId), 0, 'thumb'),
               })}

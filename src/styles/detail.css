@@ -81,6 +81,14 @@
   position: relative;
 }
 
+/* 与 .app-content::before 一致的顶部安全区 */
+.char-state-content::before {
+  content: '';
+  display: block;
+  height: env(safe-area-inset-top, 0px);
+  flex-shrink: 0;
+}
+
 .char-state-content::-webkit-scrollbar {
   display: none;
 }

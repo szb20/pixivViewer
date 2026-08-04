@@ -8,7 +8,7 @@
 }
 
 .search-page .search-head {
-  padding: 6px 12px 0;
+  padding: 0 12px;
 }
 
 /* ── 搜索栏：毛玻璃 ── */
@@ -42,14 +42,14 @@
 
 .search-page .search-icon {
   flex: none;
-  color: var(--text-tertiary);
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.18));
+  color: rgba(255, 255, 255, 0.9);
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
   transition: color 0.25s ease;
 }
 
 .search-page .search-bar:focus-within .search-icon {
-  color: rgba(160, 190, 255, 0.95);
-  filter: drop-shadow(0 0 6px rgba(120, 170, 255, 0.5));
+  color: #fff;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.85));
 }
 
 .search-page .search-input {
@@ -67,37 +67,32 @@
   color: var(--text-tertiary);
 }
 
-/* ── 搜索按钮：玻璃 + 蓝色光晕 ── */
+/* ── 搜索按钮：圆形蓝色光晕按钮 ── */
 .search-page .search-submit {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  width: 38px;
   height: 38px;
-  min-width: 68px;
-  padding: 0 18px;
-  border-radius: 12px;
-  border: 1px solid rgba(79, 140, 255, 0.55);
-  background: rgba(79, 140, 255, 0.16);
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 0;
   cursor: pointer;
-  text-shadow:
-    0 0 8px rgba(120, 170, 255, 0.9),
-    0 0 16px rgba(120, 170, 255, 0.6);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 12px rgba(79, 140, 255, 0.25);
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 0 12px rgba(255, 255, 255, 0.3);
   transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
 }
 
 .search-page .search-submit:hover:not(:disabled) {
-  background: rgba(79, 140, 255, 0.26);
+  background: rgba(255, 255, 255, 0.24);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 0 16px rgba(79, 140, 255, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 18px rgba(255, 255, 255, 0.5);
 }
 
 .search-page .search-submit:active:not(:disabled) {
@@ -107,6 +102,13 @@
 .search-page .search-submit:disabled {
   opacity: 0.72;
   cursor: default;
+}
+
+.search-page .search-submit-icon {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
 }
 
 .search-page .search-submit-spinner {
@@ -184,4 +186,37 @@
   text-shadow:
     0 0 8px rgba(255, 255, 255, 0.5),
     0 0 16px rgba(255, 255, 255, 0.25);
+}
+
+/* ══════════════════════════════════════════════
+   搜索栏 · 固定底部（毛玻璃暗色）
+   ══════════════════════════════════════════════ */
+
+/* 页面底部留出空间，避免内容被固定搜索栏遮挡 */
+.search-page {
+  padding-bottom: 120px;
+}
+
+/* 固定在底部、tab 栏上方 */
+.search-page .search-bar--bottom {
+  position: fixed;
+  bottom: 48px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 560px;
+  z-index: 5;
+  /* 与排行筛选栏一致的深色毛玻璃 */
+  background: rgba(15, 17, 21, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+}
+
+.search-page .search-bar--bottom:focus-within {
+  border-color: rgba(255, 255, 255, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 0 12px rgba(255, 255, 255, 0.08);
 }
