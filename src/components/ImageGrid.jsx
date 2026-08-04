@@ -1,18 +1,27 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import HeartIcon from './icons/HeartIcon.jsx';
 
-function GridItem({ img, isLiked, onOpen }) {
+const GridItem = memo(function GridItem({ img, isLiked, onOpen }) {
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleClick = () => {
+    onOpen?.(img);
+  };
+
+  if (error) return null;
 
   return (
-    <div className="grid-item" onClick={() => onOpen?.(img)}>
+    <div className="grid-item" onClick={handleClick}>
       <img
         className="grid-thumb"
         src={img.thumbnailUrl || img.mediumUrl}
         alt={img.title || ''}
         loading="lazy"
+        decoding="async"
+        style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease' }}
         onLoad={() => setLoaded(true)}
-        onError={e => { e.target.style.display = 'none'; }}
+        onError={() => setError(true)}
       />
       {loaded && isLiked && (
         <span className="grid-like">
@@ -24,12 +33,15 @@ function GridItem({ img, isLiked, onOpen }) {
       )}
     </div>
   );
-}
+}, (prev, next) => {
+  return (
+    prev.img.illustId === next.img.illustId &&
+    prev.isLiked === next.isLiked &&
+    prev.onOpen === next.onOpen
+  );
+});
 
-/**
- * 双列图片网格 — 单条目（一个作品一格）。
- */
-export default function ImageGrid({ items, likedSet, onOpen }) {
+const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen }) {
   if (!items?.length) return null;
   return (
     <div className="grid">
@@ -43,4 +55,6 @@ export default function ImageGrid({ items, likedSet, onOpen }) {
       ))}
     </div>
   );
-}
+});
+
+export default ImageGrid;

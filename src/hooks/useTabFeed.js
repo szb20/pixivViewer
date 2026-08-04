@@ -27,6 +27,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadTabCache, saveTabCache } from '../pixiv-assistant/index.js';
+import { useStableCallback } from './useStableCallback.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('useTabFeed');
 
 export function useTabFeed({
   cacheKey,
@@ -47,61 +51,69 @@ export function useTabFeed({
   const itemsRef = useRef([]);
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
+  const loadingRef = useRef(false);
 
-  // 页面提供的回调每次渲染都是新引用，统一走 ref，避免 effect 反复触发
-  const fetchPageRef = useRef(fetchPage);
-  fetchPageRef.current = fetchPage;
-  const hydrateRef = useRef(hydrate);
-  hydrateRef.current = hydrate;
-  const skipRef = useRef(shouldSkipFirstFetch);
-  skipRef.current = shouldSkipFirstFetch;
+  const fetchPageStable = useStableCallback(fetchPage);
+  const hydrateStable = useStableCallback(hydrate);
+  const skipFirstFetchStable = useStableCallback(shouldSkipFirstFetch);
 
   const load = useCallback(async (append) => {
+    if (loadingRef.current) {
+      log.debug('[load] 跳过重复加载, append:', append);
+      return;
+    }
+    loadingRef.current = true;
+
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); }
+
     try {
-      const r = await fetchPageRef.current(append, itemsRef.current);
-      if (r == null) return; // 页面选择不加载
+      const r = await fetchPageStable(append, itemsRef.current);
+      if (r == null) {
+        log.debug('[load] fetchPage 返回 null，跳过');
+        return;
+      }
       const nextItems = append ? [...itemsRef.current, ...(r.list || [])] : (r.list || []);
       itemsRef.current = nextItems;
       setItems(nextItems);
       setHasMore(!!r.hasMore);
       if (r.cacheExtra) {
         saveTabCache(cacheKey, { ...r.cacheExtra, items: nextItems, hasMore: !!r.hasMore })
-          .catch(() => {});
+          .catch(() => { });
       }
       if (!append && !nextItems.length) setError(r.emptyMessage || '');
     } catch (e) {
-      setError(e.message);
+      log.warn('[load] 失败:', e?.message || e);
+      setError(e.message || '加载失败');
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      loadingRef.current = false;
     }
-  }, [cacheKey]);
+  }, [cacheKey, fetchPageStable]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
 
-  // 注册下拉刷新入口（当前 tab 生效）
   useEffect(() => {
     if (!registerRefresh) return;
     return registerRefresh(cacheKey, () => loadRef.current?.(false));
   }, [registerRefresh, cacheKey]);
 
-  // 挂载时先尝试恢复缓存；缓存命中则跳过首次请求
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const cache = await loadTabCache(cacheKey);
         if (cancelled || !cache) return;
-        const applied = hydrateRef.current?.(cache);
+        const applied = hydrateStable(cache);
         if (!applied) return;
-        cacheUsedRef.current = !!skipRef.current(applied);
+        cacheUsedRef.current = !!skipFirstFetchStable(applied);
         itemsRef.current = applied.items || [];
         setItems(applied.items || []);
         setHasMore(!!applied.hasMore);
         setLoading(false);
+        log.debug('[hydrate] 缓存命中, items:', applied.items?.length || 0);
       } catch {
         /* 缓存不可用 → 走网络 */
       } finally {
@@ -109,29 +121,35 @@ export function useTabFeed({
       }
     })();
     return () => { cancelled = true; };
-  }, [cacheKey]);
+  }, [cacheKey, hydrateStable, skipFirstFetchStable]);
 
-  // 首拉 gating：已水合后，若缓存未命中（cacheUsed=false）才发首次请求
   useEffect(() => {
     if (!hydrated || !autoLoad) return;
     if (!firstFetchDoneRef.current) {
       firstFetchDoneRef.current = true;
-      if (cacheUsedRef.current) return; // 水合命中 → 跳过首拉
+      if (cacheUsedRef.current) {
+        log.debug('[firstFetch] 缓存命中，跳过首拉');
+        return;
+      }
     }
     load(false);
   }, [load, hydrated, autoLoad]);
 
-  // 重点当前 tab → 强制刷新
   useEffect(() => {
-    if (refreshToken > 0) loadRef.current?.(false);
+    if (refreshToken > 0) {
+      log.debug('[refreshToken] 强制刷新, token:', refreshToken);
+      loadRef.current?.(false);
+    }
   }, [refreshToken]);
 
-  // 哨兵触底自动加载
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el || !hasMore || loading) return;
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && hasMore && !loadingMore) load(true);
+      if (e.isIntersecting && hasMore && !loadingMore && !loadingRef.current) {
+        log.debug('[sentinel] 触底，加载更多');
+        load(true);
+      }
     }, { rootMargin: '200px 0px' });
     io.observe(el);
     return () => io.disconnect();
