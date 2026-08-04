@@ -156,21 +156,24 @@ export function useTouchGesture({
   const displaySizeCache = useRef({ key: -1, w: 300, h: 300 });
 
   const getDisplaySize = useCallback(() => {
-    const img = getCurSlideEl();
+    const el = getCurSlideEl();
+    // slide 元素可能是包裹容器（图片含托底）→ 取其中真正的原图 <img> 读原始尺寸
+    const img = el?.tagName === 'IMG' ? el : el?.querySelector('img.lightbox-img-full');
     const cacheKey = img ? img.src?.slice(-40) : -1;
     // 同一张图的 display size 不变，直接返回缓存
     if (cacheKey && displaySizeCache.current.key === cacheKey) {
       return displaySizeCache.current;
     }
-    const nw = img?.naturalWidth || img?.clientWidth || 300;
-    const nh = img?.naturalHeight || img?.clientHeight || 300;
+    // 原始尺寸：优先图片自然尺寸；加载前用条目已知宽高（详情接口），保证加载前后双击结果一致
+    const nw = img?.naturalWidth || cur?.width || 300;
+    const nh = img?.naturalHeight || cur?.height || 300;
     const vw = window.innerWidth;
     const maxH = window.innerHeight * 0.75;
     const s = Math.min(vw / nw, maxH / nh);
     const result = { w: nw * s, h: nh * s, key: cacheKey };
     displaySizeCache.current = result;
     return result;
-  }, [getCurSlideEl]);
+  }, [getCurSlideEl, cur]);
 
   // 计算最大平移量
   const getMaxPan = useCallback((scale) => {
@@ -375,8 +378,9 @@ export function useTouchGesture({
     } else {
       // 1x → 自适应倍率：以图片原始分辨率为基准，尽量让 1 图像像素 ≈ 1 屏幕像素
       if (!el) return;
-      const nw = el.naturalWidth || 300;
-      const nh = el.naturalHeight || 300;
+      const img = el.tagName === 'IMG' ? el : el.querySelector('img.lightbox-img-full');
+      const nw = img?.naturalWidth || cur?.width || 300;
+      const nh = img?.naturalHeight || cur?.height || 300;
       const ds = getDisplaySize();
       // displayScale：图片原尺寸到屏幕显示尺寸的缩放比
       // displayScale < 1 → 图片被缩小显示（高分辨率图）
@@ -398,7 +402,7 @@ export function useTouchGesture({
 
       springBack(curScale, pinchRef.current.x, pinchRef.current.y, toScale, clamped.x, clamped.y);
     }
-  }, [zoomDisabled, cancelSpring, springBack, getCurSlideEl, hardClamp, getDisplaySize]);
+  }, [zoomDisabled, cancelSpring, springBack, getCurSlideEl, hardClamp, getDisplaySize, cur]);
 
   // ── 触摸事件 ─────────────────────────────────────────────
   const handleTouchStart = useCallback((e) => {

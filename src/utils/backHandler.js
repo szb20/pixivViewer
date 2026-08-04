@@ -18,7 +18,3 @@ export function runBackHandlers() {
   }
   return false;
 }
-
-export function clearBackHandlers() {
-  handlers.clear();
-}

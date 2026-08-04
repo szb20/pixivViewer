@@ -25,7 +25,6 @@
 .lightbox-overlay .lightbox-close,
 .lightbox-overlay .lightbox-nav,
 .lightbox-overlay .lightbox-dl-btn,
-.lightbox-overlay .lightbox-link,
 .lightbox-overlay .lightbox-actions {
   opacity: 1;
   transition: opacity 0.25s ease;
@@ -34,7 +33,6 @@
 .lightbox-overlay.hide-ui .lightbox-close,
 .lightbox-overlay.hide-ui .lightbox-nav,
 .lightbox-overlay.hide-ui .lightbox-dl-btn,
-.lightbox-overlay.hide-ui .lightbox-link,
 .lightbox-overlay.hide-ui .lightbox-actions {
   opacity: 0;
   pointer-events: none;
@@ -214,11 +212,34 @@
   transition: none;
 }
 
-.lightbox-img-full {
-  max-width: 100vw;
-  max-height: 75vh;
-  object-fit: contain;
-}
+  .lightbox-img-full {
+    max-width: 100vw;
+    max-height: 75vh;
+    object-fit: contain;
+    position: relative; /* 定位后绘制在托底图之上（absolute 托底默认盖住 static 原图） */
+    z-index: 1;
+  }
+
+  /* small 图托底：与原图同比例，原图逐行渲染时垫在下面，避免底部空黑 */
+  .lightbox-img-wrap {
+    position: relative;
+    width: 100%;
+    height: 75vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform-origin: center center;
+    will-change: transform; /* 缩放/平移时提升为独立合成层，避免移动卡顿 */
+  }
+  .lightbox-img-underlay {
+    position: absolute;
+    width: 100%;
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
 
 .lightbox-info {
   position: absolute;
@@ -240,113 +261,8 @@
   pointer-events: auto;
 }
 
-.lightbox-title {
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.lightbox-author {
-  color: rgba(255, 255, 255, 0.45);
-  font-size: 12px;
-}
-
-.lightbox-size {
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.lightbox-link {
-  color: rgba(255, 255, 255, 0.45);
-  text-decoration: none;
-  font-size: 12px;
-  padding: 5px 8px;
-}
-
-/* ── 多页导航 ── */
-.lightbox-page-nav-top {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 2px;
-}
-
-.lightbox-page-nav-btn {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  position: relative;
-  z-index: 1;
-}
-
-.lightbox-page-nav-btn:disabled {
-  opacity: 0.15;
-  pointer-events: none;
-}
-
-.lightbox-page-nav-label {
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 12px;
-}
-
-/* ── 操作按钮：毛玻璃胶囊 ── */
-.lightbox-btns {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  align-items: center;
-  margin-top: 2px;
-}
-
-.lightbox-dl-btn {
-  color: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 5px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.lightbox-dl-btn:active {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-/* 图标专用圆形按钮（喜欢） */
-.lightbox-icon-only {
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 0;
-}
-
-.lightbox-icon-only:active {
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.lightbox-icon-only .heart-icon {
+/* 玻璃爱心按钮 — 心形图标（尺寸/颜色） */
+.glass-icon-btn .heart-icon {
   display: block;
   width: 24px;
   height: 24px;
@@ -354,28 +270,12 @@
   flex-shrink: 0;
 }
 
-/* 灯箱爱心按钮 — 颜色/动画 */
-.lightbox-icon-only .heart-icon--liked {
+.glass-icon-btn .heart-icon--liked {
   color: #ff4757;
   filter: drop-shadow(0 0 4px rgba(255, 71, 87, 0.6));
 }
-.lightbox-icon-only .heart-icon--neutral {
+.glass-icon-btn .heart-icon--neutral {
   color: rgba(255, 255, 255, 0.55);
-}
-.lightbox-dl-btn:active .heart-icon,
-.lightbox-icon-only:active .heart-icon {
-  animation: heart-pop 0.3s ease;
-}
-
-@keyframes heart-pop {
-  0%   { transform: scale(1); }
-  30%  { transform: scale(1.3); }
-  60%  { transform: scale(0.9); }
-  100% { transform: scale(1); }
-}
-
-html.dark .lightbox-inline-nav {
-  color: #fff;
 }
 
 /* 移动端：隐藏灯箱左右箭头（用手势滑动即可） */

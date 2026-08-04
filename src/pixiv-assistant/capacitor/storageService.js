@@ -14,6 +14,8 @@ import { NetworkStore } from './networkStore.js';
 import { galleryHasFile } from './gallery.js';
 import { pixivReUrl } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
+import { downloadMonitor } from '../../utils/downloadMonitor.js';
+import { scheduleMetaBackup } from './metaBackup.js';
 
 const log = createLogger('storageService');
 
@@ -46,6 +48,7 @@ export class PixivStorageService {
 
     // 2. 委托 TransitionEngine
     const result = await this.transitionEngine.transition('cached→saved', entity);
+    if (result.success) scheduleMetaBackup();
     return result;
   }
 
@@ -69,6 +72,7 @@ export class PixivStorageService {
     if (!entity) return { success: false, error: 'not_found' };
 
     const result = await this.transitionEngine.transition('saved→cached', entity);
+    if (result.success) scheduleMetaBackup();
     return result;
   }
 
@@ -88,6 +92,7 @@ export class PixivStorageService {
     await this.fileStore.delete(entity);
     // 删除元数据
     await this.repository.delete(entity.id);
+    scheduleMetaBackup();
     return { success: true };
   }
 
@@ -179,7 +184,23 @@ export class PixivStorageService {
    */
   async toggleLike(illustId, pageIndex = 0) {
     const id = PixivEntity.makeId(illustId, pageIndex);
-    return await this.repository.toggleLike(id);
+    const result = await this.repository.toggleLike(id);
+    if (result.success) scheduleMetaBackup();
+    return result;
+  }
+
+  /**
+   * 回填 tags（浏览时把详情接口的 tags 写回已保存/喜欢的记录）。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {string[]} tags
+   * @returns {Promise<{updated: boolean, count: number}>}
+   */
+  async updateTags(illustId, pageIndex = 0, tags = []) {
+    const id = PixivEntity.makeId(illustId, pageIndex);
+    const result = await this.repository.updateTags(id, tags);
+    if (result?.updated) scheduleMetaBackup();
+    return result;
   }
 
   /**
@@ -209,7 +230,9 @@ export class PixivStorageService {
       if (!entity.fileName) {
         await this.repository.delete(entity.id);
       } else {
-        return await this.transitionEngine.transition('cached→saved', entity);
+        const result = await this.transitionEngine.transition('cached→saved', entity);
+        if (result.success) scheduleMetaBackup();
+        return result;
       }
     }
 
@@ -244,43 +267,83 @@ export class PixivStorageService {
         originalUrl: '',
       });
       await this.repository.save(newEntity);
+      scheduleMetaBackup();
       return { success: true, cached: true, idempotent: true, skipped: true, fileName: probeName, entity: newEntity };
     }
 
     // 全新记录 → 下载图片并创建 saved 实体（原图优先，失败自动降级）
     const urls = buildDownloadUrls(item);
     if (urls.length === 0) return { success: false, error: 'no_url' };
+    const mon = downloadMonitor.start(`${item.illustId}_${item._pageIndex ?? 0}`, {
+      illustId: item.illustId,
+      page: item._pageIndex ?? 0,
+      title: cleanTitle,
+      kind: 'image',
+      message: '下载原图',
+    });
+    // 真实字节进度拿不到（CapacitorHttp 无进度事件、i.pixiv.re 无 CORS 无法流式读取），
+    // 用阶段估算：下载中 5→55% 缓速前进，写入相册 75%，完成 100%
+    mon.setProgress(5);
+    let ramp = 5;
+    let gotRealProgress = false;
+    const rampTimer = setInterval(() => {
+      if (gotRealProgress) { clearInterval(rampTimer); return; }
+      ramp = Math.min(55, ramp + 4);
+      mon.setProgress(ramp);
+      if (ramp >= 55) clearInterval(rampTimer);
+    }, 600);
     let data = null;
     let usedUrl = '';
-    for (const url of urls) {
-      data = await this.networkStore.downloadImage(url);
-      if (data) { usedUrl = url; break; }
+    try {
+      for (const url of urls) {
+        data = await this.networkStore.downloadImage(url, (pct) => {
+          gotRealProgress = true;
+          mon.setProgress(pct);
+        });
+        if (data) { usedUrl = url; break; }
+      }
+      if (!data) {
+        clearInterval(rampTimer);
+        mon.finish(false, '下载失败');
+        return { success: false, error: 'download_failed' };
+      }
+      clearInterval(rampTimer);
+      mon.setStatus('writing', '写入相册');
+      mon.setProgress(75);
+
+      const newEntity = new PixivEntity({
+        id,
+        illustId: item.illustId,
+        pageIndex: item._pageIndex ?? 0,
+        type: 'image',
+        state: 'saved',
+        fileName: '',
+        title: cleanTitle,
+        author: item.author || '',
+        authorName: item.authorName || item.author || '',
+        authorAccount: item.authorAccount || '',
+        authorId: item.authorId || '',
+        tags: item.tags || [],
+        cachedAt: Date.now(),
+        likedAt: item._liked ? Date.now() : 0,
+        originalUrl: usedUrl,
+      });
+      newEntity.fileName = this.fileStore.buildFileName(newEntity);
+
+      const written = await this.fileStore.save(newEntity, data, 'saved');
+      if (!written) {
+        mon.finish(false, '写入相册失败');
+        return { success: false, error: 'file_write_failed' };
+      }
+      await this.repository.save(newEntity);
+      mon.finish(true); // → 100%
+      scheduleMetaBackup();
+      return { success: true, entity: newEntity };
+    } catch (e) {
+      clearInterval(rampTimer);
+      mon.finish(false, e?.message || '保存失败');
+      throw e;
     }
-    if (!data) return { success: false, error: 'download_failed' };
-
-    const newEntity = new PixivEntity({
-      id,
-      illustId: item.illustId,
-      pageIndex: item._pageIndex ?? 0,
-      type: 'image',
-      state: 'saved',
-      fileName: '',
-      title: cleanTitle,
-      author: item.author || '',
-      authorName: item.authorName || item.author || '',
-      authorAccount: item.authorAccount || '',
-      authorId: item.authorId || '',
-      tags: item.tags || [],
-      cachedAt: Date.now(),
-      likedAt: item._liked ? Date.now() : 0,
-      originalUrl: usedUrl,
-    });
-    newEntity.fileName = this.fileStore.buildFileName(newEntity);
-
-    const written = await this.fileStore.save(newEntity, data, 'saved');
-    if (!written) return { success: false, error: 'file_write_failed' };
-    await this.repository.save(newEntity);
-    return { success: true, entity: newEntity };
   }
 
   /**
@@ -305,9 +368,7 @@ export function buildDownloadUrls(item) {
   if (!item) return [];
   const page = item._pageIndex ?? 0;
   const candidates = [];
-  // 优先：直接从 illustId 推导（最可靠）
-  if (item.illustId) candidates.push(pixivReUrl(String(item.illustId), page));
-  // 其次：直接从 API 返回的 originalUrl 推导（含日期路径，精确）
+  // 优先：从 API 返回的 originalUrl 推导（含日期路径，命中率高，避免短链 404）
   for (const u of [item.originalUrl, item.mediumUrl]) {
     if (!u || !item.illustId) continue;
     // 仅从含日期路径的 Pixiv URL 推导（正则匹配日期路径+illustId_pN），避免误取缩略图尺寸
@@ -318,6 +379,8 @@ export function buildDownloadUrls(item) {
       candidates.push(`https://i.pixiv.re/img-original/img/${datePath}/${id}_p${page}.jpg`);
     }
   }
+  // 兜底：直接从 illustId 推导短链
+  if (item.illustId) candidates.push(pixivReUrl(String(item.illustId), page));
   log.debug('[buildDownloadUrls] illustId:', item.illustId, 'page:', page, '→', candidates);
   return [...new Set(candidates)].filter(Boolean);
 }

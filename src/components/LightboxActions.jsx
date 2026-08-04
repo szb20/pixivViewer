@@ -67,7 +67,10 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
 
     // 单图 / GIF：喜欢 = 下载；多图：喜欢只是喜欢，下载走长按或灯箱按钮
     if (result.liked && !multiPage && typeof onLikeSaveAll === 'function') {
-      onLikeSaveAll(cur).catch(() => {});
+      onLikeSaveAll(cur).then((count) => {
+        const n = Number(count) || 0;
+        showToast(n > 0 ? `已保存 ${n} 页到相册` : '已在相册中');
+      }).catch(() => {});
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged]);
 
@@ -121,7 +124,7 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
 
   return (
     <button
-      className="lightbox-dl-btn lightbox-icon-only frosted-light"
+      className="glass-icon-btn"
       onClick={handleLike}
       onPointerDown={startLongPress}
       onPointerUp={cancelLongPress}

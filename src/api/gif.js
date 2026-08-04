@@ -13,7 +13,9 @@ import {
   PixivEntity, PixivRepository, getSettings, safeFileName, getFS, CACHE_DIR,
 } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
+import { downloadMonitor } from '../utils/downloadMonitor.js';
 import { exportToGallery, galleryHasFile } from '../pixiv-assistant/capacitor/gallery.js';
+import { scheduleMetaBackup } from '../pixiv-assistant/capacitor/metaBackup.js';
 
 const log = createLogger('gif');
 const IS_DEV = import.meta.env.DEV;
@@ -615,7 +617,22 @@ export async function saveGifToAlbum(item, onProgress) {
   const sid = String(item.illustId);
   const inFlight = saveInFlight.get(sid);
   if (inFlight) return inFlight;
-  const promise = doSaveGifToAlbum(item, onProgress);
+  const mon = downloadMonitor.start(`${sid}_0`, {
+    illustId: sid,
+    page: 0,
+    title: item.title || sid,
+    kind: 'gif',
+    message: '下载动图',
+  });
+  const wrapped = (pct) => {
+    if (pct == null) return;
+    mon.setProgress(Math.round(pct));
+    onProgress?.(pct);
+  };
+  const promise = doSaveGifToAlbum(item, wrapped).then(
+    (r) => { mon.finish(!!r?.success, r?.error || ''); return r; },
+    (e) => { mon.finish(false, e?.message || '动图保存失败'); throw e; },
+  );
   saveInFlight.set(sid, promise);
   promise.finally(() => saveInFlight.delete(sid)).catch(() => {});
   return promise;
@@ -661,6 +678,7 @@ async function doSaveGifToAlbum(item, onProgress) {
     try { meta = await fetchUgoiraMeta(sid); } catch { /* 元数据拿不到也不阻塞 */ }
     const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta);
     await repo.save(entity);
+    scheduleMetaBackup();
     onProgress?.(100);
     return { success: true, idempotent: true, cached: true, fileName: gifFileName, skipped: true, entity };
   }
@@ -689,6 +707,7 @@ async function doSaveGifToAlbum(item, onProgress) {
     // 写元数据（动图统一存 page 0）
     const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, { frames }, bytes.length);
     await repo.save(entity);
+    scheduleMetaBackup();
 
     onProgress?.(100);
     return { success: true, cached: true, fileName: gifFileName, entity };

@@ -11,8 +11,10 @@
  */
 import { CapacitorHttp } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
+import { isNativeDownloadAvailable, nativeDownload } from '../../utils/nativeDownload.js';
 
 const log = createLogger('NetworkStore');
+const IS_DEV = import.meta.env.DEV;
 
 export class NetworkStore {
   /**
@@ -25,10 +27,22 @@ export class NetworkStore {
     return url.startsWith('/') ? window.location.origin + url : url;
   }
 
-  async downloadImage(url) {
+  async downloadImage(url, onProgress) {
     if (!url) return null;
     const abs = this._absUrl(url);
     log.debug('downloadImage:', { raw: url, abs });
+    // 生产环境：优先原生流式下载（真实字节进度、不受 CORS 限制），失败降级 CapacitorHttp
+    if (!IS_DEV) {
+      if (isNativeDownloadAvailable()) {
+        try {
+          const data = await nativeDownload(abs, onProgress);
+          if (data) return data;
+        } catch (e) {
+          log.info('原生下载失败，降级 CapacitorHttp:', e?.message || e);
+        }
+      }
+      return await this._downloadWithCapacitor(url);
+    }
     try {
       const resp = await fetch(abs, { headers: { Referer: 'https://www.pixiv.net/' } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);

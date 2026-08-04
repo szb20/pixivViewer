@@ -121,15 +121,17 @@ button {
   justify-content: center;
   pointer-events: none;
   overflow: hidden;
-  /* 稳定玻璃质感：自身半透明渐变定义圆盘，边框清晰不受背后内容影响 */
+  /* 加深暗部 + 加粗边框，让圆盘在各种背景上更显眼 */
   background: linear-gradient(150deg,
-      rgba(255, 255, 255, 0.26) 0%,
-      rgba(255, 255, 255, 0.13) 45%,
-      rgba(255, 255, 255, 0.07) 100%);
+      rgba(255, 255, 255, 0.32) 0%,
+      rgba(255, 255, 255, 0.16) 45%,
+      rgba(255, 255, 255, 0.08) 100%);
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  box-shadow: inset 0 0 2px rgba(255, 255, 255, 0.12);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 0 2px rgba(255, 255, 255, 0.12),
+    0 2px 12px rgba(0, 0, 0, 0.25);
 }
 
 .ptr-orbit {
@@ -174,13 +176,47 @@ button {
 
 /* ── 毛玻璃通用样式 ── */
 .frosted {
-  background: rgba(15, 17, 21, 0.45);
+  background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(12px);
 }
 
 .frosted-light {
   background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(8px);
+}
+
+/* 玻璃圆形图标按钮（喜欢 / 下载悬浮等通用） */
+.glass-icon-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px) saturate(150%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.glass-icon-btn:active {
+  transform: scale(0.94);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.glass-icon-btn:active .heart-icon {
+  animation: heart-pop 0.3s ease;
+}
+
+@keyframes heart-pop {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.3); }
+  60%  { transform: scale(0.9); }
+  100% { transform: scale(1); }
 }
 
 /* 顶部状态栏毛玻璃（复用 .frosted） */
@@ -193,7 +229,7 @@ button {
   z-index: 30;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   pointer-events: none;
-  background: rgba(100, 110, 125, 0.45);
+  background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(8px);
 }
 
@@ -217,7 +253,7 @@ button {
   font-size: 16px;
   border: none;
   background: transparent;
-  color: #b8bcc5;
+  color: #d9dce2;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -282,10 +318,11 @@ button {
 }
 
 .grid-like .heart-icon {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
 
 .chips {
   display: flex;
@@ -331,7 +368,7 @@ button {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
-  color: #b8bcc5;
+  color: #d6d9df;
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -641,7 +678,7 @@ button {
 
 .toast-host {
   position: fixed;
-  top: 16px;
+  top: calc(env(safe-area-inset-top, 20px) + 28px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 300;
@@ -659,7 +696,9 @@ button {
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   animation: toast-in 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
   text-shadow:
     0 0 8px rgba(255, 255, 255, 0.95),
     0 0 20px rgba(255, 255, 255, 0.75),

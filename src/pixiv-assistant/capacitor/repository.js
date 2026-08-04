@@ -145,6 +145,24 @@ export class PixivRepository {
   }
 
   /**
+   * 回填 tags（浏览时把详情接口的 tags 写回已保存/喜欢的记录）。
+   * 幂等：已有 tags 或新 tags 为空则跳过。
+   * @param {string} id
+   * @param {string[]} tags
+   * @returns {Promise<{updated: boolean, count: number}>}
+   */
+  async updateTags(id, tags) {
+    const record = await getMeta(id);
+    if (!record) return { updated: false, count: 0 };
+    const clean = Array.isArray(tags) ? tags.filter(Boolean) : [];
+    if (clean.length === 0) return { updated: false, count: 0 };
+    if (Array.isArray(record.tags) && record.tags.length > 0) return { updated: false, count: 0 };
+    record.tags = clean;
+    await putMeta(record);
+    return { updated: true, count: clean.length };
+  }
+
+  /**
    * 切换喜欢状态。
    * @param {string} id
    * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}

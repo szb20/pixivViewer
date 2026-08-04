@@ -1,0 +1,186 @@
+/* ══════════════════════════════════════════════
+   下载进度悬浮按钮 + 毛玻璃全屏弹窗
+   ══════════════════════════════════════════════ */
+
+.download-fab {
+  position: fixed;
+  right: 16px;
+  bottom: max(24px, env(safe-area-inset-bottom, 16px));
+  z-index: 60;
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
+.download-fab-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ff4757;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.6);
+}
+
+/* ── 全屏毛玻璃弹出层 ── */
+
+.download-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+@supports (backdrop-filter: blur()) {
+  .download-overlay {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+
+.download-sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 78vh;
+  overflow-y: auto;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(22, 25, 32, 0.62);
+  backdrop-filter: blur(40px) saturate(180%);
+  padding: 12px 18px 24px;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+/* 顶部抓取条 */
+.download-sheet-handle {
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0 auto 14px;
+}
+
+/* ── 列表 ── */
+
+.download-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.download-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+/* ── 每行 ── */
+
+.download-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.download-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.download-row-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.download-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.download-row-status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.download-row--error .download-row-status {
+  color: rgba(252, 165, 165, 0.9);
+}
+
+.download-row-done {
+  color: #4ade80;
+  font-size: 15px;
+  flex: none;
+}
+
+.download-row-err {
+  color: #ff6b6b;
+  font-size: 15px;
+  flex: none;
+}
+
+/* ── 进度条 ── */
+
+.download-row-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.download-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.download-bar-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+.download-bar-indeterminate {
+  width: 40% !important;
+  animation: download-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes download-slide {
+  0% { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
+.download-pct {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  width: 36px;
+  text-align: right;
+  flex: none;
+}

@@ -281,32 +281,42 @@ export default function MediaLightbox({
         );
       }
       return (
-        <img
+        // 缩放/平移只作用在容器上：两张图随容器整体运动，天然对齐、单图层合成更流畅
+        <div
           ref={el => slideRefs.current[idx] = el}
-          className="lightbox-img-full"
-          src={item.src + (retryMap[idx] ? `?r=${retryMap[idx]}` : '')}
-          alt={item.title || ''}
-          draggable={false}
-          onError={() => {
-            const next = (retryMap[idx] || 0) + 1;
-            if (next >= MAX_IMG_RETRY) {
-              log.warn('图片加载失败，已停止自动重试:', item.src, 'retry:', next);
-            }
-            setRetryMap(prev => ({ ...prev, [idx]: next }));
-          }}
-          loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
-      fetchPriority={idx === index ? 'high' : 'auto'}
-          style={{
-            width: '100%',
-            maxHeight: '75vh',
-            objectFit: 'contain',
-            ...(idx === index && zoomTrans
-              ? {
-                  transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
-                }
-              : {}),
-          }}
-        />
+          className="lightbox-img-wrap"
+          style={idx === index && zoomTrans
+            ? {
+                transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
+                willChange: 'transform',
+              }
+            : undefined}
+        >
+          {/* sharp small 图托底：原图逐行渲染时，底部未渲染区域先由同比例 small 图垫着 */}
+          {(item.previewUrl || item.thumbnailUrl) && (
+            <img className="lightbox-img-underlay" src={item.previewUrl || item.thumbnailUrl} alt="" />
+          )}
+          <img
+            className="lightbox-img-full"
+            src={item.src + (retryMap[idx] && !/^(blob:|file:|content:)/.test(item.src) ? `?r=${retryMap[idx]}` : '')}
+            alt={item.title || ''}
+            draggable={false}
+            onError={() => {
+              const next = (retryMap[idx] || 0) + 1;
+              if (next >= MAX_IMG_RETRY) {
+                log.warn('图片加载失败，已停止自动重试:', item.src, 'retry:', next);
+              }
+              setRetryMap(prev => ({ ...prev, [idx]: next }));
+            }}
+            loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
+            fetchPriority={idx === index ? 'high' : 'auto'}
+            style={{
+              width: '100%',
+              maxHeight: '75vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
       );
     }
 

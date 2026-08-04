@@ -2,8 +2,7 @@
  * StorageFacade — UI 门面。
  *
  * 职责：参数校验、错误转换、并发去重。
- * 不再混入 Toast —— 提示由 UI 层根据返回值自行决定
- * （见 src/utils/storageFeedback.js 的 toastSaveResult / toastUnsaveResult / toastDeleteResult）。
+ * 不再混入 Toast —— 提示由 UI 层根据返回值自行决定。
  */
 import { PixivStorageService } from './storageService.js';
 
@@ -136,6 +135,18 @@ export class StorageFacade {
   async toggleLike(illustId, pageIndex = 0) {
     if (!illustId) return { success: false, liked: false, likedAt: 0 };
     return await this.service.toggleLike(illustId, pageIndex);
+  }
+
+  /**
+   * 回填 tags（浏览时把详情接口的 tags 写回已保存/喜欢的记录）。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {string[]} tags
+   * @returns {Promise<{updated: boolean, count: number}>}
+   */
+  async updateTags(illustId, pageIndex = 0, tags = []) {
+    if (!illustId) return { updated: false, count: 0 };
+    return await this.service.updateTags(illustId, pageIndex, tags);
   }
 
   /**

@@ -23,6 +23,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * 保存图片到系统相册（MediaStore）。
@@ -44,6 +45,8 @@ public class GallerySaverPlugin extends Plugin {
     // 注意：MediaStore 实际存储的 RELATIVE_PATH 带尾斜杠（Pictures/TeyvatWhisper/），
     // 查询必须用带斜杠的值，否则 read/exists/delete 全部匹配不到。
     private static final String RELATIVE_PATH = "Pictures/TeyvatWhisper/";
+    // 应用元数据备份（JSON）存到「下载」集合：任意 MIME 都接受，卸载后保留
+    private static final String META_RELATIVE_PATH = "Download/TeyvatWhisper/";
 
     /**
      * 确保存储权限。
@@ -241,6 +244,117 @@ public class GallerySaverPlugin extends Plugin {
                 MediaStore.Images.Media.DISPLAY_NAME + " = ? AND "
                     + MediaStore.Images.Media.RELATIVE_PATH + " = ?",
                 new String[]{fileName, RELATIVE_PATH});
+            JSObject ret = new JSObject();
+            ret.put("deleted", deleted);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 写入应用元数据备份（JSON 字符串 → MediaStore Downloads）。
+     * Android 10+ 无需权限；卸载后文件仍保留在 Download/TeyvatWhisper/。
+     */
+    @PluginMethod
+    public void writeMeta(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String data = call.getString("data");
+        if (fileName == null || data == null) {
+            call.reject("fileName 与 data 不能为空");
+            return;
+        }
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            // 先删除同名旧文件（幂等），避免 MediaStore 残留多行
+            cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
+                    + MediaStore.Downloads.RELATIVE_PATH + " = ?",
+                new String[]{fileName, META_RELATIVE_PATH});
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
+            values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
+            values.put(MediaStore.Downloads.RELATIVE_PATH, META_RELATIVE_PATH);
+            values.put(MediaStore.Downloads.IS_PENDING, 1);
+            Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                call.reject("MediaStore 插入失败");
+                return;
+            }
+            try (OutputStream os = cr.openOutputStream(uri)) {
+                if (os == null) {
+                    call.reject("打开输出流失败");
+                    return;
+                }
+                os.write(data.getBytes(StandardCharsets.UTF_8));
+            }
+            values.clear();
+            values.put(MediaStore.Downloads.IS_PENDING, 0);
+            cr.update(uri, values, null, null);
+
+            JSObject ret = new JSObject();
+            ret.put("uri", uri.toString());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 读取应用元数据备份（返回 JSON 字符串；无备份返回空字符串） */
+    @PluginMethod
+    public void readMeta(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            String selection = MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
+                + MediaStore.Downloads.RELATIVE_PATH + " = ?";
+            String[] args = new String[]{fileName, META_RELATIVE_PATH};
+            try (Cursor c = cr.query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Downloads._ID},
+                    selection, args, MediaStore.Downloads.DATE_MODIFIED + " DESC")) {
+                JSObject ret = new JSObject();
+                if (c == null || !c.moveToFirst()) {
+                    ret.put("data", "");
+                    call.resolve(ret);
+                    return;
+                }
+                long id = c.getLong(0);
+                Uri uri = ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id);
+                try (InputStream is = cr.openInputStream(uri)) {
+                    if (is == null) {
+                        ret.put("data", "");
+                        call.resolve(ret);
+                        return;
+                    }
+                    byte[] bytes = readAll(is);
+                    ret.put("data", new String(bytes, StandardCharsets.UTF_8));
+                    call.resolve(ret);
+                }
+            }
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 删除应用元数据备份（幂等，找不到也不报错） */
+    @PluginMethod
+    public void deleteMeta(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        try {
+            int deleted = getContext().getContentResolver().delete(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
+                    + MediaStore.Downloads.RELATIVE_PATH + " = ?",
+                new String[]{fileName, META_RELATIVE_PATH});
             JSObject ret = new JSObject();
             ret.put("deleted", deleted);
             call.resolve(ret);

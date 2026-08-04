@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
+import DownloadMonitorButton from './components/DownloadMonitor.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
 import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
@@ -113,6 +114,7 @@ export default function App() {
             {visitedTabs.has('search') && (
               <ErrorBoundary key="search">
                 <SearchPage
+                  active={activeTab === 'search'}
                   onOpen={openDetail}
                   registerRefresh={registerRefresh}
                   refreshToken={tabTokens.search || 0}
@@ -160,6 +162,7 @@ export default function App() {
       )}
 
       <ToastHost />
+      <DownloadMonitorButton />
     </div>
   );
 }

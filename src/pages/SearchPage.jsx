@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
@@ -10,13 +11,14 @@ const PAGE_SIZE = 20;
 const HISTORY_KEY = 'pixiv_search_history';
 const CACHE_KEY = 'search:last';
 
-export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
+export default function SearchPage({ active = true, onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const likedSet = useLikedSet();
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
   });
+  const [hideBar, setHideBar] = useState(false); // 滚动时弹入/弹出搜索栏（同筛选栏）
   const queryRef = useRef('');
   const pageRef = useRef(1);
 
@@ -84,10 +86,28 @@ export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, 
     runSearch(searchSeed.tag);
   }, [searchSeed, runSearch]);
 
+  // 滚动收起：上下滑动都隐藏搜索栏（弹出靠双击当前 Tab）
+  useEffect(() => {
+    const el = document.querySelector('.app-content');
+    if (!el) return;
+    let last = el.scrollTop;
+    const onScroll = () => {
+      const t = el.scrollTop;
+      if (Math.abs(t - last) > 20) setHideBar(true);
+      last = t;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // 点击弹出：双击当前 Tab（refreshToken 触发）→ 弹出搜索栏
+  useEffect(() => {
+    if (refreshToken > 0) setHideBar(false);
+  }, [refreshToken]);
+
   return (
     <div className="page search-page">
       <div className="search-head">
-        {/* 历史搜索：毛玻璃 chips */}
         {!searched && history.length > 0 && (
           <div className="search-history">
             <div className="search-history-head">
@@ -120,21 +140,26 @@ export default function SearchPage({ onOpen, registerRefresh, refreshToken = 0, 
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
 
-      {/* 搜索栏：固定在底部、白色 */}
-      <form className="search-bar search-bar--bottom" onSubmit={submit}>
-        <SearchIcon className="search-icon" />
-        <input
-          className="search-input"
-          type="text"
-          value={query}
-          placeholder="搜索 Pixiv 图片..."
-          enterKeyHint="search"
-          onChange={e => setQuery(e.target.value)}
-        />
-        <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
-          {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
-        </button>
-      </form>
+      {createPortal(
+        <form
+          className={`search-bar search-bar--bottom${hideBar ? ' search-bar--hidden' : ''}`}
+          style={{ display: active ? 'flex' : 'none' }}
+          onSubmit={submit}
+        >
+          <input
+            className="search-input"
+            type="text"
+            value={query}
+            placeholder=""
+            enterKeyHint="search"
+            onChange={e => setQuery(e.target.value)}
+          />
+          <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
+            {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
+          </button>
+        </form>,
+        document.querySelector('.app')
+      )}
     </div>
   );
 }

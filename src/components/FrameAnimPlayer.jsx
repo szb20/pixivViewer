@@ -441,7 +441,7 @@ export default function FrameAnimPlayer({
           <div className={`${cssPrefix}-info`}>
             <span className={`${cssPrefix}-title`}>{title || 'GIF 动图'}</span>
             {author && <span className={`${cssPrefix}-author`}>@{author}</span>}
-            {pixivUrl && !hideLink && <a className={`${cssPrefix}-pixiv-link`} href={pixivUrl} target="_blank" onClick={e => e.stopPropagation()}>Pixiv →</a>}
+          {pixivUrl && !hideLink && <a className={`${cssPrefix}-pixiv-link`} href={pixivUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>Pixiv →</a>}
           </div>
         )}
       </div>
@@ -536,7 +536,7 @@ export default function FrameAnimPlayer({
           <span className={`${cssPrefix}-title`}>{title || (cssPrefix === 'gif' ? 'GIF 动图' : 'Ugoira 动图')}</span>
           {author && <span className={`${cssPrefix}-author`}>@{author}</span>}
           {pixivUrl && !hideLink && (
-            <a className={`${cssPrefix}-pixiv-link`} href={pixivUrl} target="_blank"
+            <a className={`${cssPrefix}-pixiv-link`} href={pixivUrl} target="_blank" rel="noreferrer"
               onClick={e => e.stopPropagation()}>
               Pixiv →
             </a>
