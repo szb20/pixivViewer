@@ -16,6 +16,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Android 构建缓存（临时 gradle home）
+android/gradle-home/
+
 # Editor directories and files
 .claude/
 .vscode/*
