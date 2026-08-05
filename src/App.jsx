@@ -3,6 +3,7 @@ import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
 import SettingsModal from './components/SettingsModal.jsx';
+import ProxyCheckNotice from './components/ProxyCheckNotice.jsx';
 import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
 import AuthorWorksPage from './components/AuthorWorksPage.jsx';
@@ -15,6 +16,8 @@ import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
 import { runBackHandlers } from './utils/backHandler.js';
+import { checkProxyReachable } from './utils/proxyCheck.js';
+import { createLogger } from './utils/logger.js';
 import './index.css';
 import './styles/detail.css';
 
@@ -28,6 +31,8 @@ const TABS = [
   { key: 'gallery', label: '喜欢' },
 ];
 
+const log = createLogger('App');
+
 export default function App() {
   const {
     activeTab,
@@ -37,6 +42,8 @@ export default function App() {
     authorWorks,
     searchSeed,
     settingsOpen,
+    showProxyError,
+    proxyCheckUrl,
     setActiveTab,
     registerRefresh,
     triggerPullRefresh,
@@ -48,15 +55,18 @@ export default function App() {
     searchByTag,
     openSettings,
     closeSettings,
+    setShowProxyError,
   } = useAppStore();
 
   useEffect(() => {
     if (!window.Capacitor?.isNativePlatform?.()) return;
-    let cleanup;
+    let cancelled = false;
+    let listener;
     (async () => {
       try {
         const { App } = await import('@capacitor/app');
-        const listener = await App.addListener('backButton', (event) => {
+        if (cancelled) return;
+        listener = await App.addListener('backButton', (event) => {
           try { event.preventDefault(); } catch { }
           if (runBackHandlers()) return;
           if (event.canGoBack) {
@@ -65,10 +75,29 @@ export default function App() {
             App.exitApp();
           }
         });
-        cleanup = () => { listener.remove(); };
       } catch { /* 非原生环境 */ }
     })();
-    return () => { cleanup?.(); };
+    return () => {
+      cancelled = true;
+      listener?.remove?.();
+    };
+  }, []);
+
+  // 启动时代理连通性检测
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { reachable, proxyUrl } = await checkProxyReachable(3000);
+        if (cancelled) return;
+        if (!reachable) {
+          setShowProxyError(true, proxyUrl);
+        }
+      } catch (e) {
+        log.warn('启动时代理检测异常:', e?.message || e);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -140,6 +169,14 @@ export default function App() {
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
       {settingsOpen && <SettingsModal onClose={closeSettings} />}
+
+      {showProxyError && (
+        <ProxyCheckNotice
+          proxyUrl={proxyCheckUrl}
+          onOpenSettings={openSettings}
+          onDismiss={() => setShowProxyError(false)}
+        />
+      )}
 
       {detailImage && (
         <ErrorBoundary key="detail">

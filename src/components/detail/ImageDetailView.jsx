@@ -197,6 +197,13 @@ export default function ImageDetailView({
     setLocalSrcs({});
     prevLocalSrcsRef.current = {};
     setLocalResolved(false);
+    return () => {
+      // 卸载或切换作品时回收本实例持有的本地 blob URL，避免累积
+      const prev = prevLocalSrcsRef.current;
+      for (const u of Object.values(prev)) {
+        try { URL.revokeObjectURL(u); } catch { /* 忽略 */ }
+      }
+    };
   }, [image?.illustId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 切换作品时恢复滚动位置：用 useLayoutEffect 在浏览器绘制前同步滚动，
@@ -281,6 +288,7 @@ export default function ImageDetailView({
     if (!image?.illustId) return;
     let cancelled = false;
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
+    const created = []; // 本次运行新建的 blob URL，取消时回收未提交部分
     (async () => {
       const map = {};
       const prev = prevLocalSrcsRef.current;
@@ -290,7 +298,7 @@ export default function ImageDetailView({
         if (prev[p]) { map[p] = prev[p]; continue; } // 复用已有本地 URL，避免重复读相册
         const r = await storageFacade.load(image.illustId, p).catch(() => null);
         if (cancelled) return;
-        if (r?.localUrl) map[p] = r.localUrl;
+        if (r?.localUrl) { map[p] = r.localUrl; created.push(r.localUrl); }
       }
       if (cancelled) return;
       // 回收不再使用（已取消保存 / 切换作品）的旧 blob URL
@@ -303,7 +311,16 @@ export default function ImageDetailView({
         if (!unchanged) setLocalSrcs(map);
         setLocalResolved(true);
       })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // 仅回收尚未提交到 prevLocalSrcsRef 的新建 URL（异步加载中途被卸载/切换）
+      const prevValues = new Set(Object.values(prevLocalSrcsRef.current));
+      for (const u of created) {
+        if (!prevValues.has(u)) {
+          try { URL.revokeObjectURL(u); } catch { /* 忽略 */ }
+        }
+      }
+    };
   }, [image?.illustId, pixivCache, pageCount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 构造保存条目（单页）— 优先用详情接口的完整日期路径 URL（避免走 pixiv.re 短链反查）

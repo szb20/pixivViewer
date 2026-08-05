@@ -18,11 +18,11 @@
 
 ## Build APK
 
-Building a standalone APK (runs independently on phone, no dev server needed) must use `CAP_BUILD=1`:
+Building a standalone APK (runs independently on phone, no dev server needed). Production build is the default — no env var required:
 
 ```bash
-CAP_BUILD=1 npx cap sync android && cd android && ./gradlew assembleDebug
+npx cap sync android && cd android && ./gradlew assembleDebug
 adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Without `CAP_BUILD=1`, the Capacitor config (`capacitor.config.ts`) sets `server.url` to `http://192.168.1.2:5182`, causing the app to try connecting to the Vite dev server on the host machine — the APK will show a blank/error page when not on the same network.
+The Capacitor config (`capacitor.config.ts`) loads bundled local assets (`webDir/dist`) by default. Dev-server mode is opt-in: set `CAP_DEV=1` so `server.url` points at `http://192.168.1.2:5182` (hot-reload only; never ship this, or the APK will try to reach the dev server and show a blank page).

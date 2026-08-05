@@ -65,6 +65,8 @@ export const useAppStore = create((set, get) => ({
     authorWorks: null,
     searchSeed: null,
     settingsOpen: false,
+    showProxyError: false,
+    proxyCheckUrl: '',
 
     openDetail: (img) => {
         const { activeTab, scrollPositions } = get();
@@ -122,4 +124,6 @@ export const useAppStore = create((set, get) => ({
 
     openSettings: () => set({ settingsOpen: true }),
     closeSettings: () => set({ settingsOpen: false }),
+
+    setShowProxyError: (v, url = '') => set({ showProxyError: v, proxyCheckUrl: url }),
 }));

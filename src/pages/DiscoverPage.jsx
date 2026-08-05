@@ -31,7 +31,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       if (!append) startRef.current = 0;
       const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
       const rawList = r?.illusts || [];
-      log.warn('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawList.length, 'err:', r?.error || '');
+      log.debug('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawList.length, 'err:', r?.error || '');
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
       const filtered = rawList.filter(img => {

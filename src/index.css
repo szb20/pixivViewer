@@ -798,3 +798,101 @@ button {
   align-items: center;
   justify-content: center;
 }
+
+/* ── 代理连接失败弹窗 ── */
+
+.proxy-check-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: proxy-overlay-in 0.25s ease;
+}
+
+@keyframes proxy-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.proxy-check-card {
+  width: 100%;
+  max-width: 340px;
+  padding: 28px 24px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+  animation: proxy-card-in 0.3s ease;
+}
+
+@keyframes proxy-card-in {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.proxy-check-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.proxy-check-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.proxy-check-url {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.proxy-check-hint {
+  margin: 0 0 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.proxy-check-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.proxy-check-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.proxy-check-btn:active {
+  transform: scale(0.97);
+}
+
+.proxy-check-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.proxy-check-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.proxy-check-btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}

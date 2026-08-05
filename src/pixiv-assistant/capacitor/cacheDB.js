@@ -560,8 +560,14 @@ export async function importDBFromJSON(json) {
 
 // ═══════════════════════════════════════════════
 // 一次性清理脚本：去掉标题中的页码后缀 (1/3) 等
+// 用 localStorage 标记保证只执行一次，避免每次启动都做全表扫描写回
 // ═══════════════════════════════════════════════
+const CLEAN_TITLES_DONE_KEY = 'pixiv_cachedb_clean_titles_v1';
+let cleanTitlesDone = false;
+try { cleanTitlesDone = localStorage.getItem(CLEAN_TITLES_DONE_KEY) === '1'; } catch { /* 非浏览器环境 */ }
+
 (async function cleanTitles() {
+  if (cleanTitlesDone) return;
   try {
     if (typeof indexedDB === 'undefined') return;
     const db = await openDB();
@@ -584,7 +590,9 @@ export async function importDBFromJSON(json) {
     }
     await new Promise((resolve) => { tx.oncomplete = resolve; tx.onerror = resolve; });
     log.info(`[cleanTitles] 已清理 ${count} 条标题页码后缀`);
+    try { localStorage.setItem(CLEAN_TITLES_DONE_KEY, '1'); } catch { /* 忽略 */ }
   } catch (e) {
+    // 失败时不写标记，下次启动会重试
     log.warn('[cleanTitles] 失败:', e.message);
   }
 })();

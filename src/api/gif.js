@@ -21,8 +21,9 @@ const log = createLogger('gif');
 const IS_DEV = import.meta.env.DEV;
 
 const cache = new Map(); // illustId -> { frames, meta }
-/** 帧缓存上限 — 超限淘汰最旧条目并回收其 blob URL，避免会话内无限累积 */
-const MAX_CACHE = 8;
+/** 帧缓存上限 — 超限淘汰最旧条目并回收其 blob URL，避免会话内无限累积。
+ *  播放器层（FrameAnimPlayer）与 API 层共用此缓存，容量取两者原上限中较大值。 */
+const MAX_CACHE = 12;
 /** 进行中的下载注册表：illustId → { promise, listeners: Set, lastPct }，跨组件共享进度与去重 */
 const inflight = new Map();
 const repo = new PixivRepository();
@@ -53,6 +54,21 @@ function evictOldest() {
   const entry = cache.get(oldestKey);
   releaseFrames(entry?.frames);
   cache.delete(oldestKey);
+}
+
+/** 读取已缓存的帧结果（未命中返回 null）— 供播放器层恢复帧，避免双重缓存/重复下载 */
+export function getCachedFrames(illustId) {
+  return cache.get(String(illustId)) || null;
+}
+
+/** 清除某个作品的帧缓存并回收其 blob URL（加载失败时供播放器层调用，强制下次重新下载） */
+export function clearFrameCache(illustId) {
+  const id = String(illustId);
+  const entry = cache.get(id);
+  if (entry) {
+    releaseFrames(entry.frames);
+    cache.delete(id);
+  }
 }
 
 async function getPixivCookie() {
@@ -670,7 +686,7 @@ export async function saveGifToAlbum(item, onProgress) {
 }
 
 /** 动图保存实体（动图统一存 page 0） */
-function buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, size = 0) {
+function buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, size = 0, likedAt = 0) {
   return new PixivEntity({
     id: PixivEntity.makeId(sid, 0),
     illustId: sid,
@@ -687,7 +703,7 @@ function buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, s
     frames: (meta?.frames || []).map((f, i) => ({ file: `frame_${i}`, delay: f.delay || 80 })),
     cachedAt: Date.now(),
     size,
-    likedAt: 0,
+    likedAt,
   });
 }
 
@@ -697,6 +713,8 @@ async function doSaveGifToAlbum(item, onProgress) {
   if (existing?.fileName && existing.isSaved) {
     return { success: true, idempotent: true, cached: true, fileName: existing.fileName };
   }
+  // 若已有轻记录（toggleLike 创建、无文件），重建时保留其 likedAt，避免喜欢标记被抹掉
+  const preserveLikedAt = existing?.likedAt || 0;
 
   // 目标文件名由 illustId/作者/标题决定，先算出来：
   // 系统相册已有同名文件 → 跳过 ZIP 下载与 GIF 编码，直接补元数据
@@ -707,7 +725,7 @@ async function doSaveGifToAlbum(item, onProgress) {
   if (!existing?.fileName && await galleryHasFile(gifFileName)) {
     let meta = null;
     try { meta = await fetchUgoiraMeta(sid); } catch { /* 元数据拿不到也不阻塞 */ }
-    const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta);
+    const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, 0, preserveLikedAt);
     await repo.save(entity);
     scheduleMetaBackup();
     onProgress?.(100);
@@ -736,7 +754,7 @@ async function doSaveGifToAlbum(item, onProgress) {
     await exportToGallery(base64, gifFileName, 'image/gif');
 
     // 写元数据（动图统一存 page 0）
-    const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, { frames }, bytes.length);
+    const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, { frames }, bytes.length, preserveLikedAt);
     await repo.save(entity);
     scheduleMetaBackup();
 

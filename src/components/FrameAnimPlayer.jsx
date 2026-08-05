@@ -17,34 +17,9 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createLogger } from '../utils/logger.js';
-import { fetchUgoiraFrames } from '../api/gif.js';
+import { fetchUgoiraFrames, getCachedFrames, clearFrameCache } from '../api/gif.js';
 
 const log = createLogger('FrameAnimPlayer');
-
-// 全局下载缓存：illustId → { promise, result, loading }
-const downloadCache = new Map();
-/** 播放器侧下载缓存上限 —— 超限淘汰最旧条目并回收其帧 blob URL */
-const MAX_DOWNLOAD_CACHE = 12;
-
-/** 回收帧序列里的 blob URL（幂等，已回收的无副作用） */
-function releaseFrames(frames) {
-  if (!Array.isArray(frames)) return;
-  for (const f of frames) {
-    if (f?.path?.startsWith('blob:')) URL.revokeObjectURL(f.path);
-  }
-}
-
-/** 写入下载缓存（带容量上限，淘汰时回收 blob URL） */
-function cacheDownload(id, value) {
-  if (downloadCache.has(id)) downloadCache.delete(id);
-  downloadCache.set(id, value);
-  if (downloadCache.size > MAX_DOWNLOAD_CACHE) {
-    const oldestId = downloadCache.keys().next().value;
-    const entry = downloadCache.get(oldestId);
-    downloadCache.delete(oldestId);
-    releaseFrames(entry?.result?.frames);
-  }
-}
 
 /** 环形进度条 —— SVG 圆形，白色描边，百分比驱动 */
 function CircularProgress({ pct = 0, size = 56, stroke = 3 }) {
@@ -153,13 +128,13 @@ export default function FrameAnimPlayer({
     cancelAnimationFrame(timerRef.current);
   }, [illustId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 挂载时检查缓存：直接恢复帧，跳过 loading 态
+  // 挂载时检查共享帧缓存：直接恢复帧，跳过 loading 态
   useEffect(() => {
-    const cached = downloadCache.get(illustId);
-    if (cached?.result?.frames?.length && !loadedRef.current) {
+    const cached = getCachedFrames(illustId);
+    if (cached?.frames?.length && !loadedRef.current) {
       restoringRef.current = true;
       loadedRef.current = false;
-      setFrames(cached.result.frames);
+      setFrames(cached.frames);
       setLoadProgress(100);
     }
   }, [illustId]);
@@ -176,25 +151,17 @@ export default function FrameAnimPlayer({
   const loadFrames = async (retry = false) => {
     if (loading || loaded) return;
 
-    // 重试时清除失败缓存
-    if (retry) downloadCache.delete(illustId);
     setError(null);
 
-    // 已有缓存结果 → 直接恢复，不显示加载态
-    const cached = downloadCache.get(illustId);
-    if (cached?.result) {
-      if (cached.result.frames?.length) {
-        restoringRef.current = true;
-        loadedRef.current = false;
-        setFrames(cached.result.frames);
-        setLoadProgress(100);
-        setError(null);
-        return;
-      }
-      // 缓存了错误结果 → 清除并重试
-      if (cached.result.error) {
-        downloadCache.delete(illustId);
-      }
+    // 已有共享帧缓存 → 直接恢复，不显示加载态（retry 走 fetchUgoiraFrames 的 force 强制刷新）
+    const cached = getCachedFrames(illustId);
+    if (cached?.frames?.length) {
+      restoringRef.current = true;
+      loadedRef.current = false;
+      setFrames(cached.frames);
+      setLoadProgress(100);
+      setError(null);
+      return;
     }
 
     setLoading(true);
@@ -221,7 +188,6 @@ export default function FrameAnimPlayer({
             }, retry ? { force: true } : undefined),
             stallPromise,
           ]);
-          cacheDownload(illustId, { result });
           return result;
         } finally {
           clearTimeout(stallTimer);
@@ -230,11 +196,8 @@ export default function FrameAnimPlayer({
       const result = await fetchUgoiraFrames(illustId, (pct) => {
         if (mountedRef.current) setLoadProgress(pct);
       }, retry ? { force: true } : undefined);
-      cacheDownload(illustId, { result });
       return result;
     })();
-
-    cacheDownload(illustId, { promise });
 
     try {
       const result = await promise;
@@ -248,12 +211,12 @@ export default function FrameAnimPlayer({
         // 有 result 但没有 frames → 记录错误
         const errMsg = result?.error || '未知错误';
         log.warn('加载失败:', errMsg);
-        if (clearCacheOnError) downloadCache.delete(illustId);
+        if (clearCacheOnError) clearFrameCache(illustId);
         if (mountedRef.current) setError(errMsg);
       }
     } catch (e) {
       log.warn('加载失败:', e.message);
-      if (clearCacheOnError) downloadCache.delete(illustId);
+      if (clearCacheOnError) clearFrameCache(illustId);
       if (mountedRef.current) setError(e.message);
     } finally {
       if (mountedRef.current) setLoading(false);

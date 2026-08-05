@@ -269,11 +269,12 @@ public class GallerySaverPlugin extends Plugin {
         }
         try {
             ContentResolver cr = getContext().getContentResolver();
-            // 先删除同名旧文件（幂等），避免 MediaStore 残留多行
+            // 先删除所有旧备份（含历史遗留的 "pixiv_meta (N).json" 副本），
+            // 避免 MediaStore 残留多行 / 同名物理文件导致自动加 (N) 后缀
             cr.delete(MediaStore.Downloads.EXTERNAL_CONTENT_URI,
-                MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
+                MediaStore.Downloads.DISPLAY_NAME + " LIKE ? AND "
                     + MediaStore.Downloads.RELATIVE_PATH + " = ?",
-                new String[]{fileName, META_RELATIVE_PATH});
+                new String[]{"pixiv_meta%.json", META_RELATIVE_PATH});
             ContentValues values = new ContentValues();
             values.put(MediaStore.Downloads.DISPLAY_NAME, fileName);
             values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
@@ -313,9 +314,11 @@ public class GallerySaverPlugin extends Plugin {
         }
         try {
             ContentResolver cr = getContext().getContentResolver();
-            String selection = MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
+            // 用 LIKE 匹配（可能因历史遗留物理文件/同名冲突被 MediaStore 写成 "pixiv_meta (N).json"），
+            // 按修改时间倒序取最新一份，保证恢复时读到最近备份
+            String selection = MediaStore.Downloads.DISPLAY_NAME + " LIKE ? AND "
                 + MediaStore.Downloads.RELATIVE_PATH + " = ?";
-            String[] args = new String[]{fileName, META_RELATIVE_PATH};
+            String[] args = new String[]{"pixiv_meta%.json", META_RELATIVE_PATH};
             try (Cursor c = cr.query(
                     MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Downloads._ID},

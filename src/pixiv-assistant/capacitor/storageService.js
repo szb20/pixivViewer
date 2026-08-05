@@ -238,10 +238,13 @@ export class PixivStorageService {
       const gifEntity = await this.repository.find(PixivEntity.makeId(item.illustId, 0));
       if (gifEntity?.isGif) entity = gifEntity;
     }
+    // 若已有轻记录（toggleLike 创建、无文件），重建时保留其 likedAt，避免喜欢标记被抹掉
+    let preserveLikedAt = 0;
     if (entity) {
       // 已有记录 → 迁移到 saved（幂等时直接返回）
       // 轻记录（无实际文件，如 toggleLike 创建的）→ 删掉重新下载
       if (!entity.fileName) {
+        preserveLikedAt = entity.likedAt || 0;
         await this.repository.delete(entity.id);
       } else {
         const result = await this.transitionEngine.transition('cached→saved', entity);
@@ -277,7 +280,7 @@ export class PixivStorageService {
         authorId: item.authorId || '',
         tags: item.tags || [],
         cachedAt: Date.now(),
-        likedAt: item._liked ? Date.now() : 0,
+        likedAt: preserveLikedAt || (item._liked ? Date.now() : 0),
         originalUrl: '',
       });
       await this.repository.save(newEntity);
@@ -326,8 +329,8 @@ export class PixivStorageService {
         authorId: item.authorId || '',
         tags: item.tags || [],
         cachedAt: Date.now(),
-        likedAt: item._liked ? Date.now() : 0,
         originalUrl: usedUrl,
+        likedAt: preserveLikedAt || (item._liked ? Date.now() : 0),
       });
       newEntity.fileName = this.fileStore.buildFileName(newEntity);
 
@@ -341,7 +344,6 @@ export class PixivStorageService {
       scheduleMetaBackup();
       return { success: true, entity: newEntity };
     } catch (e) {
-      clearInterval(rampTimer);
       mon.finish(false, e?.message || '保存失败');
       throw e;
     }

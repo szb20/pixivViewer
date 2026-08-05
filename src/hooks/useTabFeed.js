@@ -52,16 +52,20 @@ export function useTabFeed({
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadingRef = useRef(false);
+  const loadSeqRef = useRef(0);
 
   const fetchPageStable = useStableCallback(fetchPage);
   const hydrateStable = useStableCallback(hydrate);
   const skipFirstFetchStable = useStableCallback(shouldSkipFirstFetch);
 
   const load = useCallback(async (append) => {
-    if (loadingRef.current) {
-      log.debug('[load] 跳过重复加载, append:', append);
+    // 追加加载（触底翻页）仍做并发去重，避免 sentinel 重复触发；
+    // 全新加载（切换关键词/刷新）允许取代在途请求，避免新请求被静默丢弃。
+    if (loadingRef.current && append) {
+      log.debug('[load] 跳过重复追加加载');
       return;
     }
+    const seq = ++loadSeqRef.current;
     loadingRef.current = true;
 
     if (append) setLoadingMore(true);
@@ -69,6 +73,7 @@ export function useTabFeed({
 
     try {
       const r = await fetchPageStable(append, itemsRef.current);
+      if (seq !== loadSeqRef.current) return; // 已被更新的请求取代，丢弃过期响应
       if (r == null) {
         log.debug('[load] fetchPage 返回 null，跳过');
         return;
@@ -83,12 +88,15 @@ export function useTabFeed({
       }
       if (!append && !nextItems.length) setError(r.emptyMessage || '');
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       log.warn('[load] 失败:', e?.message || e);
       setError(e.message || '加载失败');
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      loadingRef.current = false;
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+        loadingRef.current = false;
+      }
     }
   }, [cacheKey, fetchPageStable]);
 

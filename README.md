@@ -33,9 +33,9 @@ npx cap sync android
 npx cap run android   # 需要 Android SDK + 已连接设备
 ```
 
-开发模式（未设置 `CAP_BUILD`）下 WebView 加载局域网 Vite dev server：
+开发模式（设置 `CAP_DEV=1`）下 WebView 加载局域网 Vite dev server：
 把 `capacitor.config.ts` 里的 `server.url` 改成你的电脑局域网 IP，手机与电脑同网即可。
-正式打包：`CAP_BUILD=1 npx cap sync android`，WebView 从本地 assets 加载。
+正式打包（默认，无需任何环境变量）：`npx cap sync android`，WebView 从本地 assets 加载。
 
 ## 说明
 

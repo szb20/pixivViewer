@@ -6,9 +6,9 @@ const config: CapacitorConfig = {
   webDir: 'dist',
 };
 
-// 开发模式：WebView 加载局域网内的 Vite dev server（带 pixiv 代理）。
-// 正式打包：设置 CAP_BUILD=1 后从 webDir 本地文件加载。
-if (!process.env.CAP_BUILD) {
+// 默认始终从打包好的本地资源（webDir/dist）加载，避免误把 dev server 地址打进正式包。
+// 开发模式：显式设置 CAP_DEV=1 时，WebView 才加载局域网内的 Vite dev server（带 pixiv 代理）。
+if (process.env.CAP_DEV === '1') {
   config.server = {
     url: 'http://192.168.1.2:5182',
     cleartext: true,
