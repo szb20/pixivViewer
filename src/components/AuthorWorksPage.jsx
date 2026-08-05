@@ -120,11 +120,11 @@ export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenI
 
   return (
     <div className="author-works-overlay">
-      <div className="author-works-header">
-        <button className="author-works-back" onClick={onClose} aria-label="返回">‹</button>
-        <span className="author-works-title">@{authorName || authorId} 的作品</span>
-      </div>
       <div className="author-works-content">
+        <div className="author-works-header">
+          <button className="author-works-back" onClick={onClose} aria-label="返回">‹</button>
+          <span className="author-works-title">@{authorName || authorId} 的作品</span>
+        </div>
         {loading && <div className="hint">加载中...</div>}
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (

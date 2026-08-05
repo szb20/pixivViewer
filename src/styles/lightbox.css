@@ -23,17 +23,13 @@
 
 /* 点击图片隐藏 UI 控件 */
 .lightbox-overlay .lightbox-close,
-.lightbox-overlay .lightbox-nav,
-.lightbox-overlay .lightbox-dl-btn,
-.lightbox-overlay .lightbox-actions {
+.lightbox-overlay .lightbox-nav {
   opacity: 1;
   transition: opacity 0.25s ease;
 }
 
 .lightbox-overlay.hide-ui .lightbox-close,
-.lightbox-overlay.hide-ui .lightbox-nav,
-.lightbox-overlay.hide-ui .lightbox-dl-btn,
-.lightbox-overlay.hide-ui .lightbox-actions {
+.lightbox-overlay.hide-ui .lightbox-nav {
   opacity: 0;
   pointer-events: none;
 }
@@ -65,7 +61,6 @@
   background: rgba(255, 255, 255, 0.12);
   border-radius: 50%;
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 .lightbox-nav {
@@ -85,7 +80,6 @@
   border: none;
   border-radius: 50%;
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s, transform 0.15s;
 }
@@ -118,23 +112,6 @@
   width: 100%;
   will-change: transform;
   align-items: center;
-}
-
-/* ── 底部操作栏（当前页下载等） ── */
-.lightbox-actions {
-  position: absolute;
-  bottom: 28px;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  z-index: 10;
-  pointer-events: none;
-}
-
-.lightbox-actions > * {
-  pointer-events: auto;
 }
 
 .lightbox-slide {

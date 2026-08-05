@@ -1,26 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
-import { storageFacade } from '../pixiv-assistant/index.js';
-import { pixivApi } from '../api/pixiv.js';
-import { useTabFeed } from '../hooks/useTabFeed.js';
-import { pixivReUrl } from '../pixiv-assistant/core/utils.js';
-import { createLogger } from '../utils/logger.js';
+import { storageFacade } from '../../pixiv-assistant/index.js';
+import { pixivApi } from '../../api/pixiv.js';
+import { useTabFeed } from '../../hooks/useTabFeed.js';
+import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
+import { createLogger } from '../../utils/logger.js';
 
 const PAGE_SIZE = 24;
-const CACHE_KEY = 'gallery';
-const log = createLogger('GalleryPage');
+const CACHE_KEY = 'me_liked';
+const log = createLogger('LikedPanel');
 // 模块级去重：缺缩略图的老记录只迁移一次，失败的本次会话不再重试
 const migrateInFlight = new Set();
 const migrateFailed = new Set();
 
-export default function GalleryPage({ onOpen, registerRefresh }) {
+/** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 MePage 聚合，不在此注册。 */
+export default function LikedPanel({ onOpen, onReportLoad }) {
   const offsetRef = useRef(0);
   // 加载失败的缩略图 key 集合 → 显示占位，点击重试
   const [failed, setFailed] = useState({});
 
-  // 本地数据源（IndexedDB 喜欢列表），分页 + 哨兵 + 刷新统一由 useTabFeed 处理
+  // 本地数据源（IndexedDB 喜欢列表），分页 + 哨兵由 useTabFeed 处理
   const feed = useTabFeed({
     cacheKey: CACHE_KEY,
-    registerRefresh,
     fetchPage: async (append) => {
       if (!append) offsetRef.current = 0;
       const r = await storageFacade.listLiked(offsetRef.current, PAGE_SIZE);
@@ -32,6 +32,11 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
     },
   });
   const { load: reload } = feed;
+
+  // 上报 load 给 MePage，用于"我"页下拉刷新 / 双击刷新
+  useEffect(() => {
+    onReportLoad?.('liked', reload);
+  }, [reload, onReportLoad]);
 
   // 老记录没存缩略图：后台拉一次详情回填（一次性迁移），避免网格加载 pixiv.re 原图
   useEffect(() => {
@@ -77,7 +82,7 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
   }, [reload]);
 
   return (
-    <div className="page">
+    <>
       {feed.loading && feed.items.length === 0 && <div className="hint">加载中...</div>}
       {!feed.loading && feed.error && (
         <div className="error-box">
@@ -124,6 +129,6 @@ export default function GalleryPage({ onOpen, registerRefresh }) {
         })}
       </div>
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-    </div>
+    </>
   );
 }

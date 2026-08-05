@@ -9,9 +9,8 @@ import DetailView from './components/detail/DetailView.jsx';
 import AuthorWorksPage from './components/AuthorWorksPage.jsx';
 import DiscoverPage from './pages/DiscoverPage.jsx';
 import RankingPage from './pages/RankingPage.jsx';
-import BookmarksPage from './pages/BookmarksPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
-import GalleryPage from './pages/GalleryPage.jsx';
+import MePage from './pages/MePage.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
@@ -26,9 +25,8 @@ window.__pixivViewer = window.__pixivViewer || { storageFacade };
 const TABS = [
   { key: 'discover', label: '推荐' },
   { key: 'ranking', label: '排行' },
-  { key: 'bookmarks', label: '收藏' },
   { key: 'search', label: '搜索' },
-  { key: 'gallery', label: '喜欢' },
+  { key: 'me', label: '我' },
 ];
 
 const log = createLogger('App');
@@ -127,18 +125,6 @@ export default function App() {
               </ErrorBoundary>
             )}
           </div>
-          <div style={{ display: activeTab === 'bookmarks' ? undefined : 'none' }}>
-            {visitedTabs.has('bookmarks') && (
-              <ErrorBoundary key="bookmarks">
-                <BookmarksPage
-                  onOpen={openDetail}
-                  onOpenSettings={openSettings}
-                  registerRefresh={registerRefresh}
-                  refreshToken={tabTokens.bookmarks || 0}
-                />
-              </ErrorBoundary>
-            )}
-          </div>
           <div style={{ display: activeTab === 'search' ? undefined : 'none' }}>
             {visitedTabs.has('search') && (
               <ErrorBoundary key="search">
@@ -152,10 +138,16 @@ export default function App() {
               </ErrorBoundary>
             )}
           </div>
-          <div style={{ display: activeTab === 'gallery' ? undefined : 'none' }}>
-            {visitedTabs.has('gallery') && (
-              <ErrorBoundary key="gallery">
-                <GalleryPage onOpen={openDetail} registerRefresh={registerRefresh} />
+          <div style={{ display: activeTab === 'me' ? undefined : 'none' }}>
+            {visitedTabs.has('me') && (
+              <ErrorBoundary key="me">
+                <MePage
+                  active={activeTab === 'me'}
+                  onOpen={openDetail}
+                  onOpenSettings={openSettings}
+                  registerRefresh={registerRefresh}
+                  refreshToken={tabTokens.me || 0}
+                />
               </ErrorBoundary>
             )}
           </div>

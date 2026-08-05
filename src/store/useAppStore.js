@@ -3,9 +3,8 @@ import { create } from 'zustand';
 const TABS = [
     { key: 'discover', label: '推荐' },
     { key: 'ranking', label: '排行' },
-    { key: 'bookmarks', label: '收藏' },
     { key: 'search', label: '搜索' },
-    { key: 'gallery', label: '喜欢' },
+    { key: 'me', label: '我' },
 ];
 
 export const useAppStore = create((set, get) => ({
@@ -63,6 +62,8 @@ export const useAppStore = create((set, get) => ({
     // ========== 详情页相关 ==========
     detailImage: null,
     authorWorks: null,
+    // 从作者页打开详情时记录返回目标（关闭详情时回到作者页，而非直接回首页）
+    returnToAuthor: null,
     searchSeed: null,
     settingsOpen: false,
     showProxyError: false,
@@ -74,12 +75,18 @@ export const useAppStore = create((set, get) => ({
         if (el) {
             set({ scrollPositions: { ...scrollPositions, [activeTab]: el.scrollTop } });
         }
-        set({ detailImage: img });
+        // 普通路径打开详情（列表/推荐/相关）→ 清除"从作者页返回"标记
+        set({ detailImage: img, returnToAuthor: null });
     },
 
     closeDetail: () => {
-        const { activeTab, scrollPositions } = get();
-        set({ detailImage: null });
+        const { activeTab, scrollPositions, returnToAuthor } = get();
+        set({ detailImage: null, returnToAuthor: null });
+        if (returnToAuthor) {
+            // 从作者页打开的详情 → 关闭时回到作者页
+            set({ authorWorks: returnToAuthor });
+            return;
+        }
         requestAnimationFrame(() => {
             const el = document.querySelector('.app-content');
             if (el) el.scrollTop = scrollPositions[activeTab] || 0;
@@ -97,6 +104,7 @@ export const useAppStore = create((set, get) => ({
 
     openAuthorImage: (item) => {
         const { authorWorks } = get();
+        const returnTarget = authorWorks;
         set({ authorWorks: null });
         get().openDetail({
             illustId: item.illustId,
@@ -111,11 +119,13 @@ export const useAppStore = create((set, get) => ({
             illustType: item.illustType ?? 0,
             _totalPages: item.pageCount || 1,
         });
+        // openDetail 会清 returnToAuthor，这里再补回"从作者页打开"的返回目标
+        set({ returnToAuthor: returnTarget });
     },
 
     searchByTag: (tag) => {
         if (!tag) return;
-        set({ detailImage: null });
+        set({ detailImage: null, returnToAuthor: null });
         const { visitedTabs } = get();
         const newVisited = new Set(visitedTabs);
         newVisited.add('search');

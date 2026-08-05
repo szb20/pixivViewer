@@ -16,16 +16,20 @@
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* 顶部栏 + 系统栏整体毛玻璃：sticky 在滚动内容之上，内容从底部滚过时产生模糊 */
 .author-works-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px);
   flex: none;
 }
 
@@ -370,7 +374,7 @@
 /* 详情页左下角悬浮喜欢按钮 */
 .detail-floating-like {
     position: fixed;
-    bottom: max(24px, env(safe-area-inset-bottom, 16px));
+    bottom: max(80px, calc(env(safe-area-inset-bottom, 16px) + 60px));
     left: 16px;
     z-index: 100;
   }

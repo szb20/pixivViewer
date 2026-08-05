@@ -1,0 +1,21 @@
+/* ══════════════════════════════════════════════
+   "我"页面 · 子标签栏 + 面板
+   ══════════════════════════════════════════════ */
+
+.me-page {
+  /* 底部留出固定子标签栏（bottom:48px，高约40px）+ 主 TabBar 的空间 */
+  padding: 0 0 96px;
+}
+
+/* ── 子标签栏：复用主底边栏（tab-bar frosted + tab-btn）样式，
+     位置浮在主 TabBar 上方（bottom:48px），弹入弹出复用 chips-hidden ── */
+.sub-tab-bar {
+  bottom: 48px;
+  /* 弹入弹出过渡（chips-hidden 驱动） */
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* ── 面板容器 ── */
+.me-panels {
+  min-height: calc(100vh - 200px);
+}

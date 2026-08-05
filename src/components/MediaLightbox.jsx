@@ -22,7 +22,6 @@ const MAX_IMG_RETRY = 3;
  *   initialIndex — 初始显示的媒体索引
  *   onClose      — () => void
  *   onIndexChange— (index) => void
- *   renderActions— (item, index) => ReactNode  消费者自定义操作按钮
  *   disableZoom  — 强制禁用缩放手势（默认根据 type 自动判断）
  *   zIndex       — 自定义 z-index（默认 10000）
  */
@@ -77,7 +76,6 @@ export default function MediaLightbox({
   initialIndex = 0,
   onClose,
   onIndexChange,
-  renderActions,
   disableZoom: forceDisableZoom,
   zIndex = 10000,
 }) {
@@ -382,12 +380,6 @@ export default function MediaLightbox({
             </div>
           ))}
         </div>
-        {/* 当前页操作按钮（消费者自定义，如下载） */}
-        {renderActions && cur && (
-          <div className="lightbox-actions">
-            {renderActions(cur, index)}
-          </div>
-        )}
       </div>
     </div>
   );
