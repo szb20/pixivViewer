@@ -30,15 +30,25 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
     window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));
   }, []);
 
-  // 点赞时附带的展示元数据：存完整缩略图 URL（避免依赖 pixiv.re 短链反查）+ 标题/作者
-  const likeMeta = useCallback((img) => ({
-    thumbnailUrl: img.thumbnailUrl || img.mediumUrl || '',
-    title: img.title || '',
-    author: img.author || '',
-    authorName: img.authorName || img.author || '',
-    authorId: img.authorId || '',
-    type: img.type === 'gif' ? 'gif' : 'image',
-  }), []);
+  // 「喜欢」页网格需要展示缩略图/标题/总页数，点赞时把元数据一并写入记录
+  // （完整缩略图 URL 避免依赖 pixiv.re 短链反查）
+  const likeMeta = useCallback((img) => {
+    const m = img || cur;
+    return {
+      thumbnailUrl: m.thumbnailUrl || m.mediumUrl || '',
+      title: m.title || '',
+      author: m.author || '',
+      authorName: m.authorName || m.author || '',
+      authorAccount: m.authorAccount || '',
+      authorId: m.authorId || '',
+      tags: m.tags || [],
+      pixivUrl: m.pixivUrl || '',
+      pageCount: m.pageCount || m._totalPages || 0,
+      width: m.width || 0,
+      height: m.height || 0,
+      type: m.type === 'gif' ? 'gif' : 'image',
+    };
+  }, [cur]);
 
   const handleLike = useCallback(async (e) => {
     // 长按已触发下载，本次合成的 click 不再切换喜欢
@@ -77,9 +87,13 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
 
     // 单图 / GIF：喜欢 = 下载；多图：喜欢只是喜欢，下载走长按或灯箱按钮
     if (result.liked && !multiPage && typeof onLikeSaveAll === 'function') {
-      onLikeSaveAll(cur).then((count) => {
-        const n = Number(count) || 0;
-        showToast(n > 0 ? `已保存 ${n} 页到相册` : '已在相册中');
+      onLikeSaveAll(cur).then((res) => {
+        const saved = Number(res?.saved ?? res) || 0;
+        const exists = Number(res?.exists) || 0;
+        if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`);
+        else if (saved > 0) showToast(`已保存 ${saved} 页到相册`);
+        else if (exists > 0) showToast('已在相册中');
+        else showToast('下载失败');
       }).catch(() => {});
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged, likeMeta]);
@@ -92,9 +106,9 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
     const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
     if (!prevLiked) {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: Date.now() } }));
-          if (typeof storageFacade.toggleLike === 'function') {
-            try {
-              const result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, likeMeta(cur));
+      if (typeof storageFacade.toggleLike === 'function') {
+        try {
+          const result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, likeMeta(cur));
           if (result.success) {
             setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
             notifyLikedChanged();
@@ -111,8 +125,13 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages }) {
       showToast('当前平台暂不支持下载');
       return;
     }
-    const count = await onLikeSaveAll(cur).catch(() => 0);
-    showToast(count > 0 ? `已保存 ${count} 页到相册` : '已在相册中');
+    const res = await onLikeSaveAll(cur).catch(() => null);
+    const saved = Number(res?.saved ?? res) || 0;
+    const exists = Number(res?.exists) || 0;
+    if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`);
+    else if (saved > 0) showToast(`已保存 ${saved} 页到相册`);
+    else if (exists > 0) showToast('已在相册中');
+    else showToast('下载失败');
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, notifyLikedChanged, likeMeta]);
 
   const startLongPress = useCallback((e) => {

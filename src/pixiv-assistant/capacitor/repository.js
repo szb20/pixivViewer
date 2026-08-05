@@ -169,9 +169,35 @@ export class PixivRepository {
   }
 
   /**
+   * 回填缺失的展示元数据（浏览详情/启动迁移时把缩略图/标题/作者写回）。
+   * 只补空字段，不覆盖已有值。
+   * @param {string} id
+   * @param {object} [meta]
+   * @returns {Promise<{updated: boolean}>}
+   */
+  async backfillMeta(id, meta = {}) {
+    const record = await getMeta(id);
+    if (!record) return { updated: false };
+    let changed = false;
+    if (meta.thumbnailUrl && !record.thumbnailUrl) { record.thumbnailUrl = meta.thumbnailUrl; changed = true; }
+    if (meta.title && !record.title) { record.title = meta.title; changed = true; }
+    if ((meta.authorName || meta.author) && !record.authorName) {
+      record.authorName = meta.authorName || meta.author || '';
+      record.author = meta.author || meta.authorName || '';
+      changed = true;
+    }
+    if (meta.authorId && !record.authorId) { record.authorId = meta.authorId; changed = true; }
+    if (meta.pixivUrl && !record.pixivUrl) { record.pixivUrl = meta.pixivUrl; changed = true; }
+    if (meta.pageCount && !record.pageCount) { record.pageCount = meta.pageCount; changed = true; }
+    if (changed) await putMeta(record);
+    return { updated: changed };
+  }
+
+  /**
    * 切换喜欢状态。
    * @param {string} id
-   * @param {object} [meta] — 喜欢时附带的展示元数据（完整缩略图 URL / 标题 / 作者等）
+   * @param {object} [meta] — 展示元数据（缩略图/标题/作者/总页数等），轻记录创建时写入，
+   *                          已有记录缺字段时回填，供「喜欢」页网格展示。
    * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
    */
   async toggleLike(id, meta = {}) {
@@ -193,8 +219,14 @@ export class PixivRepository {
         title: meta.title || '',
         author: meta.author || '',
         authorName: meta.authorName || meta.author || '',
+        authorAccount: meta.authorAccount || '',
         authorId: meta.authorId || '',
+        tags: Array.isArray(meta.tags) ? meta.tags : [],
         thumbnailUrl: meta.thumbnailUrl || '',
+        pixivUrl: meta.pixivUrl || '',
+        pageCount: meta.pageCount || 0,
+        width: meta.width || 0,
+        height: meta.height || 0,
       };
       await putMeta(lightRecord);
       return { success: true, liked: true, likedAt: now };
@@ -202,11 +234,18 @@ export class PixivRepository {
 
     const wasLiked = (record.likedAt || 0) > 0;
     record.likedAt = wasLiked ? 0 : Date.now();
-    // 填充缺失的展示元数据（不覆盖已有值）
-    for (const key of ['thumbnailUrl', 'title', 'author', 'authorName', 'authorId', 'type']) {
-      const val = meta[key];
-      if (val && !record[key]) record[key] = val;
+    // 旧轻记录升级：回填缺失的展示元数据
+    if (meta.thumbnailUrl && !record.thumbnailUrl) record.thumbnailUrl = meta.thumbnailUrl;
+    if (meta.title && !record.title) record.title = meta.title;
+    if ((meta.authorName || meta.author) && !record.authorName) {
+      record.authorName = meta.authorName || meta.author || '';
+      record.author = meta.author || meta.authorName || '';
     }
+    if (meta.authorId && !record.authorId) record.authorId = meta.authorId;
+    if (meta.type && !record.type) record.type = meta.type;
+    if (Array.isArray(meta.tags) && meta.tags.length && !record.tags?.length) record.tags = meta.tags;
+    if (meta.pixivUrl && !record.pixivUrl) record.pixivUrl = meta.pixivUrl;
+    if (meta.pageCount && !record.pageCount) record.pageCount = meta.pageCount;
     await putMeta(record);
     return { success: true, liked: !wasLiked, likedAt: record.likedAt };
   }

@@ -139,6 +139,11 @@ export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenI
                     loading="lazy"
                     onError={e => { e.target.style.display = 'none'; }}
                   />
+                  {Number(it.pageCount) > 1 && (
+                    <span className="pixiv-grid-pages frosted">
+                      {Number(it.pageCount)}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

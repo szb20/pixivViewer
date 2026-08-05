@@ -41,7 +41,18 @@ export class NetworkStore {
           log.info('原生下载失败，降级 CapacitorHttp:', e?.message || e);
         }
       }
-      return await this._downloadWithCapacitor(url);
+      // CapacitorHttp 没有进度事件，用正弦估算模拟下载中状态
+      let ramp = 0;
+      const rampTimer = setInterval(() => {
+        ramp = Math.min(90, ramp + 3);
+        onProgress?.(ramp);
+        if (ramp >= 90) clearInterval(rampTimer);
+      }, 400);
+      try {
+        return await this._downloadWithCapacitor(url);
+      } finally {
+        clearInterval(rampTimer);
+      }
     }
     try {
       const resp = await fetch(abs, { headers: { Referer: 'https://www.pixiv.net/' } });

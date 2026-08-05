@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { pixivApi } from '../../api/pixiv.js';
 import { saveItem } from '../../api/index.js';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
@@ -13,6 +13,7 @@ import { gridThumbUrl } from '../../utils/quality.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
 import { showToast } from '../../utils/toast.js';
+import { buildLikedOrSavedSet } from '../../utils/worksState.js';
 
 const log = createLogger('ImageDetail');
 /** 批量保存时的最大并发页数 */
@@ -30,35 +31,49 @@ function DetailPageBlock({ page, totalPages, image, previewUrl, defaultRatio, re
   const [loaded, setLoaded] = useState(false); // 预览图是否加载完成（加载占位用）
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
-  const startPosRef = useRef(null); // 长按起始位置（用于移动阈值判断）
+  const pressStartRef = useRef(null); // { x, y } long-press origin; tolerate tiny finger jitter
 
   // 长按 500ms 触发单页下载；只有明显移动(>10px)/抬起/离开才取消。
-  // 注意：不监听 pointercancel 取消 —— WebView 自己的长按检测会先发 pointercancel，
-  // 若取消会把手势吃掉（这也是之前长按失效的原因）。
+  // 用 setPointerCapture 锁定指针，配合 contextmenu 兜底，避免被 WebView/click 吃掉。
   const startLongPress = useCallback((e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    pressStartRef.current = { x: e.clientX, y: e.clientY };
     longPressTriggeredRef.current = false;
     clearTimeout(longPressTimerRef.current);
-    startPosRef.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
     longPressTimerRef.current = setTimeout(() => {
       longPressTriggeredRef.current = true;
+      pressStartRef.current = null;
       onLongPress?.(page);
     }, 500);
   }, [page, onLongPress]);
-  const handleLongPressMove = useCallback((e) => {
-    const start = startPosRef.current;
-    if (start && (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10)) {
+
+  const handlePointerMove = useCallback((e) => {
+    const start = pressStartRef.current;
+    if (!start) return;
+    if (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10) {
       clearTimeout(longPressTimerRef.current);
-      startPosRef.current = null;
+      pressStartRef.current = null;
     }
   }, []);
+
   const cancelLongPress = useCallback(() => {
+    pressStartRef.current = null;
     clearTimeout(longPressTimerRef.current);
-    startPosRef.current = null;
   }, []);
 
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    if (e.button === 2) return;
+    if (longPressTriggeredRef.current) return;
+    longPressTriggeredRef.current = true;
+    clearTimeout(longPressTimerRef.current);
+    onLongPress?.(page);
+  }, [page, onLongPress]);
+
   // 所有页用缩略图模糊铺底，第 0 页用 thumb，其他页更模糊
-  const bg = image?.thumbnailUrl || pixivReUrl(String(image.illustId), page, 'thumb');
+  // 缩略图铺底：优先网格带进来的真实缩略图；其他页兜底用 pixiv.re 原图短链（thumb 裁剪路径 404）
+  const bg = image?.thumbnailUrl || pixivReUrl(String(image.illustId), page);
   const bgClass = page === 0 ? 'image-detail-bg' : 'image-detail-bg image-detail-bg--deep';
   // 展示图：已下载页 → 本地原图（blob）；未下载页 → 540px 等比预览（加载前只保留比例占位块）
   const src = previewUrl;
@@ -76,14 +91,20 @@ function DetailPageBlock({ page, totalPages, image, previewUrl, defaultRatio, re
         onOpenLightbox?.(page);
       }}
       onPointerDown={startLongPress}
-      onPointerMove={handleLongPressMove}
+      onPointerMove={handlePointerMove}
       onPointerUp={cancelLongPress}
       onPointerLeave={cancelLongPress}
-      onContextMenu={(e) => e.preventDefault()}
+      onPointerCancel={cancelLongPress}
+      onContextMenu={handleContextMenu}
       style={{ aspectRatio: heroRatio, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'pan-y' }}
     >
-      {bg && <img className={bgClass} src={bg} alt="" />}
-      {src && !failed ? (
+      {bg && <img className={bgClass} src={bg} alt="" draggable={false} />}
+      {!src ? (
+        // illustData 尚未加载，先显示转圈占位
+        <div className="image-detail-placeholder">
+          <span className="image-detail-placeholder-spinner" />
+        </div>
+      ) : !failed ? (
         <>
           {!loaded && (
             <div className="image-detail-placeholder">
@@ -112,12 +133,12 @@ function DetailPageBlock({ page, totalPages, image, previewUrl, defaultRatio, re
             }}
           />
         </>
-      ) : (src && failed ? (
+      ) : (
         <div className="image-detail-error">加载失败</div>
-      ) : null)}
+      )}
       {/* 页数标注：直接标在本页图片右下角 */}
       {totalPages > 1 && (
-        <span className="detail-hero-pages">{page + 1} / {totalPages}</span>
+        <span className="detail-hero-pages">{page + 1}/{totalPages}</span>
       )}
     </div>
   );
@@ -132,6 +153,8 @@ export default function ImageDetailView({
   restoreScroll = 0,
 }) {
   const { pixivCache, setPixivCache } = usePixivCache();
+  // 已喜欢/已保存的作品不进入相关推荐；当前作品本身也排除
+  const likedOrSavedSet = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const relatedCacheRef = useRef({}); // illustId → { related, loadedPages }
@@ -156,6 +179,7 @@ export default function ImageDetailView({
     illustData?.illust?.pageCount || 0,
     illustData?.illust?.images?.length || 0,
     image?._totalPages || 0,
+    image?.pageCount || 0,
     1,
   );
   // 详情页占位宽高比：优先第 0 页真实尺寸，拿不到用常见 3:4 兜底
@@ -225,24 +249,28 @@ export default function ImageDetailView({
   // 浏览时回填：已保存/喜欢的实体缺元数据时，把 完整缩略图URL/标题/作者/tags 写回并更新备份
   // （这样「喜欢」页无需依赖 pixiv.re 短链反查，直接显示完整 URL 缩略图）
   useEffect(() => {
+    const illust = illustData?.illust;
     if (!image?.illustId) return;
-    const tags = Array.isArray(illustData?.illust?.tags) ? illustData.illust.tags.filter(Boolean) : [];
+    const tags = Array.isArray(illust?.tags) ? illust.tags.filter(Boolean) : [];
+    const p0 = illust?.images?.[0] || {};
     const meta = {
-      thumbnailUrl: image?.thumbnailUrl || illustData?.illust?.images?.[0]?.url || '',
-      title: image?.title || illustData?.illust?.title || '',
-      author: image?.authorName || image?.author || illustData?.illust?.authorName || '',
-      authorName: image?.authorName || illustData?.illust?.authorName || '',
-      authorId: image?.authorId || illustData?.illust?.authorId || '',
+      thumbnailUrl: image?.thumbnailUrl || p0.thumbnailUrl || p0.previewUrl || p0.url || '',
+      title: image?.title || illust?.title || '',
+      author: image?.authorName || image?.author || illust?.authorName || illust?.author || '',
+      authorName: image?.authorName || illust?.authorName || illust?.author || '',
+      authorId: image?.authorId || illust?.authorId || '',
+      pageCount: illust?.pageCount || 0,
       tags,
     };
-    if (!meta.thumbnailUrl && !meta.title && tags.length === 0) return;
+    if (!meta.thumbnailUrl && !meta.title && !meta.authorName && tags.length === 0) return;
     (async () => {
       const totalPages = Math.max(pageCount, image?._totalPages || 1);
       for (let p = 0; p < totalPages; p++) {
         const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
         const cur = pixivCache[ck];
         if (!cur?.saved && !cur?.liked) continue; // 只回填已保存/喜欢的条目
-        await storageFacade.fillMeta(image.illustId, p, meta);
+        await storageFacade.fillMeta(image.illustId, p, meta);       // 补 tags / URL / 标题
+        await storageFacade.backfillMeta(image.illustId, p, meta);   // 补 pageCount / pixivUrl
       }
     })().catch(() => {});
   }, [illustData, image, pixivCache, pageCount]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -298,9 +326,10 @@ export default function ImageDetailView({
     };
   }, [image, illustData, isGif]);
 
-  // 保存全部页（长按❤️/喜欢单图时调用）— 分批并发，最多 3 页同时下载；返回实际保存页数
+  // 保存全部页（长按❤️/喜欢单图时调用）— 分批并发，最多 3 页同时下载；
+  // 返回 { saved, exists }：新增保存页数 / 相册中已存在的页数
   const saveAllPages = useCallback(async () => {
-    if (!image?.illustId) return 0;
+    if (!image?.illustId) return { saved: 0, exists: 0 };
     let imgs = illustData?.illust?.images || [];
     let total = pageCount;
     // illustData 未就绪时先拉一次详情，确保拿到完整页数
@@ -313,29 +342,35 @@ export default function ImageDetailView({
     }
     total = Math.max(total, image?._totalPages || 1);
     const pages = [];
+    const existsInCache = [];
     for (let p = 0; p < total; p++) {
       // 跳过已保存的页面（auto-save 已处理当前页，避免重复下载+重复 toast）
       const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
-      if (pixivCache[ck]?.saved) continue;
+      if (pixivCache[ck]?.saved) { existsInCache.push(p); continue; }
       pages.push({ item: buildSaveItem(p, imgs), ck });
     }
     let savedCount = 0;
+    let existsCount = existsInCache.length;
     for (let i = 0; i < pages.length; i += SAVE_BATCH_SIZE) {
       const batch = pages.slice(i, i + SAVE_BATCH_SIZE);
       const results = await Promise.allSettled(batch.map(async ({ item, ck }) => {
         const r = await saveItem(item);
         if (r?.success || r?.cached) {
           setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
-          return 1;
+          return r;
         }
-        return 0;
+        return null;
       }));
       for (const r of results) {
-        if (r.status === 'fulfilled') savedCount += r.value;
-        else log.warn('批量保存单页失败:', r.reason?.message || r.reason);
+        if (r.status === 'fulfilled' && r.value) {
+          if (r.value.idempotent || r.value.skipped) existsCount += 1;
+          else savedCount += 1;
+        } else {
+          log.warn('批量保存单页失败:', r.reason?.message || r.reason);
+        }
       }
     }
-    return savedCount;
+    return { saved: savedCount, exists: existsCount };
   }, [image, pageCount, illustData, pixivCache, buildSaveItem, setPixivCache]);
 
   // 长按图片 → 下载该页原图（单页保存）
@@ -360,7 +395,7 @@ export default function ImageDetailView({
       const r = await saveItem(buildSaveItem(page, imgs));
       if (r?.success || r?.cached) {
         setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
-        showToast(alreadySaved ? '该页已在相册中' : `已保存第 ${page + 1} 页到相册`);
+        showToast(r?.idempotent || r?.skipped ? '该页已在相册中' : `已保存第 ${page + 1} 页到相册`);
       } else {
         showToast('下载失败');
       }
@@ -402,7 +437,7 @@ export default function ImageDetailView({
         height: image?.height || illustData?.illust?.height || 0,
         // small 图（540px，同比例）——灯箱原图逐行渲染时托底，避免底部空黑
         previewUrl: imgs[p]?.previewUrl || '',
-        thumbnailUrl: image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0, 'thumb'),
+        thumbnailUrl: image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0),
       });
     }
     return items;
@@ -548,11 +583,7 @@ export default function ImageDetailView({
         {/* 相关推荐网格 */}
         <div style={{ height: 60 }} />
         {loadingRelated && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0 }}>
-            {[1,2,3,4,5,6].map(i => (
-              <div key={i} style={{ aspectRatio: '1', background: 'var(--bg-secondary)' }} />
-            ))}
-          </div>
+          <div className="hint">正在加载相关推荐...</div>
         )}
         {related.length > 0 && (
           <div className="pixiv-grid" ref={relatedRef}>
@@ -561,6 +592,8 @@ export default function ImageDetailView({
               const seen = new Set();
               return related.map((img) => {
                 if (img._pageIndex !== 0) return null;
+                if (img.illustId === image?.illustId) return null;
+                if (likedOrSavedSet.has(img.illustId)) return null;
                 if (seen.has(img.illustId)) return null;
                 seen.add(img.illustId);
                 const isGif = img.type === 'gif';

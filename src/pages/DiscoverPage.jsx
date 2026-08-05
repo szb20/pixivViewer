@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
-import { useLikedSet } from '../context/pixivCacheContext.js';
+import { useLikedSet, usePixivCache } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import { buildLikedOrSavedSet } from '../utils/worksState.js';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
 
@@ -12,6 +13,7 @@ const log = createLogger('Discover');
 
 export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
+  const { pixivCache } = usePixivCache();
   const startRef = useRef(0);
 
   const feed = useTabFeed({
@@ -46,6 +48,13 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
     },
   });
 
+  // 已喜欢/已保存的作品不再出现在推荐网格里
+  const likedOrSaved = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
+  const visibleItems = useMemo(
+    () => feed.items.filter(img => !likedOrSaved.has(img.illustId)),
+    [feed.items, likedOrSaved],
+  );
+
   const needCookie = !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
 
   return (
@@ -58,7 +67,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
             <button className="error-retry" onClick={() => feed.load(false)}>重试</button>
           </div>
         ))}
-      <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
+      <ImageGrid items={visibleItems} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}

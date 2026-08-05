@@ -25,6 +25,7 @@ export class PixivEntity {
    * @param {string}  [data.authorId='']
    * @param {string[]} [data.tags=[]]
    * @param {number}  [data.cachedAt]
+   * @param {number}  [data.pageCount]
    * @param {number}  [data.size=0]
    * @param {Array}   [data.frames]
    * @param {number}  [data.frameCount]
@@ -50,6 +51,7 @@ export class PixivEntity {
     this.authorId = data.authorId || '';
     this.tags = data.tags || [];
     this.cachedAt = data.cachedAt ?? Date.now();
+    this.pageCount = data.pageCount || 0;
     this.size = data.size || 0;
     this.frames = data.frames;
     this.frameCount = data.frameCount;
@@ -118,6 +120,7 @@ export class PixivEntity {
       authorId: record.authorId || '',
       tags: record.tags || [],
       cachedAt: record.cachedAt || Date.now(),
+      pageCount: record.pageCount || 0,
       size: record.size || 0,
       frames: record.frames,
       frameCount: record.frameCount,
@@ -147,6 +150,7 @@ export class PixivEntity {
       authorId: this.authorId,
       tags: this.tags,
       cachedAt: this.cachedAt,
+      pageCount: this.pageCount,
       size: this.size,
       frames: this.frames,
       frameCount: this.frameCount,

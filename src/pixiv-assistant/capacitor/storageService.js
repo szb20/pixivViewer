@@ -177,10 +177,10 @@ export class PixivStorageService {
   }
 
   /**
-   * 切换喜欢状态。
+   * 切换喜欢状态（可携带展示元数据，供「喜欢」页展示缩略图/标题）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]
-   * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
+   * @param {object} [meta]
    */
   async toggleLike(illustId, pageIndex = 0, meta = {}) {
     const id = PixivEntity.makeId(illustId, pageIndex);
@@ -201,6 +201,20 @@ export class PixivStorageService {
     const result = await this.repository.fillMeta(id, meta);
     if (result?.updated) scheduleMetaBackup();
     return result;
+  }
+
+  /**
+   * 回填缺失的展示元数据（缩略图/标题/作者等），供「喜欢」页网格展示。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {object} [meta]
+   * @returns {Promise<{updated: boolean}>}
+   */
+  async backfillMeta(illustId, pageIndex = 0, meta = {}) {
+    const id = PixivEntity.makeId(illustId, pageIndex);
+    const r = await this.repository.backfillMeta(id, meta);
+    if (r?.updated) scheduleMetaBackup();
+    return r;
   }
 
   /**
@@ -281,33 +295,20 @@ export class PixivStorageService {
       kind: 'image',
       message: '下载原图',
     });
-    // 真实字节进度拿不到（CapacitorHttp 无进度事件、i.pixiv.re 无 CORS 无法流式读取），
-    // 用阶段估算：下载中 5→55% 缓速前进，写入相册 75%，完成 100%
-    mon.setProgress(5);
-    let ramp = 5;
-    let gotRealProgress = false;
-    const rampTimer = setInterval(() => {
-      if (gotRealProgress) { clearInterval(rampTimer); return; }
-      ramp = Math.min(55, ramp + 4);
-      mon.setProgress(ramp);
-      if (ramp >= 55) clearInterval(rampTimer);
-    }, 600);
+    mon.setProgress(0);
     let data = null;
     let usedUrl = '';
     try {
       for (const url of urls) {
         data = await this.networkStore.downloadImage(url, (pct) => {
-          gotRealProgress = true;
           mon.setProgress(pct);
         });
         if (data) { usedUrl = url; break; }
       }
       if (!data) {
-        clearInterval(rampTimer);
         mon.finish(false, '下载失败');
         return { success: false, error: 'download_failed' };
       }
-      clearInterval(rampTimer);
       mon.setStatus('writing', '写入相册');
       mon.setProgress(75);
 

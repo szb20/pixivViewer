@@ -126,11 +126,10 @@ export class StorageFacade {
   }
 
   /**
-   * 切换喜欢状态。
-   * 成功后的事件广播（pixiv:liked-changed）由 UI 层负责派发，本层保持纯逻辑。
+   * 切换喜欢状态（可携带展示元数据，供「喜欢」页展示缩略图/标题）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]
-   * @returns {Promise<{success: boolean, liked: boolean, likedAt: number}>}
+   * @param {object} [meta]
    */
   async toggleLike(illustId, pageIndex = 0, meta = {}) {
     if (!illustId) return { success: false, liked: false, likedAt: 0 };
@@ -147,6 +146,18 @@ export class StorageFacade {
   async fillMeta(illustId, pageIndex = 0, meta = {}) {
     if (!illustId) return { updated: false };
     return await this.service.fillMeta(illustId, pageIndex, meta);
+  }
+
+  /**
+   * 回填缺失的展示元数据（缩略图/标题/作者等），供「喜欢」页网格展示。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {object} [meta]
+   * @returns {Promise<{updated: boolean}>}
+   */
+  async backfillMeta(illustId, pageIndex = 0, meta = {}) {
+    if (!illustId) return { updated: false };
+    return await this.service.backfillMeta(illustId, pageIndex, meta);
   }
 
   /**
