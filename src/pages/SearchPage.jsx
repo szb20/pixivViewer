@@ -5,18 +5,21 @@ import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import SearchIcon from '../components/icons/SearchIcon.jsx';
+import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
 import '../styles/search.css';
 
 const PAGE_SIZE = 20;
-const HISTORY_KEY = 'pixiv_search_history';
 const CACHE_KEY = 'search:last';
+
+// 迁移旧版独立历史 key → 统一 key
+migrateFromLegacyKey('pixiv_search_history', 'searchHistory');
 
 export default function SearchPage({ active = true, onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const likedSet = useLikedSet();
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
   const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+    return appStorage.get('searchHistory', []);
   });
   const [hideBar, setHideBar] = useState(false); // 滚动时弹入/弹出搜索栏（同筛选栏）
   const queryRef = useRef('');
@@ -66,7 +69,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     setQuery(trimmed);
     setHistory(prev => {
       const next = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 12);
-      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      appStorage.set('searchHistory', next);
       return next;
     });
     setSearched(true);
@@ -74,7 +77,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   }, [reload]);
 
   const clearHistory = useCallback(() => {
-    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+    appStorage.remove('searchHistory');
     setHistory([]);
   }, []);
 

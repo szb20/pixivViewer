@@ -6,6 +6,7 @@ import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
+import GridItem from '../GridItem.jsx';
 import { usePixivCache } from '../../context/pixivCacheContext.js';
 import { parsePixivResults, allMediaFromRelated } from './helpers.js';
 import { getSettingsSync, storageFacade } from '../../pixiv-assistant/index.js';
@@ -613,27 +614,14 @@ export default function ImageDetailView({
                 if (likedOrSavedSet.has(img.illustId)) return null;
                 if (seen.has(img.illustId)) return null;
                 seen.add(img.illustId);
-                const isGif = img.type === 'gif';
-                const target = allMediaFromRelated(img);
                 return (
-                  <div key={`rel-${img.illustId}`}
-                    className="pixiv-grid-item"
-                    onClick={() => onSelectImage?.(target)}
-                  >
-                    <div className="media-card-thumb-wrap">
-                      <img className="media-card-thumb"
-                        src={gridThumbUrl(img.thumbnailUrl || img.mediumUrl)}
-                        alt={img.title}
-                        loading="lazy"
-                        onError={e => { e.target.style.display = 'none'; }}
-                      />
-                      {isGif && (
-                        <div className="gif-play-overlay">
-                          <span className="gif-play-icon">▶</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  <GridItem
+                    key={`rel-${img.illustId}`}
+                    img={img}
+                    onOpen={(it) => onSelectImage?.(allMediaFromRelated(it))}
+                    variant="media"
+                    thumbSrc={gridThumbUrl(img.thumbnailUrl || img.mediumUrl)}
+                  />
                 );
               });
             })()}

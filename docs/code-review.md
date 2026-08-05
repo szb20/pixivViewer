@@ -29,6 +29,10 @@
 5. [架构设计](#5-架构设计)
 6. [存储与数据层](#6-存储与数据层)
 7. [安全检查](#7-安全检查)
+8. [UI 提示与弹窗审查](#8-ui-提示与弹窗审查)
+9. [优化路线图](#9-优化路线图)
+6. [存储与数据层](#6-存储与数据层)
+7. [安全检查](#7-安全检查)
 8. [优化路线图](#8-优化路线图)
 
 ---
@@ -340,7 +344,237 @@ Vite Dev Server
 
 ---
 
-## 8. 优化路线图
+## 8. UI 提示与弹窗审查
+
+> 审查日期：2026-08-05 | 范围：所有 Toast、弹窗、告警提示的视觉样式与交互
+
+### 8.1 Toast（通用轻提示）⭐⭐⭐⭐
+
+**文件：** `src/utils/toast.js` + `src/components/ToastHost.jsx` + `src/index.css:713-752`
+
+**当前样式：**
+- 顶部居中定位：`top: calc(env(safe-area-inset-top, 20px) + 28px)`
+- 毛玻璃底 `rgba(255,255,255,0.12)` + `backdrop-filter: blur(12px)`
+- 13px 白色字 + 三层 text-shadow 文字发光
+- 圆角 20px、0.2s fade-in + slide-down 动画
+- 2.5 秒自动消失
+
+**评价：毛玻璃层次好，位置避开状态栏，动画干净。** 小问题：三层 text-shadow（`0 0 8px/20px/40px`）在浅色图片上方文字略显发虚；可减为两层或降低 spread。
+
+```css
+/* 建议：减为两层，更有质感 */
+text-shadow: 0 0 8px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.5);
+```
+
+---
+
+### 8.2 Settings 设置弹窗 ⭐⭐⭐⭐
+
+**文件：** `src/components/SettingsModal.jsx` + `src/index.css:576-654`
+
+**当前样式：**
+- 底部弹出 sheet（`align-items: flex-end`），居中 `max-width: 560px`
+- 圆角 `16px 16px 0 0`，`background: var(--bg-panel)`
+- input/select 字段：`background: var(--bg-secondary)`，focus 变 accent 色边框
+- 保存成功用 inline 绿色 hint，900ms 后自动关闭弹窗
+
+**评价：底部 sheet 风格适合手机操作，字段间距合理。** 两个问题：
+
+**问题 1：** 保存成功提示 900ms 后弹窗关闭——用户可能没看到就没了。建议改为 Toast 通知，或至少在关闭前等待 2 秒。
+
+**问题 2：** `.modal` 无 `max-height`、无 `overflow-y: auto`——未来加字段（如多语言、主题切换）可能溢出屏幕。建议添加：
+```css
+.modal {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+```
+
+---
+
+### 8.3 Cookie 引导条 ⭐⭐⭐
+
+**文件：** `src/components/NeedCookieNotice.jsx` + `src/index.css:496-519`
+
+**当前样式：**
+- Flex 横排，蓝色半透明底 `rgba(79,140,255,0.12)` + 蓝色文字
+- 圆角 8px，`margin: 12px 0`
+- 右侧蓝色按钮"去设置"
+
+**评价：色彩区分度好。** 但它内联在内容流——如果列表为空（还没有搜索结果/收藏），这条可能被 scroll 推出视野，用户根本看不到。建议改成 sticky/fixed 定位，或只在内容区域为空时居中展示。
+
+---
+
+### 8.4 代理连接失败弹窗 ⭐⭐⭐
+
+**文件：** `src/components/ProxyCheckNotice.jsx` + `src/index.css:801-897`
+
+**当前样式：**
+- 全屏遮罩 `rgba(0,0,0,0.65)`，`z-index: 500`
+- 居中卡片 `max-width: 340px`，圆角 16px，带 `.frosted` 毛玻璃
+- 进入动画：overlay fade + 卡片 scale+fade
+- 两个按钮（去设置 / 重试）
+
+**问题 1：z-index 冲突。** `proxy-check-overlay` 的 `z-index: 500` 远高于 SettingsModal 的 `z-index: 100`。用户点击"去设置"时，`onDismiss()` + `onOpenSettings()` 同步执行——设置弹窗的遮罩层（`modal-overlay: z-index 100`）低于代理弹窗的遮罩（500），导致设置弹窗被代理遮罩压住。
+
+**修复：** `handleGoSettings` 中先关自己再延迟打开设置：
+```js
+const handleGoSettings = () => {
+  onDismiss();
+  setTimeout(onOpenSettings, 150); // 等 fade-out 动画结束后再打开
+};
+```
+
+**问题 2：** `.proxy-check-card` 用了 `.frosted` 但无额外卡片质感——`.frosted` 只给了 `background: rgba(15,17,21,0.55)`，在深色遮罩上缺乏层次。建议加一层浅色边框阴影或提升 `background` 的透明度。
+
+**问题 3：** Proxy URL 用 `monospace` 字体——对普通用户不友好。建议用更小字号 + 省略号截断，monospace 仅用于调试模式。
+
+---
+
+### 8.5 下载进度弹窗 ⭐⭐⭐⭐⭐
+
+**文件：** `src/components/DownloadMonitor.jsx` + `src/styles/download.css`
+
+**当前样式：**
+- 毛玻璃全屏 sheet：`backdrop-filter: blur(40px) saturate(180%)`，圆角 32px
+- 每行：圆角 24px，半透明底，带标题 + 状态 + SVG 圆环进度
+- 悬浮按钮：`position: fixed; right: 16px; bottom` 与 like 按钮同步上移
+- 角标：红色圆点 + 数字
+
+**评价：项目中最好的一块 UI。** 32px 大圆角、blur(40px) 强模糊、SVG 圆环进度——质感很强。
+
+小问题：
+- `.download-fab` 的 `bottom` 值硬编码与 `.detail-floating-like` 同步——如果在非详情页（按钮不显示时），下载按钮位置会偏上。建议用 CSS 变量统一管理悬浮按钮的 bottom 值。
+- `.download-overlay` 用了 `@supports (backdrop-filter: blur())` 做兼容性 fallback，但 `@supports` 外无 `background`，不支持 blur 的浏览器上遮罩完全透明。
+```css
+/* 建议：加 fallback 背景色 */
+.download-overlay {
+  background: rgba(0, 0, 0, 0.55); /* fallback */
+}
+@supports (backdrop-filter: blur()) {
+  .download-overlay {
+    background: rgba(0, 0, 0, 0.35);
+  }
+}
+```
+
+---
+
+### 8.6 ErrorBoundary Fallback ⭐⭐
+
+**文件：** `src/components/ErrorBoundary.jsx:42-72`
+
+**当前样式：**
+```jsx
+<div className="error-boundary" style={{
+    padding: '24px', textAlign: 'center',
+    display: 'flex', flexDirection: 'column',
+    alignItems: 'center', justifyContent: 'center',
+    minHeight: '200px',
+}}>
+    <h2 style={{ margin: '0 0 12px', fontSize: '18px' }}>出了点问题</h2>
+    <p style={{ margin: '0 0 16px', color: '#666', fontSize: '14px' }}>
+        {this.state.error?.message || '页面加载失败'}
+    </p>
+    <button style={{
+        padding: '8px 20px', borderRadius: '8px',
+        border: 'none', background: '#0096fa',
+        color: '#fff', fontSize: '14px', cursor: 'pointer',
+    }}>重试</button>
+</div>
+```
+
+**评价：最需要改进的一个。** 三个核心问题：
+
+**问题 1：** 全部硬编码颜色——`#0096fa`（非 `var(--accent)`）、`#666`（非 `var(--text-tertiary)`），不跟随 CSS 变量，主题切换时完全不变。
+
+**问题 2：** `.error-boundary` 类名在 `index.css` 中无对应规则，实际上被内联 style 覆盖，浪费了一个语义类名。
+
+**问题 3：** `color: '#666'` 在深色背景（`#000`/`var(--bg)`）上对比度极低（2.6:1），几乎不可读。
+
+**建议：** 移到独立 CSS，使用 CSS 变量：
+```css
+.error-boundary {
+  padding: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-primary);
+}
+.error-boundary h2 { margin: 0 0 12px; font-size: 18px; }
+.error-boundary p { margin: 0 0 16px; color: var(--text-secondary); font-size: 14px; }
+.error-boundary button {
+  padding: 8px 20px; border-radius: 8px; border: none;
+  background: var(--accent); color: #fff; font-size: 14px; cursor: pointer;
+}
+```
+
+---
+
+### 8.7 `.hint` 通用提示 ⭐⭐⭐
+
+**文件：** `src/index.css:521-526`
+
+```css
+.hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 8px 0 4px;
+}
+```
+
+**用途：** Feed 列表中的"正在加载..."、"没有更多"、SettingsModal 中的 PHPSESSID 获取说明、GalleryPage 的空状态提示。
+
+**评价：简单够用。** Settings 中"获取方式"用 `style={{ textAlign: 'left', padding: '4px 0 0' }}` 覆盖 `.hint` 默认值——如果这种左对齐 hint 出现多次，值得抽一个 `.hint-left` 变体。
+
+---
+
+### 8.8 详情页错误提示 ⭐⭐⭐⭐
+
+**文件：** `src/components/detail/ImageDetailView.jsx:137` + `src/styles/detail.css:228-236`
+
+```css
+.image-detail-error {
+  width: 100%; height: 200px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-tertiary); font-size: 13px;
+}
+```
+
+**评价：语义清晰，足够简单。**
+
+---
+
+### 8.9 汇总
+
+| 组件 | 评分 | 主要问题 |
+|------|------|---------|
+| Toast | ⭐⭐⭐⭐ | 文字发光三层略重 |
+| SettingsModal | ⭐⭐⭐⭐ | 保存反馈太快消失；无 max-height/overflow |
+| CookieNotice | ⭐⭐⭐ | 内联在内容流，空列表时可能不可见 |
+| ProxyCheckNotice | ⭐⭐⭐ | z-index 与 SettingsModal 冲突；卡片层次弱 |
+| DownloadMonitor | ⭐⭐⭐⭐⭐ | 仅 fallback 遮罩缺失 |
+| ErrorBoundary | ⭐⭐ | 硬编码颜色；`#666` 在深色背景不可读 |
+| .hint | ⭐⭐⭐ | 缺少左对齐变体 |
+| detail-error | ⭐⭐⭐⭐ | 够用 |
+
+**优先级：值得修**
+
+| 优先级 | 组件 | 改动 |
+|--------|------|------|
+| 1 | ErrorBoundary | 内联 style → CSS 变量，修复深色背景可读性 |
+| 2 | ProxyCheckNotice | z-index 冲突，`setTimeout` 延迟打开设置 |
+| 3 | SettingsModal | 加 `max-height` + `overflow-y: auto`，保存反馈改用 Toast |
+| 4 | Toast | 文字发光减为两层 |
+| 5 | DownloadMonitor | fallback 遮罩背景色 |
+
+---
+
+## 9. 优化路线图
 
 ### 第一阶段：快速见效（1-2 天）
 

@@ -3,6 +3,7 @@ import { pixivApi } from '../api/pixiv.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import { gridThumbUrl } from '../utils/quality.js';
 import { createLogger } from '../utils/logger.js';
+import GridItem from './GridItem.jsx';
 
 const log = createLogger('AuthorWorks');
 /** 每次滑到底加载的作品数（并发取详情） */
@@ -130,22 +131,13 @@ export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenI
         {!loading && !error && (
           <div className="pixiv-grid">
             {items.map(it => (
-              <div key={it.illustId} className="pixiv-grid-item" onClick={() => handleOpen(it)}>
-                <div className="media-card-thumb-wrap">
-                  <img
-                    className="media-card-thumb"
-                    src={gridThumbUrl(it.thumbnailUrl)}
-                    alt={it.title || it.illustId}
-                    loading="lazy"
-                    onError={e => { e.target.style.display = 'none'; }}
-                  />
-                  {Number(it.pageCount) > 1 && (
-                    <span className="pixiv-grid-pages frosted">
-                      {Number(it.pageCount)}
-                    </span>
-                  )}
-                </div>
-              </div>
+              <GridItem
+                key={it.illustId}
+                img={it}
+                onOpen={handleOpen}
+                variant="media"
+                thumbSrc={gridThumbUrl(it.thumbnailUrl)}
+              />
             ))}
           </div>
         )}

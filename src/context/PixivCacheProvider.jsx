@@ -16,6 +16,7 @@ import {
 } from '../pixiv-assistant/capacitor/metaBackup.js';
 import { ensureGalleryReadPermission } from '../pixiv-assistant/capacitor/gallery.js';
 import { createLogger } from '../utils/logger.js';
+import { hiddenWorks } from '../utils/hiddenWorks.js';
 import {
   PixivCacheContext,
   PixivLikedSetContext,
@@ -49,6 +50,8 @@ export function PixivCacheProvider({ children }) {
     let cancelled = false;
     (async () => {
       try {
+        // 从 IndexedDB 加载"不想看"隐藏列表（含旧 localStorage 迁移）
+        await hiddenWorks.init();
         // 启动时提前申请相册读取权限：判断图片是否已下载 / 读取已保存预览都需要它
         await ensureGalleryReadPermission();
         // 重装后 IndexedDB 为空 → 从系统相册备份恢复 喜欢/已保存 + cookie

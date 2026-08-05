@@ -93,6 +93,17 @@ export const useAppStore = create((set, get) => ({
         });
     },
 
+    // 直接退出到主页（详情页左上角"‹"按钮）：清空详情/作者页，不返回作者页
+    exitToHome: () => {
+        const { activeTab, scrollPositions } = get();
+        set({ detailImage: null, authorWorks: null, returnToAuthor: null });
+        // 恢复进入详情前的滚动位置，避免退出后网格停在顶部
+        requestAnimationFrame(() => {
+            const el = document.querySelector('.app-content');
+            if (el) el.scrollTop = scrollPositions[activeTab] || 0;
+        });
+    },
+
     openAuthorWorks: (authorId, authorName) => {
         if (!authorId) return;
         set({ authorWorks: { authorId: String(authorId), authorName: authorName || '' } });

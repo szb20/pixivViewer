@@ -6,6 +6,7 @@ import ImageGrid from '../components/ImageGrid.jsx';
 import { buildLikedOrSavedSet } from '../utils/worksState.js';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
+import { hiddenWorks } from '../utils/hiddenWorks.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
@@ -35,7 +36,8 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
       const filtered = rawList.filter(img => {
-        return !seen.has(img.illustId);
+        // 跳过已显示过的 + 用户"不想看"的
+        return !seen.has(img.illustId) && !hiddenWorks.has(img.illustId);
       });
       startRef.current += rawList.length;
       return {

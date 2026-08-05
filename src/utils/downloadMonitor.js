@@ -12,14 +12,23 @@
 
 const listeners = new Set();
 const jobs = new Map();
-let snapshot = [];
+// queueTotal：本次下载队列的文件总数（多图批量时=全部页数），由下载方在开始时上报；
+// 徽标据此显示"队列里还有多少文件"，而非当前正在下载的个数
+let queueTotal = 0;
+let snapshot = { jobs: [], queueTotal: 0 };
 
 function emit() {
-  snapshot = jobs.size ? [...jobs.values()] : [];
+  snapshot = { jobs: jobs.size ? [...jobs.values()] : [], queueTotal };
   for (const fn of [...listeners]) fn();
 }
 
 export const downloadMonitor = {
+  /** 上报本次下载队列的文件总数（徽标显示用） */
+  setQueueTotal(n) {
+    queueTotal = Math.max(0, Number(n) || 0);
+    emit();
+  },
+
   /** 登记一个下载任务，返回进度句柄 */
   start(key, meta) {
     jobs.set(key, {
@@ -63,6 +72,8 @@ export const downloadMonitor = {
         setTimeout(() => {
           if (jobs.get(key)?.status === 'done' || jobs.get(key)?.status === 'error') {
             jobs.delete(key);
+            // 队列清空后重置总数，避免徽标残留旧值
+            if (jobs.size === 0) queueTotal = 0;
             emit();
           }
         }, 8000);
@@ -75,6 +86,7 @@ export const downloadMonitor = {
     for (const [k, j] of jobs) {
       if (j.status === 'done' || j.status === 'error') jobs.delete(k);
     }
+    if (jobs.size === 0) queueTotal = 0;
     emit();
   },
 

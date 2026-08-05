@@ -5,8 +5,8 @@
 .download-fab {
   position: fixed;
   right: 16px;
-  /* 与左侧悬浮♥（.detail-floating-like）同步上移，避免与底部图片区重叠 */
-  bottom: max(80px, calc(env(safe-area-inset-bottom, 16px) + 60px));
+  /* 紧贴 like 按钮上方 */
+  bottom: max(96px, calc(env(safe-area-inset-bottom, 16px) + 80px));
   z-index: 60;
   box-shadow:
     0 4px 18px rgba(0, 0, 0, 0.35);

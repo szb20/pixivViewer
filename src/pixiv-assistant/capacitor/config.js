@@ -6,8 +6,13 @@
  * - getSettings: localStorage（pixiv_viewer_settings），支持 VITE_PIXIV_COOKIE 环境变量
  * - getFS: Capacitor Filesystem（原生环境），非原生环境返回 null
  */
+import { appStorage, migrateFromLegacyKey } from '../../utils/appStorage.js';
+
 let _getSettings = null;
 let _getFS = null;
+
+// 迁移旧版独立 settings key → 统一 key
+migrateFromLegacyKey('pixiv_viewer_settings', 'settings');
 
 /**
  * 配置 Pixiv 模块的适配器。
@@ -20,16 +25,9 @@ export function configurePixiv(opts = {}) {
   if (opts.getFS) _getFS = opts.getFS;
 }
 
-const SETTINGS_KEY = 'pixiv_viewer_settings';
-
 /** 同步读取设置（渲染期可用；合并默认值） */
 export function getSettingsSync() {
-  let stored = {};
-  try {
-    stored = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
-  } catch {
-    stored = {};
-  }
+  const stored = appStorage.get('settings', {}) || {};
   return {
     ...stored,
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
@@ -72,11 +70,7 @@ export async function getSettings() {
 
 /** 保存 settings（localStorage）。 */
 export async function saveSettings(s) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    /* ignore */
-  }
+  appStorage.set('settings', s);
 }
 
 /**

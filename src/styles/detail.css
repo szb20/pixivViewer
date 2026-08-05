@@ -371,13 +371,21 @@
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 
-/* 详情页左下角悬浮喜欢按钮 */
+/* 详情页右下角悬浮 like 按钮 */
 .detail-floating-like {
     position: fixed;
-    bottom: max(80px, calc(env(safe-area-inset-bottom, 16px) + 60px));
-    left: 16px;
+    right: 16px;
+    bottom: max(48px, calc(env(safe-area-inset-bottom, 16px) + 32px));
     z-index: 100;
   }
+
+/* 详情页左上角"返回主页"按钮 — 复用 .glass-icon-btn（与 like 按钮同尺寸同风格），此处只管定位 */
+.detail-back-home {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top, 16px));
+    left: 16px;
+    z-index: 100;
+}
 
   /* 多图作品页数标注（标在本页图片右下角） */
   .detail-hero-pages {

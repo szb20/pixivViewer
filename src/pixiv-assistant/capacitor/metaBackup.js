@@ -12,13 +12,14 @@ import { getSettingsSync, saveSettings } from './config.js';
 import { PixivEntity } from './entity.js';
 import { parseCacheFileName } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
+import { hiddenWorks } from '../../utils/hiddenWorks.js';
 
 const log = createLogger('metaBackup');
 
 /** 新版备份文件名（Downloads 集合，卸载后保留，纯 JSON 可读） */
 const META_FILE = 'pixiv_meta.json';
 /** 备份格式版本 */
-const BACKUP_VERSION = 3;
+const BACKUP_VERSION = 4;
 /** 旧版曾用 1×1 PNG 藏 JSON（Images 集合），用于迁移兼容 */
 const LEGACY_META_PNG = 'pixiv_meta.png';
 
@@ -62,6 +63,7 @@ export async function writeMetaBackup(records, settings) {
     v: BACKUP_VERSION,
     savedAt: Date.now(),
     items,
+    hidden: hiddenWorks.getList(),
     settings: {
       pixivCookie: (settings?.pixivCookie || '').trim(),
     },
@@ -134,6 +136,7 @@ export async function readMetaBackup() {
       const parsed = JSON.parse(r.data);
       return {
         items: Array.isArray(parsed?.items) ? parsed.items : [],
+        hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
         settings: parsed?.settings || {},
       };
     }
@@ -150,13 +153,14 @@ export async function readMetaBackup() {
       const parsed = JSON.parse(text.trim());
       return {
         items: Array.isArray(parsed?.items) ? parsed.items : [],
+        hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
         settings: parsed?.settings || {},
       };
     }
   } catch (e) {
     log.debug('[metaBackup] 读取旧版 PNG 备份失败:', e?.message || e);
   }
-  return { items: [], settings: {} };
+  return { items: [], hidden: [], settings: {} };
 }
 
 /**
@@ -169,8 +173,13 @@ export async function restoreMetaBackupIfNeeded() {
     const existing = await getAllMeta().catch(() => []);
     if (Array.isArray(existing) && existing.length > 0) return; // 非全新安装，不覆盖
 
-    const { items, settings } = await readMetaBackup();
+    const { items, hidden, settings } = await readMetaBackup();
     if (items.length === 0 && !settings.pixivCookie) return;
+
+    if (Array.isArray(hidden) && hidden.length > 0) {
+      hiddenWorks.replace(hidden);
+      log.info('[metaBackup] 已恢复', hidden.length, '条"不想看"隐藏');
+    }
 
     if (items.length > 0) {
       const records = items.map(it => {

@@ -2,7 +2,7 @@
  * DownloadMonitorButton — 下载进度悬浮按钮 + 毛玻璃全屏弹窗。
  *
  * 订阅全局 downloadMonitor（见 utils/downloadMonitor.js），
- * 有下载任务时显示悬浮按钮（角标=进行中数量），点击展开全屏毛玻璃任务列表。
+ * 有下载任务时显示悬浮按钮（角标=下载队列文件总数），点击展开全屏毛玻璃任务列表。
  */
 import { useState, useSyncExternalStore, useEffect } from 'react';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
@@ -54,10 +54,12 @@ function DownloadRow({ job }) {
 }
 
 export default function DownloadMonitorButton() {
-  const jobs = useSyncExternalStore(downloadMonitor.subscribe, downloadMonitor.getSnapshot);
+  const snap = useSyncExternalStore(downloadMonitor.subscribe, downloadMonitor.getSnapshot);
+  const jobs = snap.jobs;
+  const queueTotal = snap.queueTotal;
   const [open, setOpen] = useState(false);
-  // 角标显示总任务数（含已完成的暂存任务），多图批量下载时就是本次的页数
-  const total = jobs.length;
+  // 角标显示下载队列文件总数（下载方上报），无上报时退化为当前任务数
+  const total = queueTotal > 0 ? queueTotal : jobs.length;
 
   // 任务全部完成后自动关闭弹窗
   useEffect(() => {

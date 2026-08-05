@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { storageFacade } from '../../pixiv-assistant/index.js';
 import { pixivApi } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { createLogger } from '../../utils/logger.js';
+import GridItem from '../../components/GridItem.jsx';
 
 const PAGE_SIZE = 24;
 const CACHE_KEY = 'me_liked';
@@ -15,8 +16,6 @@ const migrateFailed = new Set();
 /** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 MePage 聚合，不在此注册。 */
 export default function LikedPanel({ onOpen, onReportLoad }) {
   const offsetRef = useRef(0);
-  // 加载失败的缩略图 key 集合 → 显示占位，点击重试
-  const [failed, setFailed] = useState({});
 
   // 本地数据源（IndexedDB 喜欢列表），分页 + 哨兵由 useTabFeed 处理
   const feed = useTabFeed({
@@ -94,39 +93,24 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
         <div className="error-box">还没有喜欢的作品 — 在详情页点击爱心即可收藏</div>
       )}
       <div className="gallery-grid">
-        {feed.items.map(item => {
-          const id = `${item.illustId}_${item.pageIndex ?? 0}`;
-          // 优先用点赞时存的 API 缩略图；缺失时显示占位块，由后台迁移回填，不再加载原图
-          const src = item.thumbnailUrl || '';
-          return (
-            <div key={id} className="gallery-item"
-              onClick={() => onOpen?.({
-                illustId: item.illustId,
-                _pageIndex: item.pageIndex ?? 0,
-                _totalPages: item.pageCount || item.frameCount || 1,
-                type: item.isGif ? 'gif' : 'image',
-                title: item.title,
-                author: item.author,
-                authorId: item.authorId,
-                authorName: item.authorName,
-                thumbnailUrl: item.thumbnailUrl || pixivReUrl(String(item.illustId), 0),
-              })}
-            >
-              {src ? (
-                failed[id] ? (
-                  <div className="gallery-thumb-fallback" onClick={e => { e.stopPropagation(); setFailed(p => ({ ...p, [id]: false })); }}>
-                    加载失败<br />点此重试
-                  </div>
-                ) : (
-                  <img className="gallery-thumb" src={src} alt={item.title || ''} loading="lazy"
-                    onError={() => setFailed(p => ({ ...p, [id]: true }))} />
-                )
-              ) : (
-                <div className="gallery-thumb" />
-              )}
-            </div>
-          );
-        })}
+        {feed.items.map(item => (
+          <GridItem
+            key={`${item.illustId}_${item.pageIndex ?? 0}`}
+            img={item}
+            onOpen={(it) => onOpen?.({
+              illustId: it.illustId,
+              _pageIndex: it.pageIndex ?? 0,
+              _totalPages: it.pageCount || it.frameCount || 1,
+              type: it.isGif ? 'gif' : 'image',
+              title: it.title,
+              author: it.author,
+              authorId: it.authorId,
+              authorName: it.authorName,
+              thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
+            })}
+            variant="gallery"
+          />
+        ))}
       </div>
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
     </>

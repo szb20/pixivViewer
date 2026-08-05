@@ -47,6 +47,7 @@ export default function App() {
     triggerPullRefresh,
     openDetail,
     closeDetail,
+    exitToHome,
     openAuthorWorks,
     closeAuthorWorks,
     openAuthorImage,
@@ -175,6 +176,7 @@ export default function App() {
           <DetailView
             image={detailImage}
             onClose={closeDetail}
+            onExitToHome={exitToHome}
             onSearchTag={searchByTag}
             onAuthorWorks={openAuthorWorks}
           />
