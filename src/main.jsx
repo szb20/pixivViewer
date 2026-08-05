@@ -4,6 +4,10 @@ import './index.css'
 import App from './App.jsx'
 import { PixivCacheProvider } from './context/PixivCacheProvider.jsx'
 import { createLogger } from './utils/logger.js'
+import { initTheme } from './utils/theme.js'
+
+// 启动时应用已保存的主题色
+initTheme()
 
 // 设置透明状态栏 + 白色文字/图标（适配深色背景）
 import { StatusBar, Style } from '@capacitor/status-bar'

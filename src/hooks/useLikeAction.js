@@ -40,7 +40,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: !prevLiked, likedAt: Date.now() } }));
 
     if (typeof storageFacade.toggleLike !== 'function') {
-      showToast('当前平台暂不支持喜欢功能');
+      showToast('当前平台暂不支持喜欢功能', { type: 'warning' });
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       return;
     }
@@ -49,7 +49,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     try {
       result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, buildLikeMeta(cur));
     } catch {
-      showToast('操作失败');
+      showToast('操作失败', { type: 'error' });
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       return;
     }
@@ -58,7 +58,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
       notifyLikedChanged();
     } else {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
-      showToast('操作失败');
+      showToast('操作失败', { type: 'error' });
       return;
     }
 
@@ -67,10 +67,10 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
       onLikeSaveAll(cur).then((res) => {
         const saved = Number(res?.saved ?? res) || 0;
         const exists = Number(res?.exists) || 0;
-        if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`);
-        else if (saved > 0) showToast(`已保存 ${saved} 页到相册`);
-        else if (exists > 0) showToast('已在相册中');
-        else showToast('下载失败');
+        if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`, { type: 'success' });
+        else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });
+        else if (exists > 0) showToast('已在相册中', { type: 'info' });
+        else showToast('下载失败', { type: 'error' });
       }).catch(() => {});
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged]);
@@ -97,16 +97,16 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
       }
     }
     if (typeof onLikeSaveAll !== 'function') {
-      showToast('当前平台暂不支持下载');
+      showToast('当前平台暂不支持下载', { type: 'warning' });
       return;
     }
     const res = await onLikeSaveAll(cur).catch(() => null);
     const saved = Number(res?.saved ?? res) || 0;
     const exists = Number(res?.exists) || 0;
-    if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`);
-    else if (saved > 0) showToast(`已保存 ${saved} 页到相册`);
-    else if (exists > 0) showToast('已在相册中');
-    else showToast('下载失败');
+    if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`, { type: 'success' });
+    else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });
+    else if (exists > 0) showToast('已在相册中', { type: 'info' });
+    else showToast('下载失败', { type: 'error' });
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, notifyLikedChanged]);
 
   const startLongPress = useCallback((e) => {

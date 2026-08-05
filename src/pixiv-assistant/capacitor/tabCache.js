@@ -9,7 +9,7 @@ import { createLogger } from '../../utils/logger.js';
 const log = createLogger('tabCache');
 
 const DB_NAME = 'teyvat_pixiv_tabs';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'tabs';
 
 /** 各 Tab 的 TTL（毫秒），统一 24 小时 */
@@ -30,10 +30,13 @@ function openDB() {
       return reject(new Error('IndexedDB not available'));
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (e) => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'key' });
+      } else if (e.oldVersion < 2) {
+        // v1 → v2：清空旧缓存，强制重新拉取（旧条目缺少 authorAvatar 等新字段）
+        e.target.transaction.objectStore(STORE).clear();
       }
     };
     req.onsuccess = () => {

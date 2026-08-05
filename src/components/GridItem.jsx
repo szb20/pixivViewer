@@ -31,7 +31,7 @@ export default memo(function GridItem({
   const v = {
     grid:    { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
     media:   { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
-    gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: '', play: '', like: '', wrap: '', gifOverlay: false },
+    gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
   }[variant] || { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false };
 
   const [loaded, setLoaded] = useState(false);
@@ -116,13 +116,13 @@ export default memo(function GridItem({
         loading="lazy"
         decoding="async"
         style={variant === 'grid' ? { opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease' } : undefined}
-        onLoad={variant === 'gallery' ? undefined : () => setLoaded(true)}
+        onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
       />
-      {v.badge && pageCount > 1 && (
+      {loaded && v.badge && pageCount > 1 && (
         <span className={`${v.badge} frosted`}>{pageCount}</span>
       )}
-      {isGif && (v.gifOverlay ? (
+      {loaded && isGif && (v.gifOverlay ? (
         <div className="gif-play-overlay"><span className="gif-play-icon">▶</span></div>
       ) : v.play ? (
         <span className={v.play}>▶</span>
@@ -142,7 +142,7 @@ export default memo(function GridItem({
       onContextMenu={handleContextMenu}
     >
       {v.wrap ? <div className={v.wrap}>{thumb}</div> : thumb}
-      {isLiked && v.like && (
+      {loaded && isLiked && v.like && (
         <span className={v.like}><HeartIcon filled /></span>
       )}
       {onHide && (

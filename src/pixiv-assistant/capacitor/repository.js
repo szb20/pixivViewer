@@ -220,6 +220,7 @@ export class PixivRepository {
         author: meta.author || '',
         authorName: meta.authorName || meta.author || '',
         authorAccount: meta.authorAccount || '',
+        authorAvatar: meta.authorAvatar || '',
         authorId: meta.authorId || '',
         tags: Array.isArray(meta.tags) ? meta.tags : [],
         thumbnailUrl: meta.thumbnailUrl || '',
@@ -242,6 +243,7 @@ export class PixivRepository {
       record.author = meta.author || meta.authorName || '';
     }
     if (meta.authorId && !record.authorId) record.authorId = meta.authorId;
+    if (meta.authorAvatar && !record.authorAvatar) record.authorAvatar = meta.authorAvatar;
     if (meta.type && !record.type) record.type = meta.type;
     if (Array.isArray(meta.tags) && meta.tags.length && !record.tags?.length) record.tags = meta.tags;
     if (meta.pixivUrl && !record.pixivUrl) record.pixivUrl = meta.pixivUrl;

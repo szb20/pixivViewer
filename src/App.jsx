@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
-import SettingsModal from './components/SettingsModal.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 import ProxyCheckNotice from './components/ProxyCheckNotice.jsx';
 import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
@@ -144,8 +144,10 @@ export default function App() {
               <ErrorBoundary key="me">
                 <MePage
                   active={activeTab === 'me'}
+                  showSettingsBtn={activeTab === 'me' && !detailImage && !authorWorks}
                   onOpen={openDetail}
                   onOpenSettings={openSettings}
+                  onAuthorWorks={openAuthorWorks}
                   registerRefresh={registerRefresh}
                   refreshToken={tabTokens.me || 0}
                 />
@@ -161,7 +163,7 @@ export default function App() {
 
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      {settingsOpen && <SettingsModal onClose={closeSettings} />}
+      {settingsOpen && <SettingsPage onClose={closeSettings} />}
 
       {showProxyError && (
         <ProxyCheckNotice
@@ -187,6 +189,7 @@ export default function App() {
         <AuthorWorksPage
           authorId={authorWorks.authorId}
           authorName={authorWorks.authorName}
+          authorAvatar={authorWorks.authorAvatar}
           onClose={closeAuthorWorks}
           onOpenImage={openAuthorImage}
         />

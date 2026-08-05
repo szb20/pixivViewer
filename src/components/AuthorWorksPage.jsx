@@ -4,6 +4,8 @@ import { registerBackHandler } from '../utils/backHandler.js';
 import { gridThumbUrl } from '../utils/quality.js';
 import { createLogger } from '../utils/logger.js';
 import GridItem from './GridItem.jsx';
+import FollowIcon from './icons/FollowIcon.jsx';
+import { useAuthorProfile } from '../hooks/useAuthorProfile.js';
 
 const log = createLogger('AuthorWorks');
 /** 每次滑到底加载的作品数（并发取详情） */
@@ -14,8 +16,14 @@ const BATCH_SIZE = 12;
  * 首屏用 profile/top（带元数据），滑到底再用 profile/all 的全部 ID 分批取详情（无限滚动）。
  * 叠加在详情页之上，系统返回键先关闭本页。
  */
-export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenImage }) {
+export default function AuthorWorksPage({ authorId, authorName, authorAvatar: initialAvatar, onClose, onOpenImage }) {
   const [items, setItems] = useState([]);
+  const {
+    avatar: authorAvatar,
+    isFollowed: authorIsFollowed,
+    updating: followUpdating,
+    toggleFollow,
+  } = useAuthorProfile(authorId, initialAvatar);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
@@ -124,7 +132,20 @@ export default function AuthorWorksPage({ authorId, authorName, onClose, onOpenI
       <div className="author-works-content">
         <div className="author-works-header">
           <button className="author-works-back" onClick={onClose} aria-label="返回">‹</button>
-          <span className="author-works-title">@{authorName || authorId} 的作品</span>
+          {authorAvatar
+            ? <img className="author-works-avatar" src={authorAvatar} alt="" loading="lazy" />
+            : <span className="author-works-avatar author-works-avatar--placeholder" />}
+          <span className="author-works-head-text">
+            <span className="author-works-title">{authorName || authorId}</span>
+          </span>
+          <button
+            className={`follow-btn follow-btn--standalone${authorIsFollowed ? ' followed' : ''}`}
+            disabled={followUpdating}
+            aria-label={authorIsFollowed ? '已关注' : '关注'}
+            onClick={() => toggleFollow()}
+          >
+            <FollowIcon followed={authorIsFollowed} />
+          </button>
         </div>
         {loading && <div className="hint">加载中...</div>}
         {error && <div className="error-box">{error}</div>}

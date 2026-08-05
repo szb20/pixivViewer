@@ -5,7 +5,7 @@ export default function ToastHost() {
 
   useEffect(() => {
     const onToast = (e) => {
-      const t = { id: e.detail?.id || Date.now(), message: e.detail?.message || '' };
+      const t = { id: e.detail?.id || Date.now(), message: e.detail?.message || '', type: e.detail?.type || 'info' };
       setToasts(prev => [...prev, t]);
       setTimeout(() => {
         setToasts(prev => prev.filter(x => x.id !== t.id));
@@ -18,7 +18,7 @@ export default function ToastHost() {
   if (!toasts.length) return null;
   return (
     <div className="toast-host">
-      {toasts.map(t => <div key={t.id} className="toast">{t.message}</div>)}
+      {toasts.map(t => <div key={t.id} className="toast" data-type={t.type || 'info'}>{t.message}</div>)}
     </div>
   );
 }

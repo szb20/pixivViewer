@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 5px) 12px 5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(12px);
@@ -44,12 +44,38 @@
 }
 
 .author-works-title {
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.author-works-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  flex: none;
+}
+
+.author-works-avatar--placeholder {
+  background-color: #2a2f3a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236b7080'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 20c0-4 4-6 8-6s8 2 8 6'/%3E%3C/svg%3E");
+  background-size: 55%;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.author-works-head-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .author-works-content {
@@ -124,8 +150,108 @@
 
 .image-detail-author {
   font-size: 13px;
+  font-weight: 400;
   color: var(--text-secondary);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.image-detail-author-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.image-detail-author-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 1px;
+}
+
+.image-detail-author-account {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 关注/已关注 按钮（详情页 + 作者作品页共用） */
+.image-detail-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.follow-btn {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: rgba(15, 17, 21, 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+  z-index: 1;
+}
+
+.follow-btn--standalone {
+  position: static;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+}
+
+.follow-btn .follow-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.follow-btn--standalone .follow-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.follow-btn.followed {
+  border-color: rgba(74, 222, 128, 0.55);
+  color: var(--ok);
+  background: rgba(15, 17, 21, 0.72);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.follow-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.image-detail-author-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  flex: none;
+}
+
+.image-detail-author-avatar--placeholder {
+  background-color: #2a2f3a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236b7080'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 20c0-4 4-6 8-6s8 2 8 6'/%3E%3C/svg%3E");
+  background-size: 55%;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .image-detail-pixiv-link {
@@ -139,7 +265,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 10px 12px 8px;
+  padding: 12px 12px 20px;
 }
 
 .image-detail-tag {
@@ -367,8 +493,12 @@
 
 .gif-play-icon {
   font-size: 48px;
-  color: rgba(255, 255, 255, 0.9);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow:
+    0 0 3px rgba(255, 255, 255, 0.95),
+    0 0 8px rgba(255, 255, 255, 0.75),
+    0 0 16px rgba(255, 255, 255, 0.5),
+    0 0 32px rgba(255, 255, 255, 0.3);
 }
 
 /* 详情页右下角悬浮 like 按钮 */

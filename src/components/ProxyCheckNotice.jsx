@@ -32,8 +32,8 @@ export default function ProxyCheckNotice({ proxyUrl, onOpenSettings, onDismiss }
   };
 
   return (
-    <div className="proxy-check-overlay">
-      <div className="proxy-check-card frosted">
+    <div className="dialog-overlay" data-variant="card">
+      <div className="dialog-panel frosted">
         <div className="proxy-check-icon">⚠️</div>
         <h3 className="proxy-check-title">代理连接失败</h3>
         <p className="proxy-check-url">{proxyUrl || 'http://127.0.0.1:7890'}</p>
@@ -42,13 +42,13 @@ export default function ProxyCheckNotice({ proxyUrl, onOpenSettings, onDismiss }
         </p>
         <div className="proxy-check-actions">
           <button
-            className="proxy-check-btn proxy-check-btn-secondary"
+            className="btn"
             onClick={handleGoSettings}
           >
             去设置
           </button>
           <button
-            className="proxy-check-btn proxy-check-btn-primary"
+            className="btn btn-primary"
             onClick={handleRetry}
             disabled={checking}
           >

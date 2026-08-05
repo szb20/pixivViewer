@@ -2,7 +2,7 @@
  * Pixiv API 共享工厂 — 所有 API 函数只写一次，平台只提供 HTTP 传输层。
  *
  * Transport 接口：
- *   fetch(pathname, opts?) → Promise<parsedJSON>  发 GET 请求，返回解析后的 JSON，失败 throw
+ *   fetch(pathname, opts?) → Promise<parsedJSON|string>  发 GET/POST，opts 支持 method/body/raw（raw 返回文本），失败 throw
  *   getCookie() → string | Promise<string>        当前 PHPSESSID 值（空串表示无）
  *
  * 用法：
@@ -16,6 +16,9 @@ import { createLogger } from '../../utils/logger.js';
 const log = createLogger('pixivApi');
 
 // ── 常量 ──
+
+// CSRF token 缓存：从页面 HTML 的 api.token 提取，10 分钟内复用
+let csrfTokenCache = { token: '', ts: 0 };
 
 const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 const DEFAULT_HEADERS = {
@@ -37,6 +40,8 @@ function mapIllustItem(item) {
     authorName: item.userName || item.user_name || '',
     authorAccount: item.userAccount || item.user_account || '',
     authorId: String(item.userId || item.user_id || ''),
+    // 列表接口自带的作者头像（避免每张详情页都请求 /ajax/user/{id} 触发反爬）
+    authorAvatar: proxyThumb(item.profileImageUrl || item.userProfileImageUrl || ''),
     thumbnailUrl: proxyThumb(item.url || item.thumbnailUrl || item.profileImageUrl || ''),
     mediumUrl: pixivReUrl(illustId),
     originalUrl: item.originalUrl || pixivReUrl(illustId),
@@ -95,7 +100,7 @@ export function createPixivApi(transport) {
    * @returns {Promise<Object>} 解析后的 JSON
    */
   async function apiFetch(pathname, opts = {}) {
-    const { headers: extraHeaders = {}, timeout, skipCookie } = opts;
+    const { headers: extraHeaders = {}, timeout, skipCookie, method = 'GET', body, raw = false } = opts;
     const headers = { ...DEFAULT_HEADERS, 'User-Agent': DESKTOP_UA };
 
     // 自动注入 Cookie（除非显式跳过）
@@ -106,7 +111,26 @@ export function createPixivApi(transport) {
 
     Object.assign(headers, extraHeaders);
 
-    return transport.fetch(pathname, { headers, timeout });
+    return transport.fetch(pathname, { headers, timeout, method, body, raw });
+  }
+
+  /** 获取 Pixiv CSRF token：GET 任意页面 HTML，提取 api.token，带 10 分钟缓存 */
+  async function getCsrfToken() {
+    const now = Date.now();
+    if (csrfTokenCache.token && now - csrfTokenCache.ts < 10 * 60 * 1000) return csrfTokenCache.token;
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) throw new Error(cookieCheck.message || 'no_cookie');
+    const html = await apiFetch('/', {
+      headers: { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` },
+      raw: true,
+      timeout: 20000,
+    });
+    const text = typeof html === 'string' ? html : String(html || '');
+    const unescaped = text.replace(/\\"/g, '"');
+    const m = unescaped.match(/"token"\s*:\s*"([a-f0-9]+)"/);
+    if (!m) throw new Error('csrf_token_missing');
+    csrfTokenCache = { token: m[1], ts: Date.now() };
+    return m[1];
   }
 
   /** 分类错误信息，返回中文友好提示 */
@@ -435,6 +459,7 @@ export function createPixivApi(transport) {
         author: item.userName || item.userAccount || '',
         authorName: item.userName || '',
         authorAccount: item.userAccount || '',
+        authorAvatar: proxyThumb(item.profileImageUrl || ''),
         authorId: String(item.userId || ''),
         thumbnailUrl: proxyThumb(item.url || ''),
         mediumUrl: pixivReUrl(String(item.id || item.illustId)),
@@ -481,6 +506,144 @@ export function createPixivApi(transport) {
     }
   }
 
+  /** 我关注的作者列表（订阅页，按关注时间倒序分页） */
+  async function fetchFollowingUsers(opts = {}) {
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) return { error: cookieCheck.error, message: cookieCheck.message };
+
+    const { offset = 0, limit = 30 } = opts;
+    try {
+      const userId = extractUserIdFromCookie(cookieCheck.cookie);
+      if (!userId) return { error: 'auth_failed', message: 'Cookie 格式无效，应为 {userId}_{token}' };
+
+      const params = new URLSearchParams({ offset: String(offset), limit: String(limit), rest: 'show' });
+      const headers = { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` };
+      const data = await apiFetch(
+        `/ajax/user/${userId}/following?${params}&lang=zh`,
+        { headers, timeout: 15000 }
+      );
+
+      const users = (data?.body?.users || []).map(u => ({
+        userId: String(u.userId || u.id || ''),
+        name: u.userName || u.name || '',
+        account: u.userAccount || u.account || '',
+        avatar: proxyThumb(u.profileImageUrl || u.image || ''),
+        comment: u.comment || '',
+      }));
+
+      return {
+        total: data?.body?.total || 0,
+        offset,
+        users,
+      };
+    } catch (e) {
+      log.error('[fetchFollowingUsers] 失败:', e.message);
+      return { users: [], error: classifyError(e, '关注作者') };
+    }
+  }
+
+  /** 作者资料（头像/账号）— 详情页作者头像用；illust 接口不返回头像，需单独请求 */
+  async function fetchUserProfile(userId) {
+    if (!userId) return { profile: null, error: '缺少 userId' };
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) return { error: cookieCheck.error, message: cookieCheck.message };
+    try {
+      const headers = { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` };
+      const data = await apiFetch(`/ajax/user/${userId}?lang=zh`, { headers, timeout: 15000 });
+      const body = data?.body;
+      if (!body) return { profile: null, error: '未找到' };
+      const bg = typeof body.background === 'string' ? body.background : (body.background?.url || '');
+      return {
+        profile: {
+          userId: String(body.userId || userId),
+          name: body.name || '',
+          account: body.account || '',
+          avatar: proxyThumb(body.imageBig || body.image || ''),
+          background: proxyThumb(bg),
+          isFollowed: body.isFollowed === true,
+          premium: body.premium === true,
+        },
+      };
+    } catch (e) {
+      log.error('[fetchUserProfile] 失败:', e.message);
+      return { profile: null, error: classifyError(e, '作者资料') };
+    }
+  }
+
+  /** 关注作者（真实端点：POST /bookmark_add.php，表单格式 + x-csrf-token） */
+  async function followUser(userId, { restrict = 'public' } = {}) {
+    if (!userId) return { success: false, error: '缺少 userId' };
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) return { success: false, error: cookieCheck.error, message: cookieCheck.message };
+    const baseHeaders = () => ({
+      'Cookie': `PHPSESSID=${cookieCheck.cookie}`,
+      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const token = await getCsrfToken();
+        const body = new URLSearchParams({
+          mode: 'add',
+          type: 'user',
+          user_id: String(userId),
+          tag: '',
+          restrict: restrict === 'private' ? '1' : '0',
+          format: 'json',
+        }).toString();
+        const data = await apiFetch('/bookmark_add.php', {
+          method: 'POST',
+          body,
+          headers: { ...baseHeaders(), 'x-csrf-token': token },
+          timeout: 15000,
+        });
+        const ok = Array.isArray(data) || (data && data.error === false);
+        return ok ? { success: true } : { success: false, error: data?.message || '关注失败' };
+      } catch (e) {
+        if (attempt === 0 && /HTTP\s+(400|401|403|405|422)/.test(e.message || '')) {
+          // token 可能已失效：清缓存强制重取后重试一次
+          csrfTokenCache = { token: '', ts: 0 };
+          continue;
+        }
+        log.error('[followUser] 失败:', e.message);
+        return { success: false, error: classifyError(e, '关注') };
+      }
+    }
+    return { success: false, error: '关注失败' };
+  }
+
+  /** 取消关注作者（真实端点：POST /rpc_group_setting.php，表单格式 + x-csrf-token） */
+  async function unfollowUser(userId) {
+    if (!userId) return { success: false, error: '缺少 userId' };
+    const cookieCheck = await ensureCookie();
+    if (cookieCheck.error) return { success: false, error: cookieCheck.error, message: cookieCheck.message };
+    const baseHeaders = () => ({
+      'Cookie': `PHPSESSID=${cookieCheck.cookie}`,
+      'Content-Type': 'application/x-www-form-urlencoded; charset=utf-8',
+    });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const token = await getCsrfToken();
+        const body = new URLSearchParams({ mode: 'del', type: 'bookuser', id: String(userId) }).toString();
+        const data = await apiFetch('/rpc_group_setting.php', {
+          method: 'POST',
+          body,
+          headers: { ...baseHeaders(), 'x-csrf-token': token },
+          timeout: 15000,
+        });
+        const ok = !!(data && data.error !== true);
+        return ok ? { success: true } : { success: false, error: data?.message || '取关失败' };
+      } catch (e) {
+        if (attempt === 0 && /HTTP\s+(400|401|403|405|422)/.test(e.message || '')) {
+          csrfTokenCache = { token: '', ts: 0 };
+          continue;
+        }
+        log.error('[unfollowUser] 失败:', e.message);
+        return { success: false, error: classifyError(e, '取关') };
+      }
+    }
+    return { success: false, error: '取关失败' };
+  }
+
   /** 相似推荐 — 根据 illustId 获取相关作品 */
   async function fetchRelated(illustId, opts = {}) {
     const { limit = 30, start = 0 } = opts;
@@ -516,6 +679,10 @@ export function createPixivApi(transport) {
       fetchRanking,
     fetchBookmarks,
     fetchFollowing,
+    fetchFollowingUsers,
+    fetchUserProfile,
+    followUser,
+    unfollowUser,
     fetchRelated,
   };
 }

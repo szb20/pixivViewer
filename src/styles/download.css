@@ -1,12 +1,13 @@
 /* ══════════════════════════════════════════════
-   下载进度悬浮按钮 + 毛玻璃全屏弹窗
+   下载进度悬浮按钮 + 列表行样式
+   遮罩与面板骨架已收敛到 src/index.css .dialog-overlay / .dialog-panel
    ══════════════════════════════════════════════ */
 
 .download-fab {
   position: fixed;
   right: 16px;
-  /* 紧贴 like 按钮上方 */
-  bottom: max(96px, calc(env(safe-area-inset-bottom, 16px) + 80px));
+  /* 紧贴 like 按钮上方，间距 20px */
+  bottom: max(116px, calc(env(safe-area-inset-bottom, 16px) + 100px));
   z-index: 60;
   box-shadow:
     0 4px 18px rgba(0, 0, 0, 0.35);
@@ -26,40 +27,6 @@
   line-height: 18px;
   text-align: center;
   box-shadow: 0 0 8px rgba(255, 71, 87, 0.6);
-}
-
-/* ── 全屏毛玻璃弹出层 ── */
-
-.download-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 20px;
-  padding-top: max(20px, env(safe-area-inset-top, 0px));
-}
-
-@supports (backdrop-filter: blur()) {
-  .download-overlay {
-    background: rgba(0, 0, 0, 0.35);
-  }
-}
-
-.download-sheet {
-  width: 100%;
-  max-width: 480px;
-  max-height: 78vh;
-  overflow-y: auto;
-  border-radius: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(22, 25, 32, 0.62);
-  backdrop-filter: blur(40px) saturate(180%);
-  padding: 16px 18px 20px;
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.06),
-    0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
 /* ── 列表 ── */

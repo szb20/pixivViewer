@@ -22,6 +22,7 @@ export class PixivEntity {
    * @param {string}  [data.author='']
    * @param {string}  [data.authorName='']
    * @param {string}  [data.authorAccount='']
+   * @param {string}  [data.authorAvatar='']
    * @param {string}  [data.authorId='']
    * @param {string[]} [data.tags=[]]
    * @param {number}  [data.cachedAt]
@@ -48,6 +49,7 @@ export class PixivEntity {
     this.author = data.author || '';
     this.authorName = data.authorName || data.author || '';
     this.authorAccount = data.authorAccount || '';
+    this.authorAvatar = data.authorAvatar || '';
     this.authorId = data.authorId || '';
     this.tags = data.tags || [];
     this.cachedAt = data.cachedAt ?? Date.now();
@@ -117,6 +119,7 @@ export class PixivEntity {
       author: record.author || '',
       authorName: record.authorName || record.author || '',
       authorAccount: record.authorAccount || '',
+      authorAvatar: record.authorAvatar || '',
       authorId: record.authorId || '',
       tags: record.tags || [],
       cachedAt: record.cachedAt || Date.now(),
@@ -147,6 +150,7 @@ export class PixivEntity {
       author: this.author,
       authorName: this.authorName,
       authorAccount: this.authorAccount,
+      authorAvatar: this.authorAvatar,
       authorId: this.authorId,
       tags: this.tags,
       cachedAt: this.cachedAt,

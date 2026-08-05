@@ -1,14 +1,18 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { pixivApi } from '../../api/pixiv.js';
 import { saveItem } from '../../api/index.js';
+import { saveAllPages as saveAllPagesShared } from '../../api/saveAllPages.js';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
 import GridItem from '../GridItem.jsx';
+import FollowIcon from '../icons/FollowIcon.jsx';
 import { usePixivCache } from '../../context/pixivCacheContext.js';
 import { parsePixivResults, allMediaFromRelated } from './helpers.js';
+import { useAuthorProfile } from '../../hooks/useAuthorProfile.js';
+import { useGridLikeToggle } from '../../hooks/useGridLikeToggle.js';
 import { getSettingsSync, storageFacade } from '../../pixiv-assistant/index.js';
 import { gridThumbUrl } from '../../utils/quality.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
@@ -18,7 +22,6 @@ import { buildLikedOrSavedSet } from '../../utils/worksState.js';
 
 const log = createLogger('ImageDetail');
 /** 批量保存时的最大并发页数 */
-const SAVE_BATCH_SIZE = 3;
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
@@ -154,6 +157,7 @@ export default function ImageDetailView({
   restoreScroll = 0,
 }) {
   const { pixivCache, setPixivCache } = usePixivCache();
+  const toggleLike = useGridLikeToggle();
   // 已喜欢/已保存的作品不进入相关推荐；当前作品本身也排除
   const likedOrSavedSet = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
   const [related, setRelated] = useState([]);
@@ -161,6 +165,13 @@ export default function ImageDetailView({
   const relatedCacheRef = useRef({}); // illustId → { related, loadedPages }
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
   const [illustData, setIllustData] = useState(null);
+  const authorId = String(image?.authorId || illustData?.illust?.authorId || '');
+  const {
+    avatar: authorAvatar,
+    isFollowed: authorIsFollowed,
+    updating: followUpdating,
+    toggleFollow,
+  } = useAuthorProfile(authorId, image?.authorAvatar);
   const contentRef = useRef(null);
   const relatedRef = useRef(null); // 相关推荐哨兵
   const relatedInViewRef = useRef(false); // 相关推荐是否在视口内
@@ -174,8 +185,10 @@ export default function ImageDetailView({
 
   // 兼容旧数据：列表接口映射可能只带 illustType 不带 type
   const isGif = image?.type === 'gif' || Number(image?.illustType) === 2;
-  // Tag 展示：直接用列表返回的 tag（详情 API 额外 tag 不做增量追加）
-  const tags = (image?.tags || []).slice(0, 12);
+  // Tag 展示：优先列表返回的 tag；列表没带（如作者页/关注流，可能为空数组）则等 fetchIllust 回来用 API 的 tag 兜底
+  const listTags = Array.isArray(image?.tags) ? image.tags : [];
+  const apiTags = Array.isArray(illustData?.illust?.tags) ? illustData.illust.tags : [];
+  const tags = (listTags.length ? listTags : apiTags).filter(Boolean).slice(0, 12);
   const pageCount = Math.max(
     illustData?.illust?.pageCount || 0,
     illustData?.illust?.images?.length || 0,
@@ -344,52 +357,15 @@ export default function ImageDetailView({
     };
   }, [image, illustData, isGif]);
 
-  // 保存全部页（长按❤️/喜欢单图时调用）— 分批并发，最多 3 页同时下载；
-  // 返回 { saved, exists }：新增保存页数 / 相册中已存在的页数
+  // 保存全部页（长按❤️/喜欢单图时调用）— 与网格长按共用同一实现
   const saveAllPages = useCallback(async () => {
-    if (!image?.illustId) return { saved: 0, exists: 0 };
-    let imgs = illustData?.illust?.images || [];
-    let total = pageCount;
-    // illustData 未就绪时先拉一次详情，确保拿到完整页数
-    if (imgs.length === 0) {
-      try {
-        const r = await pixivApi.fetchIllust(image.illustId);
-        imgs = r?.illust?.images || [];
-        total = Math.max(r?.illust?.pageCount || 0, imgs.length || 0);
-      } catch (e) { log.debug('补拉详情失败，保持当前页数:', e?.message || e); }
-    }
-    total = Math.max(total, image?._totalPages || 1);
-    const pages = [];
-    const existsInCache = [];
-    for (let p = 0; p < total; p++) {
-      // 跳过已保存的页面（auto-save 已处理当前页，避免重复下载+重复 toast）
-      const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
-      if (pixivCache[ck]?.saved) { existsInCache.push(p); continue; }
-      pages.push({ item: buildSaveItem(p, imgs), ck });
-    }
-    let savedCount = 0;
-    let existsCount = existsInCache.length;
-    for (let i = 0; i < pages.length; i += SAVE_BATCH_SIZE) {
-      const batch = pages.slice(i, i + SAVE_BATCH_SIZE);
-      const results = await Promise.allSettled(batch.map(async ({ item, ck }) => {
-        const r = await saveItem(item);
-        if (r?.success || r?.cached) {
-          setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
-          return r;
-        }
-        return null;
-      }));
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value) {
-          if (r.value.idempotent || r.value.skipped) existsCount += 1;
-          else savedCount += 1;
-        } else {
-          log.warn('批量保存单页失败:', r.reason?.message || r.reason);
-        }
-      }
-    }
-    return { saved: savedCount, exists: existsCount };
-  }, [image, pageCount, illustData, pixivCache, buildSaveItem, setPixivCache]);
+    return saveAllPagesShared(image, {
+      pixivCache,
+      setPixivCache,
+      images: illustData?.illust?.images,
+      totalPages: pageCount,
+    });
+  }, [image, pageCount, illustData, pixivCache, setPixivCache]);
 
   // 长按图片 → 下载该页原图（单页保存）
   const downloadPage = useCallback(async (page) => {
@@ -408,14 +384,14 @@ export default function ImageDetailView({
         log.debug('单页下载补拉详情失败，保持兜底 URL:', e?.message || e);
       }
     }
-    showToast(alreadySaved ? '该页已在相册中' : `开始下载第 ${page + 1} 页…`);
+    showToast(alreadySaved ? '该页已在相册中' : `开始下载第 ${page + 1} 页…`, { type: 'info' });
     try {
       const r = await saveItem(buildSaveItem(page, imgs));
       if (r?.success || r?.cached) {
         setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
-        showToast(r?.idempotent || r?.skipped ? '该页已在相册中' : `已保存第 ${page + 1} 页到相册`);
+        showToast(r?.idempotent || r?.skipped ? '该页已在相册中' : `已保存第 ${page + 1} 页到相册`, { type: 'success' });
       } else {
-        showToast('下载失败');
+        showToast('下载失败', { type: 'error' });
       }
     } catch (e) {
       log.warn('单页下载失败:', page, e?.message || e);
@@ -572,8 +548,30 @@ export default function ImageDetailView({
           <div className="image-detail-author-row">
             {image?.authorName || image?.author ? (
               <span className="image-detail-author"
-                onClick={() => onAuthorWorks?.(image.authorId, image.authorName || image.author)}>
-                @{image.authorName || image.author}
+                onClick={() => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar)}>
+                <span className="image-detail-avatar-wrap">
+                  {authorAvatar
+                    ? <img className="image-detail-author-avatar" src={authorAvatar} alt="" loading="lazy" />
+                    : <span className="image-detail-author-avatar image-detail-author-avatar--placeholder" />}
+                  {authorId && (
+                    <button
+                      className={`follow-btn${authorIsFollowed ? ' followed' : ''}`}
+                      disabled={followUpdating}
+                      aria-label={authorIsFollowed ? '已关注' : '关注'}
+                      onClick={(e) => { e.stopPropagation(); toggleFollow(); }}
+                    >
+                      <FollowIcon followed={authorIsFollowed} />
+                    </button>
+                  )}
+                </span>
+                <span className="image-detail-author-text">
+                  <span className="image-detail-author-name">{image.authorName || image.author}</span>
+                  <span className="image-detail-author-sub">
+                    {illustData?.illust?.authorAccount && (
+                      <span className="image-detail-author-account">@{illustData.illust.authorAccount}</span>
+                    )}
+                  </span>
+                </span>
               </span>
             ) : null}
             <a className="image-detail-pixiv-link"
@@ -599,7 +597,6 @@ export default function ImageDetailView({
         )}
 
         {/* 相关推荐网格 */}
-        <div style={{ height: 60 }} />
         {loadingRelated && (
           <div className="hint">正在加载相关推荐...</div>
         )}
@@ -619,6 +616,7 @@ export default function ImageDetailView({
                     key={`rel-${img.illustId}`}
                     img={img}
                     onOpen={(it) => onSelectImage?.(allMediaFromRelated(it))}
+                    onLongPress={toggleLike}
                     variant="media"
                     thumbSrc={gridThumbUrl(img.thumbnailUrl || img.mediumUrl)}
                   />

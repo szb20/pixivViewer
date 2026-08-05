@@ -41,7 +41,11 @@ export function pixivReUrl(illustId, page = 0, size) {
  */
 export function proxyThumb(url) {
   if (!url) return '';
-  const proxied = url.replace(/i\.pximg\.net/gi, 'i.pixiv.re');
+  // 兼容非字符串字段（如 /ajax/user 的 background 可能是 { url } 对象）
+  let target = url;
+  if (typeof target === 'object' && target && typeof target.url === 'string') target = target.url;
+  if (typeof target !== 'string') return '';
+  const proxied = target.replace(/i\.pximg\.net/gi, 'i.pixiv.re');
   if (USE_PROXY) return proxied.replace(/https:\/\/i\.pixiv\.re/, '/pixiv-thumb');
   return proxied;
 }

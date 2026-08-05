@@ -11,6 +11,7 @@ export function buildLikeMeta(img) {
     author: m.author || '',
     authorName: m.authorName || m.author || '',
     authorAccount: m.authorAccount || '',
+    authorAvatar: m.authorAvatar || '',
     authorId: m.authorId || '',
     tags: m.tags || [],
     pixivUrl: m.pixivUrl || '',

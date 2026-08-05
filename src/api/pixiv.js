@@ -32,28 +32,30 @@ function buildHeaders(headers = {}) {
   return h;
 }
 
-async function devFetch(pathname, { headers = {}, timeout } = {}) {
+async function devFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
   const h = buildHeaders(headers);
   const ctrl = new AbortController();
   const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
   try {
-    const res = await fetch(`/pixiv-api${pathname}`, { headers: h, signal: ctrl.signal });
+    const res = await fetch(`/pixiv-api${pathname}`, { method, body, headers: h, signal: ctrl.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    return raw ? await res.text() : await res.json();
   } finally { if (timer) clearTimeout(timer); }
 }
 
-async function prodFetch(pathname, { headers = {}, timeout } = {}) {
+async function prodFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
   const h = buildHeaders(headers);
   const url = `${PIXIV_BASE}${pathname}`;
   try {
     const resp = await CapacitorHttp.request({
-      method: 'GET', url,
+      method, url,
       headers: h,
+      data: method === 'GET' ? undefined : body,
       connectTimeout: timeout || 15000,
       readTimeout: timeout || 15000,
     });
     if (resp.status < 200 || resp.status >= 300) throw new Error(`HTTP ${resp.status}`);
+    if (raw) return typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
     return typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
   } catch (e) {
     if (e.message?.includes('HTTP')) throw e;
@@ -62,9 +64,9 @@ async function prodFetch(pathname, { headers = {}, timeout } = {}) {
     const ctrl = new AbortController();
     const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
     try {
-      const res = await fetch(url, { headers: h, signal: ctrl.signal });
+      const res = await fetch(url, { method, body, headers: h, signal: ctrl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.json();
+      return raw ? await res.text() : await res.json();
     } finally { if (timer) clearTimeout(timer); }
   }
 }

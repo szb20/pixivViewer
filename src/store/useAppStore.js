@@ -104,9 +104,9 @@ export const useAppStore = create((set, get) => ({
         });
     },
 
-    openAuthorWorks: (authorId, authorName) => {
+    openAuthorWorks: (authorId, authorName, authorAvatar) => {
         if (!authorId) return;
-        set({ authorWorks: { authorId: String(authorId), authorName: authorName || '' } });
+        set({ authorWorks: { authorId: String(authorId), authorName: authorName || '', authorAvatar: authorAvatar || '' } });
     },
 
     closeAuthorWorks: () => {
@@ -123,6 +123,7 @@ export const useAppStore = create((set, get) => ({
             author: item.authorName || authorWorks?.authorName || '',
             authorName: item.authorName || authorWorks?.authorName || '',
             authorId: item.authorId || authorWorks?.authorId || '',
+            authorAvatar: item.authorAvatar || authorWorks?.authorAvatar || '',
             thumbnailUrl: item.thumbnailUrl,
             mediumUrl: item.mediumUrl,
             originalUrl: item.originalUrl || item.mediumUrl,

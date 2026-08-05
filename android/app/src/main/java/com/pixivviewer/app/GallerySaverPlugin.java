@@ -316,13 +316,13 @@ public class GallerySaverPlugin extends Plugin {
             ContentResolver cr = getContext().getContentResolver();
             // 用 LIKE 匹配（可能因历史遗留物理文件/同名冲突被 MediaStore 写成 "pixiv_meta (N).json"），
             // 按修改时间倒序取最新一份，保证恢复时读到最近备份
-            String selection = MediaStore.Downloads.DISPLAY_NAME + " LIKE ? AND "
+            String selection = MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
                 + MediaStore.Downloads.RELATIVE_PATH + " = ?";
-            String[] args = new String[]{"pixiv_meta%.json", META_RELATIVE_PATH};
+            String[] args = new String[]{fileName, META_RELATIVE_PATH};
             try (Cursor c = cr.query(
                     MediaStore.Downloads.EXTERNAL_CONTENT_URI,
                     new String[]{MediaStore.Downloads._ID},
-                    selection, args, MediaStore.Downloads.DATE_MODIFIED + " DESC")) {
+                    selection, args, null)) {
                 JSObject ret = new JSObject();
                 if (c == null || !c.moveToFirst()) {
                     ret.put("data", "");
@@ -342,6 +342,67 @@ public class GallerySaverPlugin extends Plugin {
                     call.resolve(ret);
                 }
             }
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** List all metadata backup file names (including historical copies), for merge-on-read restore */
+    @PluginMethod
+    public void listMetaFiles(PluginCall call) {
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            JSArray files = new JSArray();
+            String selection = MediaStore.Downloads.RELATIVE_PATH + " = ?";
+            String[] args = new String[]{META_RELATIVE_PATH};
+            try (Cursor c = cr.query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Downloads.DISPLAY_NAME},
+                    selection, args,
+                    MediaStore.Downloads.DATE_MODIFIED + " DESC")) {
+                if (c != null) {
+                    while (c.moveToNext()) {
+                        String name = c.getString(0);
+                        if (name == null || name.isEmpty()) continue;
+                        if (name.startsWith("pixiv_meta") || name.startsWith("pixivviewer-meta-backup")) {
+                            files.put(name);
+                        }
+                    }
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("files", files);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** List metadata backup PNG names in the gallery collection (survives reinstall) */
+    @PluginMethod
+    public void listMetaPngs(PluginCall call) {
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            JSArray files = new JSArray();
+            String selection = MediaStore.Images.Media.RELATIVE_PATH + " = ?";
+            String[] args = new String[]{RELATIVE_PATH};
+            try (Cursor c = cr.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    new String[]{MediaStore.Images.Media.DISPLAY_NAME},
+                    selection, args,
+                    MediaStore.Images.Media.DATE_MODIFIED + " DESC")) {
+                if (c != null) {
+                    while (c.moveToNext()) {
+                        String name = c.getString(0);
+                        if (name != null && name.startsWith("pixiv_meta") && name.endsWith(".png")) {
+                            files.put(name);
+                        }
+                    }
+                }
+            }
+            JSObject ret = new JSObject();
+            ret.put("files", files);
+            call.resolve(ret);
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }

@@ -6,9 +6,25 @@
   --text-primary: #f2f3f5;
   --text-secondary: #a0a4ad;
   --text-tertiary: #6b7080;
-  --accent: #4f8cff;
-  --danger: #ff6b6b;
-  --ok: #4ade80;
+  /* 主题色体系（JS 运行时注入，此处为默认 fallback） */
+  --color-accent: #4f8cff;
+  --color-accent-rgb: 79, 140, 255;
+  --color-success: #4ade80;
+  --color-success-rgb: 74, 222, 128;
+  --color-danger: #ff6b6b;
+  --color-danger-rgb: 255, 107, 107;
+  --color-warning: #ffa502;
+  --color-warning-rgb: 255, 165, 2;
+  --color-info: #5b9cf5;
+  --color-info-rgb: 91, 156, 245;
+  --color-like: #ff4757;
+  --color-like-rgb: 255, 71, 87;
+  --color-r18: #e6a6fa;
+  --color-r18-rgb: 230, 166, 250;
+  /* 兼容旧引用 */
+  --accent: var(--color-accent);
+  --danger: var(--color-danger);
+  --ok: var(--color-success);
 }
 
 /* llm-chat 搬运组件的 CSS 变量别名（让 lightbox 等样式直接生效） */
@@ -302,8 +318,12 @@ button {
   left: 50%;
   transform: translate(-50%, -50%);
   font-size: 32px;
-  color: rgba(255, 255, 255, 0.85);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  color: rgba(255, 255, 255, 0.96);
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 6px rgba(255, 255, 255, 0.75),
+    0 0 12px rgba(255, 255, 255, 0.5),
+    0 0 24px rgba(255, 255, 255, 0.3);
   pointer-events: none;
 }
 
@@ -342,7 +362,7 @@ button {
   padding: 0;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.3);
   font-size: 12px;
   line-height: 1;
   display: flex;
@@ -547,7 +567,7 @@ button {
   border: none;
   border-radius: 14px;
   background: var(--accent);
-  color: #fff;
+  color: #0f1115;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -565,7 +585,7 @@ button {
   border: none;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: #0f1115;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -578,6 +598,7 @@ button {
 }
 
 .gallery-item {
+  position: relative;
   aspect-ratio: 1;
   border-radius: 0;
   overflow: hidden;
@@ -608,74 +629,71 @@ button {
   cursor: pointer;
 }
 
-.modal-overlay {
+/* ═══════════════════════════════════════════════
+   统一弹窗骨架 — CSS 变量驱动，data-variant 切布局
+   ═══════════════════════════════════════════════ */
+
+.dialog-overlay {
   position: fixed;
   inset: 0;
   z-index: 100;
   background: rgba(0, 0, 0, 0.55);
   display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: dialog-overlay-in 0.25s ease;
+}
+
+@keyframes dialog-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* 底部弹出变体 */
+.dialog-overlay[data-variant="sheet"] {
   align-items: flex-end;
   justify-content: center;
+  padding: 0;
 }
 
-.modal {
+.dialog-panel {
   width: 100%;
-  max-width: 560px;
+  border: 1px solid rgba(var(--dialog-border, 255, 255, 255), var(--dialog-border-alpha, 0.1));
+  border-radius: var(--dialog-radius, 16px);
+  max-width: var(--dialog-max-w, 560px);
+  max-height: var(--dialog-max-h, none);
+  overflow-y: var(--dialog-overflow, visible);
+  animation: dialog-panel-in 0.3s ease;
+  /* 面板材质由 CSS 变量驱动，缺省 frosted 毛玻璃 */
+  background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.55));
+  backdrop-filter: blur(var(--dialog-blur, 12px));
+}
+
+@keyframes dialog-panel-in {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.dialog-overlay[data-variant="sheet"] .dialog-panel {
+  --dialog-radius: 16px 16px 0 0;
+  --dialog-max-w: 560px;
+  --dialog-max-h: none;
+  --dialog-overflow: visible;
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
-  background: var(--bg-panel);
-  border-radius: 16px 16px 0 0;
+  animation-name: dialog-sheet-in;
 }
 
-.modal h3 {
-  margin: 0 0 14px;
-  font-size: 16px;
+@keyframes dialog-sheet-in {
+  from { opacity: 0; transform: translateY(30%); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-.field {
-  margin-bottom: 12px;
-}
-
-.field label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.field input {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-}
-
-.field input:focus {
-  border-color: var(--accent);
-}
-
-.field select {
-  width: 100%;
-  padding: 9px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 13px;
-  outline: none;
-}
-
-.field select:focus {
-  border-color: var(--accent);
-}
-
-.modal-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
+.dialog-overlay[data-variant="card"] .dialog-panel {
+  --dialog-radius: 16px;
+  --dialog-max-w: 340px;
+  padding: 28px 24px 22px;
+  text-align: center;
 }
 
 .btn {
@@ -692,7 +710,7 @@ button {
 .btn-primary {
   border-color: var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: #0f1115;
   font-weight: 600;
 }
 
@@ -765,14 +783,21 @@ button {
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   animation: toast-in 0.2s ease;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(12px);
+  /* 由 CSS 变量 --toast-color 驱动颜色，缺省白色 */
+  background: rgba(var(--toast-color, 255, 255, 255), 0.12);
+  border: 1px solid rgba(var(--toast-color, 255, 255, 255), 0.18);
   text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.95),
-    0 0 20px rgba(255, 255, 255, 0.75),
-    0 0 40px rgba(255, 255, 255, 0.5);
+    0 0 8px  rgba(var(--toast-color, 255, 255, 255), 0.95),
+    0 0 20px rgba(var(--toast-color, 255, 255, 255), 0.65),
+    0 0 40px rgba(var(--toast-color, 255, 255, 255), 0.35);
 }
+
+/* 每个语义变体只声明 --toast-color */
+.toast[data-type="info"]    { --toast-color: var(--color-accent-rgb); }
+.toast[data-type="success"] { --toast-color: var(--color-success-rgb); }
+.toast[data-type="error"]   { --toast-color: var(--color-danger-rgb); }
+.toast[data-type="warning"] { --toast-color: var(--color-warning-rgb); }
 
 @keyframes toast-in {
   from {
@@ -833,39 +858,7 @@ button {
   justify-content: center;
 }
 
-/* ── 代理连接失败弹窗 ── */
-
-.proxy-check-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: rgba(0, 0, 0, 0.65);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  animation: proxy-overlay-in 0.25s ease;
-}
-
-@keyframes proxy-overlay-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.proxy-check-card {
-  width: 100%;
-  max-width: 340px;
-  padding: 28px 24px 22px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  text-align: center;
-  animation: proxy-card-in 0.3s ease;
-}
-
-@keyframes proxy-card-in {
-  from { opacity: 0; transform: scale(0.92) translateY(12px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
-}
+/* ── 代理连接失败弹窗（复用 .dialog-overlay + .dialog-panel） ── */
 
 .proxy-check-icon {
   font-size: 40px;
@@ -900,33 +893,15 @@ button {
   gap: 10px;
 }
 
-.proxy-check-btn {
+.proxy-check-actions .btn {
   flex: 1;
   padding: 10px 0;
-  border: none;
   border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
 }
 
-.proxy-check-btn:active {
-  transform: scale(0.97);
-}
-
-.proxy-check-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.proxy-check-btn-primary {
+.proxy-check-actions .btn-primary {
   background: var(--accent);
-  color: #fff;
-}
-
-.proxy-check-btn-secondary {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  color: #0f1115;
 }

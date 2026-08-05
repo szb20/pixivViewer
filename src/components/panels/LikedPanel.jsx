@@ -97,6 +97,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
           <GridItem
             key={`${item.illustId}_${item.pageIndex ?? 0}`}
             img={item}
+            isLiked
             onOpen={(it) => onOpen?.({
               illustId: it.illustId,
               _pageIndex: it.pageIndex ?? 0,
@@ -106,6 +107,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
               author: it.author,
               authorId: it.authorId,
               authorName: it.authorName,
+              authorAvatar: it.authorAvatar || '',
               thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
             })}
             variant="gallery"

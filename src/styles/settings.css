@@ -1,0 +1,263 @@
+/* ══════════════════════════════════════════════
+   设置页 · 全屏覆盖层 + 毛玻璃顶栏 + 卡片分组
+   ══════════════════════════════════════════════ */
+
+/* ── 全屏覆盖层 ── */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 毛玻璃 sticky 顶栏 ── */
+.settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px);
+  flex: none;
+}
+
+.settings-header-back {
+  font-size: 28px;
+  line-height: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 0 6px;
+  flex: none;
+}
+
+.settings-header-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* ── 可滚动内容 ── */
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+  scrollbar-width: none;
+}
+
+.settings-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── 卡片分组 ── */
+.settings-group {
+  margin-bottom: 16px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+}
+
+.settings-group-label {
+  padding: 10px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+/* ── 设置行 ── */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-size: 14px;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.settings-row-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* ── 展开行（Cookie 点击展开 textarea） ── */
+.settings-row-expand {
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-row-expand:active {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.settings-row-value {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row-chevron {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-left: 6px;
+  transition: transform 0.2s;
+}
+
+.settings-row-chevron--open {
+  transform: rotate(180deg);
+}
+
+.settings-expand-area {
+  padding: 0 14px 12px;
+}
+
+.settings-expand-area textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: monospace;
+  resize: vertical;
+  min-height: 80px;
+  outline: none;
+  line-height: 1.5;
+}
+
+.settings-expand-area textarea:focus {
+  border-color: var(--accent);
+}
+
+.settings-expand-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+/* ── 输入框 ── */
+.settings-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+
+.settings-input:focus {
+  border-color: var(--accent);
+}
+
+.settings-input-row {
+  padding: 10px 14px 12px;
+}
+
+/* ── Pill 按钮组（画质切换） ── */
+.settings-pill-group {
+  display: flex;
+  gap: 6px;
+}
+
+.settings-pill {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.settings-pill--active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0f1115;
+  font-weight: 600;
+}
+
+/* ── 主题色色块选择 ── */
+.settings-theme-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.settings-swatch {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+
+.settings-swatch:active {
+  transform: scale(0.9);
+}
+
+.settings-swatch--active {
+  border-color: #fff;
+  box-shadow:
+    0 0 0 2px var(--swatch-color),
+    0 0 16px rgba(var(--color-accent-rgb), 0.5);
+}
+
+/* ── 保存提示（floating toast 样式） ── */
+.settings-toast {
+  position: fixed;
+  bottom: max(24px, calc(env(safe-area-inset-bottom, 16px) + 8px));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 80;
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  animation: settings-toast-in 0.3s ease;
+  pointer-events: none;
+}
+
+@keyframes settings-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

@@ -7,7 +7,7 @@
  *      随系统存储一起存活；重装后若 IndexedDB 为空则从备份自动恢复。
  */
 import { Capacitor } from '@capacitor/core';
-import { getAllMeta, putMetaBatch } from './cacheDB.js';
+import { getAllMeta, getMeta, putMeta, putMetaBatch } from './cacheDB.js';
 import { getSettingsSync, saveSettings } from './config.js';
 import { PixivEntity } from './entity.js';
 import { parseCacheFileName } from '../core/utils.js';
@@ -71,9 +71,20 @@ export async function writeMetaBackup(records, settings) {
   try {
     const S = plugin();
     await S.writeMeta({ fileName: META_FILE, data: payload });
-    // 清理旧版 PNG 备份（Images 集合），避免残留
-    await S.delete({ fileName: LEGACY_META_PNG }).catch(() => {});
-    await S.delete({ fileName: '_.pixiv_meta.png' }).catch(() => {});
+    // 同时写一份相册副本（1×1 PNG 尾部藏 JSON）：
+    // 卸载重装后 MediaStore Downloads 行对新 UID 不可见，而 Pictures 媒体行可见，
+    // 相册副本是跨重装恢复的关键载体。
+    try {
+      const oldPngs = await S.listMetaPngs().then(r => r?.files, () => []);
+      if (Array.isArray(oldPngs)) {
+        for (const name of oldPngs) {
+          await S.delete({ fileName: name }).catch(() => {});
+        }
+      }
+      await S.save({ fileName: LEGACY_META_PNG, data: buildMetaPng(payload), mimeType: 'image/png' });
+    } catch (e) {
+      log.warn('[metaBackup] 写入相册备份失败:', e?.message || e);
+    }
     log.info('[metaBackup] 已备份', items.length, '条喜欢/已保存 → pixiv_meta.json');
   } catch (e) {
     log.warn('[metaBackup] 写入备份失败:', e?.message || e);
@@ -126,41 +137,124 @@ export async function ensureMetaBackup() {
   }
 }
 
-/** 读取备份文件（新版 JSON → 旧版 PNG 兜底迁移）。无备份/失败返回空。 */
-export async function readMetaBackup() {
-  if (!isNative()) return { items: [], settings: {} };
-  // 1. 新版：Downloads 里的纯 JSON
-  try {
-    const r = await plugin().readMeta({ fileName: META_FILE }).catch(() => null);
-    if (r?.data) {
-      const parsed = JSON.parse(r.data);
-      return {
-        items: Array.isArray(parsed?.items) ? parsed.items : [],
-        hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
-        settings: parsed?.settings || {},
-      };
+/** 合并多份备份条目：按作品去重，likedAt 取任意一份的最大值，元数据取最全的一份 */
+function mergeBackupItems(entries) {
+  const byKey = new Map();
+  for (const it of entries) {
+    if (!it?.illustId) continue;
+    const key = `pixiv:${it.illustId}:${it.pageIndex ?? 0}`;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, { ...it });
+      continue;
     }
-  } catch (e) {
-    log.debug('[metaBackup] 读取 JSON 备份失败:', e?.message || e);
+    const merged = { ...prev };
+    // 喜欢状态：只要任意一份备份标记过喜欢，就保留（0 永远不覆盖 >0）
+    merged.likedAt = Math.max(prev.likedAt || 0, it.likedAt || 0);
+    if ((it.cachedAt || 0) > (merged.cachedAt || 0)) merged.cachedAt = it.cachedAt;
+    if (it.state === 'saved' && merged.state !== 'saved') merged.state = 'saved';
+    for (const f of ['title', 'author', 'authorName', 'authorId', 'fileName', 'type']) {
+      if (!merged[f] && it[f]) merged[f] = it[f];
+    }
+    if (Array.isArray(it.tags) && it.tags.length
+      && !(Array.isArray(merged.tags) && merged.tags.length)) {
+      merged.tags = it.tags;
+    }
+    byKey.set(key, merged);
   }
-  // 2. 旧版：1×1 PNG 尾部藏的 JSON（迁移兼容）
-  try {
-    const r = await plugin().read({ fileName: LEGACY_META_PNG }).catch(() => null);
-    if (r?.data) {
-      const prefix = base64ToBytes(PNG_PREFIX_B64);
-      const bytes = base64ToBytes(r.data);
-      const text = new TextDecoder().decode(bytes.subarray(prefix.length));
-      const parsed = JSON.parse(text.trim());
-      return {
-        items: Array.isArray(parsed?.items) ? parsed.items : [],
-        hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
-        settings: parsed?.settings || {},
-      };
+  return [...byKey.values()];
+}
+
+/** 合并多份备份的 items / hidden / settings */
+function mergeBackupMeta(list) {
+  const out = { items: [], hidden: [], settings: {} };
+  for (const item of list) {
+    out.items = mergeBackupItems([...out.items, ...(Array.isArray(item?.items) ? item.items : [])]);
+    const hidden = Array.isArray(item?.hidden) ? item.hidden : [];
+    for (const h of hidden) {
+      if (!out.hidden.includes(h)) out.hidden.push(h);
     }
-  } catch (e) {
-    log.debug('[metaBackup] 读取旧版 PNG 备份失败:', e?.message || e);
+    const cookie = item?.settings?.pixivCookie;
+    if (cookie && !out.settings.pixivCookie) out.settings.pixivCookie = cookie;
+  }
+  return out;
+}
+
+/** 解析 v1/v3/v4 格式的 JSON 备份为统一结构（v1 旧格式字段是 entities） */
+function parseBackupJSON(data) {
+  const parsed = JSON.parse(data);
+  if (Array.isArray(parsed?.items)) {
+    return {
+      items: parsed.items,
+      hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
+      settings: parsed?.settings || {},
+    };
+  }
+  if (Array.isArray(parsed?.entities)) {
+    return {
+      items: parsed.entities.map(e => ({
+        illustId: e.illustId,
+        pageIndex: e.pageIndex ?? 0,
+        type: e.type || 'image',
+        state: e.state === 'saved' ? 'saved' : 'cached',
+        title: e.title || '',
+        author: e.author || '',
+        authorName: e.authorName || e.author || '',
+        authorId: e.authorId || '',
+        likedAt: e.likedAt || 0,
+        fileName: e.fileName || '',
+        cachedAt: e.cachedAt || 0,
+        tags: Array.isArray(e.tags) ? e.tags : [],
+      })),
+      hidden: Array.isArray(parsed?.hidden) ? parsed.hidden : [],
+      settings: parsed?.settings || {},
+    };
   }
   return { items: [], hidden: [], settings: {} };
+}
+
+/** 读取并合并全部备份（多份 JSON + 旧版 v1 + 旧版 PNG 兜底）。无备份/失败返回空。 */
+export async function readMetaBackup() {
+  if (!isNative()) return { items: [], hidden: [], settings: {} };
+  const parsed = [];
+
+  // 1. 枚举 Downloads 里全部 pixiv_meta*.json / pixivviewer-meta-backup.json 并逐份读取
+  try {
+    const names = await plugin().listMetaFiles().then(r => r?.files, () => []);
+    const targets = Array.isArray(names) ? names : [];
+    for (const name of targets) {
+      try {
+        const r = await plugin().readMeta({ fileName: name }).catch(() => null);
+        if (r?.data) parsed.push(parseBackupJSON(r.data));
+      } catch (e) {
+        log.debug('[metaBackup] 解析备份失败:', name, e?.message || e);
+      }
+    }
+  } catch (e) {
+    log.debug('[metaBackup] 枚举备份失败:', e?.message || e);
+  }
+
+  // 2. 相册里的 PNG 备份（Pictures 集合，卸载重装后仍可见；枚举全部副本并合并）
+  try {
+    const names = await plugin().listMetaPngs().then(r => r?.files, () => []);
+    const targets = Array.isArray(names) ? names : [];
+    for (const name of targets) {
+      try {
+        const r = await plugin().read({ fileName: name }).catch(() => null);
+        if (!r?.data) continue;
+        const prefix = base64ToBytes(PNG_PREFIX_B64);
+        const bytes = base64ToBytes(r.data);
+        const text = new TextDecoder().decode(bytes.subarray(prefix.length));
+        parsed.push(parseBackupJSON(text.trim()));
+      } catch (e) {
+        log.debug('[metaBackup] 解析相册备份失败:', name, e?.message || e);
+      }
+    }
+  } catch (e) {
+    log.debug('[metaBackup] 枚举相册备份失败:', e?.message || e);
+  }
+
+  return mergeBackupMeta(parsed);
 }
 
 /**
@@ -171,17 +265,61 @@ export async function restoreMetaBackupIfNeeded() {
   if (!isNative()) return;
   try {
     const existing = await getAllMeta().catch(() => []);
-    if (Array.isArray(existing) && existing.length > 0) return; // 非全新安装，不覆盖
-
     const { items, hidden, settings } = await readMetaBackup();
-    if (items.length === 0 && !settings.pixivCookie) return;
+    const likedFromBackup = (items || []).filter(it => (it.likedAt || 0) > 0);
+    const existingLikedCount = (existing || []).filter(r => (r.likedAt || 0) > 0).length;
+
+    // 全新安装：库为空 → 全量导入；库已有 saved 但一条喜欢都没有、而备份里有喜欢
+    // → 只合并喜欢标记（自愈：首次启动相册权限未就绪导致读不到备份的场景）。
+    const freshInstall = !Array.isArray(existing) || existing.length === 0;
+    const needLikeMerge = !freshInstall && existingLikedCount === 0 && likedFromBackup.length > 0;
+    if (!freshInstall && !needLikeMerge) return; // 非全新安装且喜欢数据已存在，不覆盖
+    if (freshInstall && items.length === 0 && !settings.pixivCookie) return;
 
     if (Array.isArray(hidden) && hidden.length > 0) {
       hiddenWorks.replace(hidden);
       log.info('[metaBackup] 已恢复', hidden.length, '条"不想看"隐藏');
     }
 
-    if (items.length > 0) {
+    if (needLikeMerge) {
+      // 只合并喜欢标记：已有记录仅抬升 likedAt 并回填缺失元数据，缺失的建轻记录
+      let mergedCount = 0;
+      for (const it of likedFromBackup) {
+        const id = PixivEntity.makeId(it.illustId, it.pageIndex ?? 0);
+        const rec = await getMeta(id);
+        if (rec) {
+          if ((rec.likedAt || 0) >= (it.likedAt || 0)) continue;
+          rec.likedAt = it.likedAt;
+          if (!rec.title && it.title) rec.title = it.title;
+          if (!rec.authorName && (it.authorName || it.author)) {
+            rec.authorName = it.authorName || it.author;
+            rec.author = it.author || it.authorName || '';
+          }
+          if (!rec.authorId && it.authorId) rec.authorId = it.authorId;
+          await putMeta(rec);
+          mergedCount++;
+        } else {
+          const light = new PixivEntity({
+            id,
+            illustId: it.illustId,
+            pageIndex: it.pageIndex ?? 0,
+            type: it.type === 'gif' ? 'gif' : 'image',
+            state: it.state === 'saved' ? 'saved' : 'cached',
+            title: it.title || '',
+            author: it.author || it.authorName || '',
+            authorName: it.authorName || it.author || '',
+            authorId: it.authorId || '',
+            likedAt: it.likedAt,
+            fileName: it.fileName || '',
+            cachedAt: it.cachedAt || Date.now(),
+            tags: Array.isArray(it.tags) ? it.tags : [],
+          });
+          await putMeta(light.toRecord());
+          mergedCount++;
+        }
+      }
+      log.info('[metaBackup] 已合并喜欢标记', mergedCount, '条（备份', likedFromBackup.length, '条）');
+    } else if (items.length > 0) {
       const records = items.map(it => {
         const entity = new PixivEntity({
           id: PixivEntity.makeId(it.illustId, it.pageIndex ?? 0),
@@ -274,4 +412,16 @@ function base64ToBytes(b64) {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+/** 把 JSON 备份包裹进 1×1 PNG 尾部，作为相册集合里的跨重装备份副本 */
+function buildMetaPng(payload) {
+  const prefix = base64ToBytes(PNG_PREFIX_B64);
+  const json = new TextEncoder().encode(payload);
+  const out = new Uint8Array(prefix.length + json.length);
+  out.set(prefix, 0);
+  out.set(json, prefix.length);
+  let bin = '';
+  for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i]);
+  return btoa(bin);
 }
