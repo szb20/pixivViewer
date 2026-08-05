@@ -25,8 +25,8 @@ window.__pixivViewer = window.__pixivViewer || { storageFacade };
 const TABS = [
   { key: 'discover', label: '推荐' },
   { key: 'ranking', label: '排行' },
-  { key: 'search', label: '搜索' },
   { key: 'me', label: '我' },
+  { key: 'search', label: '搜索' },
 ];
 
 const log = createLogger('App');
@@ -103,7 +103,7 @@ export default function App() {
     <div className="app">
       <ErrorBoundary>
         <main className="app-content">
-          <div style={{ display: activeTab === 'discover' ? undefined : 'none' }}>
+          <div className="tab-pane" style={{ display: activeTab === 'discover' ? undefined : 'none' }}>
             {visitedTabs.has('discover') && (
               <ErrorBoundary key="discover">
                 <DiscoverPage
@@ -115,7 +115,7 @@ export default function App() {
               </ErrorBoundary>
             )}
           </div>
-          <div style={{ display: activeTab === 'ranking' ? undefined : 'none' }}>
+          <div className="tab-pane" style={{ display: activeTab === 'ranking' ? undefined : 'none' }}>
             {visitedTabs.has('ranking') && (
               <ErrorBoundary key="ranking">
                 <RankingPage
@@ -126,7 +126,7 @@ export default function App() {
               </ErrorBoundary>
             )}
           </div>
-          <div style={{ display: activeTab === 'search' ? undefined : 'none' }}>
+          <div className="tab-pane" style={{ display: activeTab === 'search' ? undefined : 'none' }}>
             {visitedTabs.has('search') && (
               <ErrorBoundary key="search">
                 <SearchPage
@@ -139,12 +139,12 @@ export default function App() {
               </ErrorBoundary>
             )}
           </div>
-          <div style={{ display: activeTab === 'me' ? undefined : 'none' }}>
+          <div className="tab-pane" style={{ display: activeTab === 'me' ? undefined : 'none' }}>
             {visitedTabs.has('me') && (
               <ErrorBoundary key="me">
                 <MePage
                   active={activeTab === 'me'}
-                  showSettingsBtn={activeTab === 'me' && !detailImage && !authorWorks}
+                  showSettingsBtn={activeTab === 'me' && !settingsOpen && !detailImage && !authorWorks}
                   onOpen={openDetail}
                   onOpenSettings={openSettings}
                   onAuthorWorks={openAuthorWorks}

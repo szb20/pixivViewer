@@ -24,6 +24,8 @@ const SUB_TABS = [
 export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
   const [subTab, setSubTab] = useState('liked');
   const [visitedSubs, setVisitedSubs] = useState(() => new Set(['liked']));
+  // 子页签切换动画：旧面板淡出后再隐藏
+  const [subAnim, setSubAnim] = useState(null);
   // 子标签栏显隐：仿照排行页筛选栏，下滑隐藏、双击"我"tab 切换
   const [showBar, setShowBar] = useState(true);
   const subTabRef = useRef(subTab);
@@ -81,9 +83,19 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
   }, []);
 
   const switchSubTab = (key) => {
+    if (key === subTab) return;
+    setSubAnim({ from: subTab });
     setVisitedSubs(v => { const n = new Set(v); n.add(key); return n; });
     setSubTab(key);
+    window.setTimeout(() => setSubAnim(null), 240);
   };
+
+  const subPaneVisible = (key) => key === subTab || (subAnim && key === subAnim.from);
+  const subPaneCls = (key) => (
+    subAnim && key === subAnim.from
+      ? 'tab-pane tab-pane--fade-out'
+      : (subAnim && key === subTab ? 'tab-pane tab-pane--fade-in' : 'tab-pane')
+  );
 
   return (
     <div className="page me-page">
@@ -104,7 +116,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
 
       <div className="me-panels">
         {visitedSubs.has('following') && (
-          <div style={{ display: subTab === 'following' ? undefined : 'none' }}>
+          <div className={subPaneCls('following')} style={{ display: subPaneVisible('following') ? undefined : 'none' }}>
             <FollowingPanel
               onOpen={onOpen}
               onOpenSettings={onOpenSettings}
@@ -113,7 +125,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
           </div>
         )}
         {visitedSubs.has('subscriptions') && (
-          <div style={{ display: subTab === 'subscriptions' ? undefined : 'none' }}>
+          <div className={subPaneCls('subscriptions')} style={{ display: subPaneVisible('subscriptions') ? undefined : 'none' }}>
             <FollowingAuthorsPanel
               onOpen={onOpen}
               onOpenAuthor={onAuthorWorks}
@@ -123,7 +135,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
           </div>
         )}
         {visitedSubs.has('liked') && (
-          <div style={{ display: subTab === 'liked' ? undefined : 'none' }}>
+          <div className={subPaneCls('liked')} style={{ display: subPaneVisible('liked') ? undefined : 'none' }}>
             <LikedPanel
               onOpen={onOpen}
               onReportLoad={reportLoad}
@@ -131,7 +143,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
           </div>
         )}
         {visitedSubs.has('bookmarks') && (
-          <div style={{ display: subTab === 'bookmarks' ? undefined : 'none' }}>
+          <div className={subPaneCls('bookmarks')} style={{ display: subPaneVisible('bookmarks') ? undefined : 'none' }}>
             <BookmarksPanel
               onOpen={onOpen}
               onOpenSettings={onOpenSettings}

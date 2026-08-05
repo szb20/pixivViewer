@@ -90,11 +90,13 @@ export default memo(function GridItem({
   const src = thumbSrc || img.thumbnailUrl || img.mediumUrl || '';
   const pageCount = Number(img._totalPages || img.pageCount) || 1;
   const isGif = img.type === 'gif' || Number(img.illustType) === 2;
+  // 缩略图加载完成前显示高光扫描占位
+  const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
 
   // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
   if (variant === 'gallery') {
     if (!src) {
-      return <div className={v.item}><div className={v.thumb} /></div>;
+      return <div className={`${v.item} grid-shimmer`}><div className={v.thumb} /></div>;
     }
     if (error) {
       return (
@@ -132,7 +134,7 @@ export default memo(function GridItem({
 
   return (
     <div
-      className={v.item}
+      className={`${v.item}${shimmerCls}`}
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}
@@ -145,7 +147,7 @@ export default memo(function GridItem({
       {loaded && isLiked && v.like && (
         <span className={v.like}><HeartIcon filled /></span>
       )}
-      {onHide && (
+      {loaded && onHide && (
         <button
           className="grid-hide"
           onClick={(e) => { e.stopPropagation(); onHide?.(img.illustId); }}

@@ -6,6 +6,7 @@
   inset: 0;
   z-index: 50;
   background: var(--bg);
+  animation: overlay-in 0.24s ease;
 }
 
 /* 全屏"作者作品"页 — 叠加在详情页之上 */
@@ -16,6 +17,7 @@
   background: var(--bg);
   display: flex;
   flex-direction: column;
+  animation: overlay-in 0.24s ease;
 }
 
 /* 顶部栏 + 系统栏整体毛玻璃：sticky 在滚动内容之上，内容从底部滚过时产生模糊 */
@@ -197,8 +199,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid rgba(255, 255, 255, 0.35);
-  background: rgba(15, 17, 21, 0.72);
+  border: 0.8px solid rgba(255, 255, 255, 0.35);
+  background: rgba(15, 17, 21, 0.18);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: var(--text-primary);
@@ -227,7 +229,7 @@
 .follow-btn.followed {
   border-color: rgba(74, 222, 128, 0.55);
   color: var(--ok);
-  background: rgba(15, 17, 21, 0.72);
+  background: rgba(15, 17, 21, 0.18);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }

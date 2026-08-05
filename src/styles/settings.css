@@ -7,10 +7,11 @@
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: rgba(15, 17, 21, 0.55);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 17, 21, 0.42);
+  backdrop-filter: blur(22px) saturate(160%);
   display: flex;
   flex-direction: column;
+  animation: overlay-in 0.24s ease;
 }
 
 /* ── 毛玻璃 sticky 顶栏 ── */
@@ -22,8 +23,9 @@
   align-items: center;
   gap: 8px;
   padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
-  background: rgba(15, 17, 21, 0.55);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 17, 21, 0.42);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex: none;
 }
 
@@ -63,8 +65,12 @@
   margin-bottom: 16px;
   border-radius: 12px;
   overflow: hidden;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 .settings-group-label {
@@ -83,7 +89,7 @@
   justify-content: space-between;
   padding: 12px 14px;
   min-height: 44px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .settings-row:last-child {
@@ -139,9 +145,9 @@
 .settings-expand-area textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 13px;
   font-family: monospace;
@@ -166,9 +172,9 @@
 .settings-input {
   width: 100%;
   padding: 9px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
@@ -190,9 +196,9 @@
 
 .settings-pill {
   padding: 5px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 16px;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;

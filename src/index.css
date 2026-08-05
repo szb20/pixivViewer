@@ -106,6 +106,7 @@ button {
 .app-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
   padding-bottom: 32px;
@@ -206,7 +207,7 @@ button {
   height: 48px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 0.8px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(12px) saturate(150%);
   display: inline-flex;
@@ -904,4 +905,46 @@ button {
 .proxy-check-actions .btn-primary {
   background: var(--accent);
   color: #0f1115;
+}
+
+/* ── 网格占位高光扫描（缩略图加载完成前）── */
+.grid-shimmer {
+  background: linear-gradient(110deg, var(--bg-secondary) 30%, #262b36 50%, var(--bg-secondary) 70%);
+  background-size: 200% 100%;
+  animation: grid-shimmer-sweep 1.2s linear infinite;
+}
+
+@keyframes grid-shimmer-sweep {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+/* 子页签切换：新面板叠在上层淡入（旧面板留在文档流中，高度稳定） */
+.tab-pane--fade-in {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  animation: pane-in 0.2s ease;
+}
+
+/* 子页签切换：旧面板原位淡出 */
+.tab-pane--fade-out {
+  animation: pane-out 0.2s ease forwards;
+}
+
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pane-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* ── 全屏遮罩淡入（详情/作者页/设置）── */
+@keyframes overlay-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
 }
