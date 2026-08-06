@@ -6,6 +6,7 @@ import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import SearchIcon from '../components/icons/SearchIcon.jsx';
 import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
+import { getMainScrollEl } from '../utils/scroll.js';
 import '../styles/search.css';
 
 const PAGE_SIZE = 20;
@@ -91,7 +92,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
 
   // 滚动收起：上下滑动都隐藏搜索栏（弹出靠双击当前 Tab）
   useEffect(() => {
-    const el = document.querySelector('.app-content');
+    const el = getMainScrollEl();
     if (!el) return;
     let last = el.scrollTop;
     const onScroll = () => {

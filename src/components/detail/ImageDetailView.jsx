@@ -7,14 +7,14 @@ import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
-import GridItem from '../GridItem.jsx';
 import FollowIcon from '../icons/FollowIcon.jsx';
+import DetailPageBlock from './DetailPageBlock.jsx';
+import RelatedGrid from './RelatedGrid.jsx';
 import { usePixivCache } from '../../context/pixivCacheContext.js';
-import { parsePixivResults, allMediaFromRelated } from './helpers.js';
+import { parsePixivResults } from './helpers.js';
 import { useAuthorProfile } from '../../hooks/useAuthorProfile.js';
 import { useGridLikeToggle } from '../../hooks/useGridLikeToggle.js';
 import { getSettingsSync, storageFacade } from '../../pixiv-assistant/index.js';
-import { gridThumbUrl } from '../../utils/quality.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
 import { showToast } from '../../utils/toast.js';
@@ -24,137 +24,13 @@ const log = createLogger('ImageDetail');
 /** 批量保存时的最大并发页数 */
 
 /**
- * 多图详情页的单页块 — 所有页面上下堆叠展示。
- * 进入视口时懒加载原图（本地相册优先 → 网络原图），
- * 原图就绪前用缩略图模糊铺底；点击打开灯箱；长按下载该页原图。
- */
-function DetailPageBlock({ page, totalPages, image, previewUrl, defaultRatio, registerRef, onOpenLightbox, onLongPress }) {
-  const wrapRef = useRef(null);
-  const [failed, setFailed] = useState(false);
-  const [ratio, setRatio] = useState(null); // 预览图加载后按真实比例覆盖占位
-  const [loaded, setLoaded] = useState(false); // 预览图是否加载完成（加载占位用）
-  const longPressTimerRef = useRef(null);
-  const longPressTriggeredRef = useRef(false);
-  const pressStartRef = useRef(null); // { x, y } long-press origin; tolerate tiny finger jitter
-
-  // 长按 500ms 触发单页下载；只有明显移动(>10px)/抬起/离开才取消。
-  // 用 setPointerCapture 锁定指针，配合 contextmenu 兜底，避免被 WebView/click 吃掉。
-  const startLongPress = useCallback((e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    pressStartRef.current = { x: e.clientX, y: e.clientY };
-    longPressTriggeredRef.current = false;
-    clearTimeout(longPressTimerRef.current);
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      pressStartRef.current = null;
-      onLongPress?.(page);
-    }, 500);
-  }, [page, onLongPress]);
-
-  const handlePointerMove = useCallback((e) => {
-    const start = pressStartRef.current;
-    if (!start) return;
-    if (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10) {
-      clearTimeout(longPressTimerRef.current);
-      pressStartRef.current = null;
-    }
-  }, []);
-
-  const cancelLongPress = useCallback(() => {
-    pressStartRef.current = null;
-    clearTimeout(longPressTimerRef.current);
-  }, []);
-
-  const handleContextMenu = useCallback((e) => {
-    e.preventDefault();
-    if (e.button === 2) return;
-    if (longPressTriggeredRef.current) return;
-    longPressTriggeredRef.current = true;
-    clearTimeout(longPressTimerRef.current);
-    onLongPress?.(page);
-  }, [page, onLongPress]);
-
-  // 所有页用缩略图模糊铺底，第 0 页用 thumb，其他页更模糊
-  // 缩略图铺底：优先网格带进来的真实缩略图；其他页兜底用 pixiv.re 原图短链（thumb 裁剪路径 404）
-  const bg = image?.thumbnailUrl || pixivReUrl(String(image.illustId), page);
-  const bgClass = page === 0 ? 'image-detail-bg' : 'image-detail-bg image-detail-bg--deep';
-  // 展示图：已下载页 → 本地原图（blob）；未下载页 → 540px 等比预览（加载前只保留比例占位块）
-  const src = previewUrl;
-  const heroRatio = ratio || defaultRatio || '3 / 4';
-
-  return (
-    <div
-      ref={(node) => { wrapRef.current = node; registerRef?.(page, node); }}
-      className="image-detail-hero"
-      onClick={() => {
-        if (longPressTriggeredRef.current) {
-          longPressTriggeredRef.current = false;
-          return;
-        }
-        onOpenLightbox?.(page);
-      }}
-      onPointerDown={startLongPress}
-      onPointerMove={handlePointerMove}
-      onPointerUp={cancelLongPress}
-      onPointerLeave={cancelLongPress}
-      onPointerCancel={cancelLongPress}
-      onContextMenu={handleContextMenu}
-      style={{ aspectRatio: heroRatio, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'pan-y' }}
-    >
-      {bg && <img className={bgClass} src={bg} alt="" draggable={false} />}
-      {!src ? (
-        // illustData 尚未加载，先显示转圈占位
-        <div className="image-detail-placeholder">
-          <span className="image-detail-placeholder-spinner" />
-        </div>
-      ) : !failed ? (
-        <>
-          {!loaded && (
-            <div className="image-detail-placeholder">
-              <span className="image-detail-placeholder-spinner" />
-            </div>
-          )}
-          <img
-            className="image-detail-main image-detail-main--flow"
-            key={src}
-            src={src}
-            alt={`第 ${page + 1} 页`}
-            loading="lazy"
-            draggable={false}
-            onLoad={(e) => {
-              setLoaded(true);
-              // 仅等比预览图参与宽高比校准，方形缩略图不参与
-              if (previewUrl) {
-                const nw = e.currentTarget.naturalWidth;
-                const nh = e.currentTarget.naturalHeight;
-                if (nw && nh) setRatio(`${nw} / ${nh}`);
-              }
-            }}
-            onError={() => {
-              log.warn('详情页预览图加载失败:', page, src?.slice(0, 120));
-              setFailed(true);
-            }}
-          />
-        </>
-      ) : (
-        <div className="image-detail-error">加载失败</div>
-      )}
-      {/* 页数标注：直接标在本页图片右下角 */}
-      {totalPages > 1 && (
-        <span className="detail-hero-pages">{page + 1}/{totalPages}</span>
-      )}
-    </div>
-  );
-}
-
-/**
  * 图片详情页 — 全屏展示大图 + 信息 + 操作 + 相关推荐网格。
  * 点击图片进入，往下滑看推荐，点推荐图片切换详情。
  */
 export default function ImageDetailView({
   image, onSelectImage, onAuthorWorks, onSearchTag,
   restoreScroll = 0,
+  restoreAnchor = null,
 }) {
   const { pixivCache, setPixivCache } = usePixivCache();
   const toggleLike = useGridLikeToggle();
@@ -182,6 +58,8 @@ export default function ImageDetailView({
   const prevLocalSrcsRef = useRef({});
   const [localResolved, setLocalResolved] = useState(false); // 当前作品本地解析是否完成
   const lastRestoreRef = useRef(null); // 最近一次滚动恢复记录（用于数据就绪后校正）
+  const ratioCacheRef = useRef({}); // illustId → { page: "w / h" }，返回时复用，避免高度二次校准闪动
+  const userInteractedAfterRestoreRef = useRef(false); // 恢复后用户是否已主动操作滚动/触控
 
   // 兼容旧数据：列表接口映射可能只带 illustType 不带 type
   const isGif = image?.type === 'gif' || Number(image?.illustType) === 2;
@@ -202,6 +80,48 @@ export default function ImageDetailView({
     const h = image?.height || illustData?.illust?.height || 0;
     return w && h ? `${w} / ${h}` : '3 / 4';
   })();
+  const pageRatios = ratioCacheRef.current[image?.illustId] || {};
+  const rememberPageRatio = useCallback((page, nextRatio) => {
+    if (!image?.illustId || !nextRatio) return;
+    const prev = ratioCacheRef.current[image.illustId] || {};
+    if (prev[page] === nextRatio) return;
+    ratioCacheRef.current[image.illustId] = { ...prev, [page]: nextRatio };
+  }, [image?.illustId]);
+
+  const markUserInteracted = useCallback(() => {
+    userInteractedAfterRestoreRef.current = true;
+  }, []);
+
+  const registerPageRef = useCallback((page, node) => {
+    if (node) pageRefs.current[page] = node;
+    else delete pageRefs.current[page];
+  }, []);
+
+  const applyScrollRestore = useCallback(() => {
+    const target = image?._pageIndex ?? 0;
+    const el = contentRef.current;
+    if (!el) return 0;
+
+    // 优先按锚点恢复：保存"第一个可见图片块/相关推荐块距离容器顶部的偏移"。
+    // 当前面图片高度因异步比例/本地原图变化时，锚点恢复比裸 scrollTop 更稳定。
+    if (restoreAnchor?.id) {
+      const node = el.querySelector(`[data-detail-anchor="${restoreAnchor.id}"]`);
+      if (node) {
+        const rootTop = el.getBoundingClientRect().top;
+        const nodeTop = node.getBoundingClientRect().top;
+        el.scrollTop += nodeTop - rootTop - (restoreAnchor.delta || 0);
+        return el.scrollTop;
+      }
+    }
+
+    if (target > 0) {
+      const node = pageRefs.current[target];
+      if (node) node.scrollIntoView({ block: 'start' });
+    } else {
+      el.scrollTop = restoreScroll || 0;
+    }
+    return el.scrollTop;
+  }, [image?._pageIndex, restoreAnchor, restoreScroll]);
 
   // 切换作品时重置详情数据（避免残留上一张作品的画面）
   useEffect(() => {
@@ -227,14 +147,15 @@ export default function ImageDetailView({
     const target = image?._pageIndex ?? 0;
     const el = contentRef.current;
     if (!el) return;
-    if (target > 0) {
-      const node = pageRefs.current[target];
-      if (node) node.scrollIntoView({ block: 'start' });
-    } else {
-      el.scrollTop = restoreScroll || 0;
-    }
-    lastRestoreRef.current = { illustId: image.illustId, target, appliedTop: el.scrollTop };
-  }, [image?.illustId, image?._pageIndex, restoreScroll]);
+    userInteractedAfterRestoreRef.current = false;
+    const appliedTop = applyScrollRestore();
+    lastRestoreRef.current = {
+      illustId: image.illustId,
+      target,
+      appliedTop,
+      anchor: restoreAnchor,
+    };
+  }, [image?.illustId, image?._pageIndex, restoreScroll, restoreAnchor, applyScrollRestore]);
 
   // 详情数据加载完、页面真实高度就绪后，校正一次滚动位置（仅当用户尚未手动滚动时）
   useEffect(() => {
@@ -242,13 +163,12 @@ export default function ImageDetailView({
     if (!last || !illustData || last.illustId !== image?.illustId) return;
     const el = contentRef.current;
     if (!el) return;
-    if (Math.abs(el.scrollTop - last.appliedTop) > 40) return; // 用户已手动滚动，不打扰
-    if (last.target > 0) {
-      const node = pageRefs.current[last.target];
-      if (node) node.scrollIntoView({ block: 'start' });
-    } else {
-      el.scrollTop = last.appliedTop;
-    }
+    if (userInteractedAfterRestoreRef.current) return; // 用户已手动滚动/触控，不打扰
+    requestAnimationFrame(() => {
+      if (userInteractedAfterRestoreRef.current) return;
+      const appliedTop = applyScrollRestore();
+      lastRestoreRef.current = { ...last, appliedTop };
+    });
   }, [illustData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 获取作品详情（所有页共享同一份 API 响应，仅依赖 illustId，不随翻页重复请求）
@@ -495,7 +415,13 @@ export default function ImageDetailView({
 
   return (
     <div className="char-state-bar">
-      <div className="char-state-content" ref={contentRef}>
+      <div
+        className="char-state-content"
+        ref={contentRef}
+        onTouchStartCapture={markUserInteracted}
+        onPointerDownCapture={markUserInteracted}
+        onWheelCapture={markUserInteracted}
+      >
         {/* GIF 动图：用动图播放器 */}
         {isGif ? (
           <div style={{ display: 'flex', justifyContent: 'center' }} onClick={() => setLightboxIndex(0)}>
@@ -532,9 +458,11 @@ export default function ImageDetailView({
                     image={image}
                     previewUrl={heroUrl}
                     defaultRatio={defaultRatio}
-                    registerRef={(page, node) => { pageRefs.current[page] = node; }}
+                    cachedRatio={pageRatios[p]}
+                    registerRef={registerPageRef}
                     onOpenLightbox={(page) => setLightboxIndex(page)}
                     onLongPress={downloadPage}
+                    onRatioReady={rememberPageRatio}
                   />
                 );
               })}
@@ -601,29 +529,14 @@ export default function ImageDetailView({
           <div className="hint">正在加载相关推荐...</div>
         )}
         {related.length > 0 && (
-          <div className="pixiv-grid" ref={relatedRef}>
-            {(() => {
-              // O(n) 去重：同一作品只渲染一次（保留首条），替代原先 map 内 findIndex 的 O(n²)
-              const seen = new Set();
-              return related.map((img) => {
-                if (img._pageIndex !== 0) return null;
-                if (img.illustId === image?.illustId) return null;
-                if (likedOrSavedSet.has(img.illustId)) return null;
-                if (seen.has(img.illustId)) return null;
-                seen.add(img.illustId);
-                return (
-                  <GridItem
-                    key={`rel-${img.illustId}`}
-                    img={img}
-                    onOpen={(it) => onSelectImage?.(allMediaFromRelated(it))}
-                    onLongPress={toggleLike}
-                    variant="media"
-                    thumbSrc={gridThumbUrl(img.thumbnailUrl || img.mediumUrl)}
-                  />
-                );
-              });
-            })()}
-          </div>
+          <RelatedGrid
+            related={related}
+            currentIllustId={image?.illustId}
+            likedOrSavedSet={likedOrSavedSet}
+            relatedRef={relatedRef}
+            onSelectImage={onSelectImage}
+            onLongPress={toggleLike}
+          />
         )}
 
         {/* 底部间距 */}

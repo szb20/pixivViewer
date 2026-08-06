@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getMainScrollEl } from '../utils/scroll.js';
 
 /** 触发刷新的下拉距离阈值（px） */
 const THRESHOLD = 64;
@@ -41,7 +42,7 @@ export default function PullToRefresh({ onRefresh }) {
   };
 
   useEffect(() => {
-    const el = document.querySelector('.app-content');
+    const el = getMainScrollEl();
     if (!el) return;
 
     const onTouchStart = (e) => {

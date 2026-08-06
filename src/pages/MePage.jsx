@@ -4,6 +4,7 @@ import FollowingPanel from '../components/panels/FollowingPanel.jsx';
 import FollowingAuthorsPanel from '../components/panels/FollowingAuthorsPanel.jsx';
 import LikedPanel from '../components/panels/LikedPanel.jsx';
 import BookmarksPanel from '../components/panels/BookmarksPanel.jsx';
+import { getMainScrollEl } from '../utils/scroll.js';
 import '../styles/me.css';
 
 const SUB_TABS = [
@@ -61,7 +62,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
   // 仅"用户主动下滑"隐藏子标签栏：用 touchmove/wheel 判定，
   // 切 tab 时恢复滚动位置是程序化的（不产生 touchmove/wheel），不会误隐藏。
   useEffect(() => {
-    const el = document.querySelector('.app-content');
+    const el = getMainScrollEl();
     if (!el) return;
     // 手势起点：一次触摸/滚动会话内，滚动超过起点 +20px 视为下滑
     let gestureStart = el.scrollTop;

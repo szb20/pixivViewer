@@ -1,8 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { createLogger } from '../utils/logger.js';
-
-const log = createLogger('ImagePreloader');
-
 const preloaded = new Set();
 const MAX_CACHE = 200;
 

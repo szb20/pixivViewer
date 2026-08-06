@@ -11,8 +11,10 @@ initTheme()
 
 // 设置透明状态栏 + 白色文字/图标（适配深色背景）
 import { StatusBar, Style } from '@capacitor/status-bar'
-StatusBar.setStyle({ style: Style.Dark })
-StatusBar.setOverlaysWebView({ overlay: true })
+if (window.Capacitor?.isNativePlatform?.()) {
+  StatusBar.setStyle({ style: Style.Dark }).catch(() => {})
+  StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {})
+}
 
 const log = createLogger('global')
 

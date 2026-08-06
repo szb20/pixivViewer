@@ -3,6 +3,7 @@ import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache } from '../pixiv-assistant/index.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import { getMainScrollEl } from '../utils/scroll.js';
 
 const CACHE_KEY = 'ranking';
 
@@ -40,9 +41,12 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
   const cacheRef = useRef(new Map()); // mode → { items, hasMore, page } 内存缓存
   const fetchSeqRef = useRef(0); // 防止快速切档时旧响应覆盖新内容
   const loadedModeRef = useRef(null); // 当前 items 属于哪个 mode
+  const loadingRef = useRef(false); // 同步并发锁：避免触底哨兵连续触发重复翻页
   const mode = r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category;
 
   const load = useCallback(async (append) => {
+    if (loadingRef.current && append) return;
+    loadingRef.current = true;
     const page = append ? pageRef.current + 1 : 1;
     const seq = ++fetchSeqRef.current;
     if (append) setLoadingMore(true);
@@ -90,6 +94,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
     if (seq === fetchSeqRef.current) {
       setLoading(false);
       setLoadingMore(false);
+      loadingRef.current = false;
     }
   }, [mode, category, r18]);
 
@@ -154,7 +159,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
 
   // 下滑时收起筛选栏
   useEffect(() => {
-    const el = document.querySelector('.app-content');
+    const el = getMainScrollEl();
     if (!el) return;
     let last = el.scrollTop;
     const onScroll = () => {
@@ -170,7 +175,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
     const el = sentinelRef.current;
     if (!el || !hasMore || loading) return;
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && hasMore && !loadingMore) load(true);
+      if (e.isIntersecting && hasMore && !loadingMore && !loadingRef.current) load(true);
     }, { rootMargin: '200px 0px' });
     io.observe(el);
     return () => io.disconnect();

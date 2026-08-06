@@ -20,7 +20,9 @@ import { createLogger } from './utils/logger.js';
 import './index.css';
 import './styles/detail.css';
 
-window.__pixivViewer = window.__pixivViewer || { storageFacade };
+if (import.meta.env.DEV) {
+  window.__pixivViewer = window.__pixivViewer || { storageFacade };
+}
 
 const TABS = [
   { key: 'discover', label: '推荐' },
@@ -97,7 +99,7 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [setShowProxyError]);
 
   return (
     <div className="app">

@@ -29,7 +29,6 @@ export default function SettingsPage({ onClose }) {
   const [cookieOpen, setCookieOpen] = useState(false);
 
   // 即时保存状态
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -61,13 +60,11 @@ export default function SettingsPage({ onClose }) {
   // 即时保存核心
   const doSave = useCallback(async (patch) => {
     if (!loadedRef.current) return;
-    setSaving(true);
     try {
       const s = await getSettings();
       await saveSettings({ ...s, ...patch });
       showToast();
     } catch { /* 静默忽略 */ }
-    setSaving(false);
   }, []);
 
   const showToast = () => {

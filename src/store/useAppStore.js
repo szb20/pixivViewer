@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getMainScrollEl, restoreMainScroll } from '../utils/scroll.js';
 
 const TABS = [
     { key: 'discover', label: '推荐' },
@@ -18,21 +19,21 @@ export const useAppStore = create((set, get) => ({
 
     setActiveTab: (key) => {
         const { activeTab, scrollPositions, tabTokens, visitedTabs } = get();
-        const el = document.querySelector('.app-content');
-        if (el) {
-            scrollPositions[activeTab] = el.scrollTop;
-        }
+        const el = getMainScrollEl();
+        const nextScrollPositions = el
+            ? { ...scrollPositions, [activeTab]: el.scrollTop }
+            : scrollPositions;
         if (key === activeTab) {
-            set({ tabTokens: { ...tabTokens, [key]: (tabTokens[key] || 0) + 1 } });
+            set({
+                scrollPositions: nextScrollPositions,
+                tabTokens: { ...tabTokens, [key]: (tabTokens[key] || 0) + 1 },
+            });
             return;
         }
         const newVisited = new Set(visitedTabs);
         newVisited.add(key);
-        set({ activeTab: key, visitedTabs: newVisited });
-        requestAnimationFrame(() => {
-            const el2 = document.querySelector('.app-content');
-            if (el2) el2.scrollTop = scrollPositions[key] || 0;
-        });
+        set({ activeTab: key, visitedTabs: newVisited, scrollPositions: nextScrollPositions });
+        restoreMainScroll(nextScrollPositions[key] || 0);
     },
 
     saveScrollPosition: (tab, scrollTop) => {
@@ -71,7 +72,7 @@ export const useAppStore = create((set, get) => ({
 
     openDetail: (img) => {
         const { activeTab, scrollPositions } = get();
-        const el = document.querySelector('.app-content');
+        const el = getMainScrollEl();
         if (el) {
             set({ scrollPositions: { ...scrollPositions, [activeTab]: el.scrollTop } });
         }
@@ -87,10 +88,7 @@ export const useAppStore = create((set, get) => ({
             set({ authorWorks: returnToAuthor });
             return;
         }
-        requestAnimationFrame(() => {
-            const el = document.querySelector('.app-content');
-            if (el) el.scrollTop = scrollPositions[activeTab] || 0;
-        });
+        restoreMainScroll(scrollPositions[activeTab] || 0);
     },
 
     // 直接退出到主页（详情页左上角"‹"按钮）：清空详情/作者页，不返回作者页
@@ -98,10 +96,7 @@ export const useAppStore = create((set, get) => ({
         const { activeTab, scrollPositions } = get();
         set({ detailImage: null, authorWorks: null, returnToAuthor: null });
         // 恢复进入详情前的滚动位置，避免退出后网格停在顶部
-        requestAnimationFrame(() => {
-            const el = document.querySelector('.app-content');
-            if (el) el.scrollTop = scrollPositions[activeTab] || 0;
-        });
+        restoreMainScroll(scrollPositions[activeTab] || 0);
     },
 
     openAuthorWorks: (authorId, authorName, authorAvatar) => {

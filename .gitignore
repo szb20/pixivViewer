@@ -19,6 +19,9 @@ dist-ssr
 # Android 构建缓存（临时 gradle home）
 android/gradle-home/
 
+# Codex 项目级本地配置（可能含本地覆盖/密钥，不入库；模板保留 .example）
+.codex/
+
 # Editor directories and files
 .claude/
 .vscode/*

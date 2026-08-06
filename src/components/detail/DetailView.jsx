@@ -1,10 +1,33 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ImageDetailView from './ImageDetailView.jsx';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
+import { getDetailScrollEl } from '../../utils/scroll.js';
 import BackIcon from '../icons/BackIcon.jsx';
 
 const log = createLogger('DetailView');
+
+const scrollKeyOf = (img) => (
+  img?.illustId ? `${img.illustId}:${img._pageIndex ?? 0}` : ''
+);
+
+const captureScrollAnchor = () => {
+  const root = getDetailScrollEl();
+  if (!root) return { top: 0, anchor: null };
+  const rootTop = root.getBoundingClientRect().top;
+  const blocks = [...root.querySelectorAll('[data-detail-anchor]')];
+  let best = null;
+  for (const node of blocks) {
+    const rect = node.getBoundingClientRect();
+    if (rect.bottom <= rootTop) continue;
+    best = {
+      id: node.dataset.detailAnchor,
+      delta: rect.top - rootTop,
+    };
+    break;
+  }
+  return { top: root.scrollTop || 0, anchor: best };
+};
 
 /**
  * 详情页包装 — 管理"当前作品"切换栈：
@@ -12,45 +35,44 @@ const log = createLogger('DetailView');
  */
 export default function DetailView({ image: initialImage, onClose, onExitToHome, onSearchTag, onAuthorWorks }) {
   const [image, setImage] = useState(initialImage);
-  const [restoreScroll, setRestoreScroll] = useState(0);
+  const [restoreState, setRestoreState] = useState({ top: 0, anchor: null });
   const stackRef = useRef([initialImage]);
   const handleBackRef = useRef(null);
-  const scrollMapRef = useRef({}); // illustId → scrollTop
+  const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
 
   // 外部 prop 变化（从列表/推荐直接打开新作品）→ 重置栈
   useEffect(() => {
     if (initialImage?.illustId !== stackRef.current[stackRef.current.length - 1]?.illustId) {
       stackRef.current = [initialImage];
       setImage(initialImage);
-      setRestoreScroll(0);
+      setRestoreState({ top: 0, anchor: null });
     }
   }, [initialImage]);
 
-  const getCurrentScroll = () => {
-    const el = document.querySelector('.char-state-content');
-    return el?.scrollTop || 0;
-  };
+  const getCurrentScrollState = useCallback(() => captureScrollAnchor(), []);
 
   const handleSelect = (img) => {
     if (!img) return;
     const cur = stackRef.current[stackRef.current.length - 1];
-    const s = getCurrentScroll();
-    if (cur?.illustId) scrollMapRef.current[cur.illustId] = s;
+    const s = getCurrentScrollState();
+    const curKey = scrollKeyOf(cur);
+    if (curKey) scrollMapRef.current[curKey] = s;
     log.info('push:', cur?.illustId, 'stack:', stackRef.current.length, '→', img.illustId);
     stackRef.current.push(img);
-    setRestoreScroll(0);
+    setRestoreState({ top: 0, anchor: null });
     setImage(img);
   };
 
   const handleBack = () => {
     const cur = stackRef.current[stackRef.current.length - 1];
-    const s = getCurrentScroll();
-    if (cur?.illustId) scrollMapRef.current[cur.illustId] = s;
-    log.info('pop:', cur?.illustId, 'stack:', stackRef.current.length, 'scroll:', s);
+    const s = getCurrentScrollState();
+    const curKey = scrollKeyOf(cur);
+    if (curKey) scrollMapRef.current[curKey] = s;
+    log.info('pop:', cur?.illustId, 'stack:', stackRef.current.length, 'scroll:', s.top);
     stackRef.current.pop();
     const prev = stackRef.current[stackRef.current.length - 1];
     if (prev) {
-      setRestoreScroll(scrollMapRef.current[prev.illustId] || 0);
+      setRestoreState(scrollMapRef.current[scrollKeyOf(prev)] || { top: 0, anchor: null });
       log.info('restore:', prev.illustId);
       setImage(prev);
     } else {
@@ -79,7 +101,8 @@ export default function DetailView({ image: initialImage, onClose, onExitToHome,
         onSelectImage={handleSelect}
         onSearchTag={onSearchTag}
         onAuthorWorks={onAuthorWorks}
-        restoreScroll={restoreScroll}
+        restoreScroll={restoreState.top}
+        restoreAnchor={restoreState.anchor}
       />
     </div>
   );

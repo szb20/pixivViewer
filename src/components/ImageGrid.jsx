@@ -3,6 +3,7 @@ import GridItem from './GridItem.jsx';
 import { buildLikedIllustIdSet } from '../utils/worksState.js';
 import { hiddenWorks, useHiddenWorks } from '../utils/hiddenWorks.js';
 import { useGridLikeToggle } from '../hooks/useGridLikeToggle.js';
+import { showToast } from '../utils/toast.js';
 
 const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen }) {
   const hiddenSet = useHiddenWorks();
