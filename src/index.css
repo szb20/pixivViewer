@@ -581,17 +581,6 @@ button {
   padding: 8px 0 4px;
 }
 
-.btn-primary {
-  padding: 0 16px;
-  border: none;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #0f1115;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 .gallery-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -638,7 +627,9 @@ button {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(8, 10, 14, 0.5);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -660,15 +651,19 @@ button {
 
 .dialog-panel {
   width: 100%;
-  border: 1px solid rgba(var(--dialog-border, 255, 255, 255), var(--dialog-border-alpha, 0.1));
-  border-radius: var(--dialog-radius, 16px);
+  border: 1px solid rgba(var(--dialog-border, 255, 255, 255), var(--dialog-border-alpha, 0.12));
+  border-radius: var(--dialog-radius, 20px);
   max-width: var(--dialog-max-w, 560px);
   max-height: var(--dialog-max-h, none);
   overflow-y: var(--dialog-overflow, visible);
   animation: dialog-panel-in 0.3s ease;
-  /* 面板材质由 CSS 变量驱动，缺省 frosted 毛玻璃 */
-  background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.55));
-  backdrop-filter: blur(var(--dialog-blur, 12px));
+  /* 面板材质由 CSS 变量驱动，缺省毛玻璃质感 */
+  background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.72));
+  -webkit-backdrop-filter: blur(var(--dialog-blur, 24px)) saturate(160%);
+  backdrop-filter: blur(var(--dialog-blur, 24px)) saturate(160%);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 @keyframes dialog-panel-in {
@@ -691,9 +686,9 @@ button {
 }
 
 .dialog-overlay[data-variant="card"] .dialog-panel {
-  --dialog-radius: 16px;
-  --dialog-max-w: 340px;
-  padding: 28px 24px 22px;
+  --dialog-radius: 20px;
+  --dialog-max-w: 360px;
+  padding: 32px 26px 24px;
   text-align: center;
 }
 
@@ -796,7 +791,7 @@ button {
 
 /* 每个语义变体只声明 --toast-color */
 .toast[data-type="info"]    { --toast-color: var(--color-accent-rgb); }
-.toast[data-type="success"] { --toast-color: var(--color-success-rgb); }
+.toast[data-type="success"] { --toast-color: var(--color-accent-rgb); }
 .toast[data-type="error"]   { --toast-color: var(--color-danger-rgb); }
 .toast[data-type="warning"] { --toast-color: var(--color-warning-rgb); }
 
@@ -862,28 +857,41 @@ button {
 /* ── 代理连接失败弹窗（复用 .dialog-overlay + .dialog-panel） ── */
 
 .proxy-check-icon {
-  font-size: 40px;
-  line-height: 1;
-  margin-bottom: 12px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  animation: proxy-icon-float 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 8px 20px rgba(255, 138, 76, 0.28));
+}
+
+@keyframes proxy-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
 }
 
 .proxy-check-title {
-  margin: 0 0 8px;
-  font-size: 16px;
+  margin: 0 0 10px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .proxy-check-url {
-  margin: 0 0 10px;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 12px;
-  color: var(--text-tertiary);
   font-family: monospace;
+  color: var(--text-tertiary);
   word-break: break-all;
 }
 
 .proxy-check-hint {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.6;
@@ -896,15 +904,24 @@ button {
 
 .proxy-check-actions .btn {
   flex: 1;
-  padding: 10px 0;
-  border-radius: 10px;
+  padding: 11px 0;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 600;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.proxy-check-actions .btn:disabled {
+  opacity: 0.65;
+  cursor: default;
 }
 
 .proxy-check-actions .btn-primary {
   background: var(--accent);
+  border-color: var(--accent);
   color: #0f1115;
+  box-shadow: 0 4px 16px rgba(var(--color-accent-rgb, 79, 140, 255), 0.35);
 }
 
 /* ── 网格占位高光扫描（缩略图加载完成前）── */

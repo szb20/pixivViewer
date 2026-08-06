@@ -1,6 +1,7 @@
 /**
  * 主题色系统 — 可持久化 + CSS 变量驱动，全站自动生效。
  */
+import { appStorage } from './appStorage.js';
 
 export const THEMES = [
   { key: 'white',    label: '亮白', color: '#ffffff', rgb: '255, 255, 255' },
@@ -24,6 +25,12 @@ export function applyTheme(key) {
 
 export function getSavedTheme() {
   try {
+    // 统一存储：settings 对象内 theme 字段（与 saveSettings 同源）
+    const s = appStorage.get('settings', {}) || {};
+    if (s?.theme && THEMES.some(t => t.key === s.theme)) return s.theme;
+  } catch { /* ignore */ }
+  try {
+    // 兜底：迁移前残留的旧版独立 key
     const raw = localStorage.getItem('pixiv_viewer_settings');
     if (raw) {
       const s = JSON.parse(raw);

@@ -33,8 +33,53 @@ export default function ProxyCheckNotice({ proxyUrl, onOpenSettings, onDismiss }
 
   return (
     <div className="dialog-overlay" data-variant="card">
-      <div className="dialog-panel frosted">
-        <div className="proxy-check-icon">⚠️</div>
+      <div className="dialog-panel">
+        <div className="proxy-check-icon" aria-hidden="true">
+          <svg viewBox="0 0 64 64" width="64" height="64">
+            <defs>
+              <linearGradient id="proxyWarnGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stopColor="#ffb74d" />
+                <stop offset="100%" stopColor="#ff6b6b" />
+              </linearGradient>
+            </defs>
+            <circle
+              cx="32"
+              cy="32"
+              r="29"
+              fill="rgba(255, 255, 255, 0.06)"
+              stroke="rgba(255, 255, 255, 0.12)"
+              strokeWidth="1.5"
+            />
+            <circle
+              cx="32"
+              cy="32"
+              r="25"
+              fill="none"
+              stroke="url(#proxyWarnGrad)"
+              strokeOpacity="0.45"
+              strokeWidth="1.5"
+              strokeDasharray="3 6"
+              strokeLinecap="round"
+            />
+            <path
+              d="M32 20 L45 44 H19 Z"
+              fill="rgba(255, 138, 76, 0.14)"
+              stroke="url(#proxyWarnGrad)"
+              strokeWidth="3"
+              strokeLinejoin="round"
+            />
+            <line
+              x1="32"
+              y1="28.5"
+              x2="32"
+              y2="37"
+              stroke="url(#proxyWarnGrad)"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
+            <circle cx="32" cy="42" r="2.4" fill="url(#proxyWarnGrad)" />
+          </svg>
+        </div>
         <h3 className="proxy-check-title">代理连接失败</h3>
         <p className="proxy-check-url">{proxyUrl || 'http://127.0.0.1:7890'}</p>
         <p className="proxy-check-hint">

@@ -154,7 +154,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
             className="search-input"
             type="text"
             value={query}
-            placeholder=""
+            placeholder="标签 / 作品ID"
             enterKeyHint="search"
             onChange={e => setQuery(e.target.value)}
           />

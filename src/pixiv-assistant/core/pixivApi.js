@@ -196,22 +196,54 @@ export function createPixivApi(transport) {
     illustCache.set(illustId, { data, time: Date.now() });
   }
 
-  /** 图片搜索 */
+  /** 图片搜索 — 纯数字/作品链接按 ID 直查，其余走标签搜索 */
   async function searchPixiv(query, opts = {}) {
     const { page = 1, count = 10 } = opts;
-    if (!query?.trim()) return { images: [], query: '' };
+    const trimmed = query?.trim();
+    if (!trimmed) return { images: [], query: '' };
+
+    // 作品 ID（纯数字 ≥6 位）或 pixiv 作品链接 → 直接抓取单条
+    const urlId = trimmed.match(/pixiv\.net\/artworks\/(\d+)/i)?.[1];
+    const bareId = /^\d{6,}$/.test(trimmed) ? trimmed : '';
+    const illustId = urlId || bareId;
+    if (illustId) {
+      const r = await fetchIllust(illustId);
+      if (r?.illust) {
+        const i = r.illust;
+        const page0 = i.images?.[0] || {};
+        return {
+          images: [mapIllustItem({
+            illustId: i.illustId,
+            title: i.title,
+            userName: i.authorName,
+            userAccount: i.authorAccount,
+            userId: i.authorId,
+            url: page0.thumbnailUrl || page0.url || '',
+            tags: i.tags || [],
+            pageCount: i.pageCount || 1,
+            illustType: i.illustType ?? 0,
+            width: i.width || 0,
+            height: i.height || 0,
+          })],
+          query: trimmed,
+          total: 1,
+        };
+      }
+      return { images: [], query: trimmed, error: r?.error || '未找到该作品' };
+    }
+
     try {
-      const encoded = encodeURIComponent(query.trim());
+      const encoded = encodeURIComponent(trimmed);
       const data = await apiFetch(
         `/ajax/search/artworks/${encoded}?word=${encoded}&order=date_d&mode=safe&p=${page}&s_mode=s_tag&type=illust_and_ugoira&lang=zh`,
         { skipCookie: true }
       );
       const illusts = data?.body?.illust?.data || data?.body?.illustManga?.data || [];
       const images = illusts.slice(0, count).map(mapIllustItem);
-      return { images, query: query.trim(), total: data?.body?.illust?.total || illusts.length };
+      return { images, query: trimmed, total: data?.body?.illust?.total || illusts.length };
     } catch (e) {
       log.error('[searchPixiv] 失败:', e.message);
-      return { images: [], query: query.trim(), error: classifyError(e, '搜索') };
+      return { images: [], query: trimmed, error: classifyError(e, '搜索') };
     }
   }
 

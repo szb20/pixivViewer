@@ -87,19 +87,8 @@ export default function DownloadMonitorButton() {
       </button>
 
       {open && (
-        <div className="dialog-overlay" data-variant="card" onClick={() => setOpen(false)}>
-          <div className="dialog-panel" style={{
-            '--dialog-bg': '22, 25, 32',
-            '--dialog-alpha': '0.62',
-            '--dialog-blur': '40px',
-            '--dialog-radius': '32px',
-            '--dialog-border-alpha': '0.12',
-            '--dialog-max-w': '480px',
-            '--dialog-max-h': '78vh',
-            '--dialog-overflow': 'auto',
-            padding: '16px 18px 20px',
-            textAlign: 'left',
-          }} onClick={e => e.stopPropagation()}>
+        <div className="dialog-overlay" data-variant="download" onClick={() => setOpen(false)}>
+          <div className="dialog-panel" onClick={e => e.stopPropagation()}>
             {/* 列表 */}
             <div className="download-list">
               {jobs.length === 0 ? (
