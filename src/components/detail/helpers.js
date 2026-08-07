@@ -52,5 +52,6 @@ export function allMediaFromRelated(img) {
     height: h,
     tags: img.tags || [],
     _lazy: img.type === 'gif' ? true : undefined,
+    _openTransition: img._openTransition,
   };
 }

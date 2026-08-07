@@ -137,6 +137,17 @@ export class StorageFacade {
   }
 
   /**
+   * 幂等设为喜欢。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {object} [meta]
+   */
+  async like(illustId, pageIndex = 0, meta = {}) {
+    if (!illustId) return { success: false, liked: false, likedAt: 0 };
+    return await this.service.like(illustId, pageIndex, meta);
+  }
+
+  /**
    * 回填展示元数据（浏览时把完整缩略图 URL / 标题 / 作者 / tags 写回已保存/喜欢的记录）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]

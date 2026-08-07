@@ -37,36 +37,7 @@ export class PixivRepository {
    * @returns {PixivEntity|null}
    */
   async find(id) {
-    let record = await getMeta(id);
-
-    // 兼容旧格式 key：pixiv_{id}_{page} / pixiv_{id}_g0 / pixiv_{id}（无后缀）
-    // 命中后迁移到新格式 key，避免旧数据在相册/喜欢/删除中 miss
-    if (!record && typeof id === 'string' && id.startsWith('pixiv:')) {
-      const parts = id.slice('pixiv:'.length).split(':');
-      const illustId = parts[0];
-      const pageIndex = parseInt(parts[1], 10) || 0;
-      const legacyKeys = [
-        `pixiv_${illustId}_${pageIndex}`,
-        `pixiv_${illustId}_g0`,
-        `pixiv_${illustId}`,
-      ];
-      for (const legacyKey of legacyKeys) {
-        if (legacyKey === id) continue;
-        const legacy = await getMeta(legacyKey);
-        if (legacy) {
-          const migrated = { ...legacy, cacheKey: id };
-          if (migrated.pageIndex == null) migrated.pageIndex = pageIndex;
-          // 旧 GIF 记录可能没有 type 字段，靠 _g0 后缀区分，迁移时补上
-          if (!migrated.type && (legacyKey.includes('_g0') || legacyKey.startsWith('ugoira_'))) {
-            migrated.type = 'gif';
-          }
-          await putMeta(migrated).catch(() => {});
-          await deleteMeta(legacyKey).catch(() => {});
-          record = migrated;
-          break;
-        }
-      }
-    }
+    const record = await getMeta(id);
     return PixivEntity.fromRecord(record);
   }
 
@@ -127,8 +98,6 @@ export class PixivRepository {
     const record = await getMeta(id);
     if (!record) throw new Error(`entity_not_found: ${id}`);
     record.state = newState;
-    // 保留旧字段兼容旧代码
-    record.saved = newState === 'saved' ? 1 : 0;
     await putMeta(record);
   }
 
@@ -253,8 +222,64 @@ export class PixivRepository {
   }
 
   /**
+   * 幂等设为喜欢。
+   * @param {string} id
+   * @param {object} [meta]
+   * @returns {Promise<{success: boolean, liked: true, likedAt: number, idempotent?: boolean}>}
+   */
+  async like(id, meta = {}) {
+    const record = await getMeta(id);
+    const now = Date.now();
+    if (!record) {
+      const parts = id.replace('pixiv:', '').split(':');
+      const illustId = parts[0];
+      const pageIndex = parseInt(parts[1], 10) || 0;
+      const lightRecord = {
+        cacheKey: id,
+        illustId,
+        pageIndex,
+        state: 'cached',
+        likedAt: now,
+        cachedAt: now,
+        type: meta.type || 'image',
+        title: meta.title || '',
+        author: meta.author || '',
+        authorName: meta.authorName || meta.author || '',
+        authorAccount: meta.authorAccount || '',
+        authorAvatar: meta.authorAvatar || '',
+        authorId: meta.authorId || '',
+        tags: Array.isArray(meta.tags) ? meta.tags : [],
+        thumbnailUrl: meta.thumbnailUrl || '',
+        pixivUrl: meta.pixivUrl || '',
+        pageCount: meta.pageCount || 0,
+        width: meta.width || 0,
+        height: meta.height || 0,
+      };
+      await putMeta(lightRecord);
+      return { success: true, liked: true, likedAt: now };
+    }
+
+    const alreadyLiked = (record.likedAt || 0) > 0;
+    if (!alreadyLiked) record.likedAt = now;
+    if (meta.thumbnailUrl && !record.thumbnailUrl) record.thumbnailUrl = meta.thumbnailUrl;
+    if (meta.title && !record.title) record.title = meta.title;
+    if ((meta.authorName || meta.author) && !record.authorName) {
+      record.authorName = meta.authorName || meta.author || '';
+      record.author = meta.author || meta.authorName || '';
+    }
+    if (meta.authorId && !record.authorId) record.authorId = meta.authorId;
+    if (meta.authorAvatar && !record.authorAvatar) record.authorAvatar = meta.authorAvatar;
+    if (meta.type && !record.type) record.type = meta.type;
+    if (Array.isArray(meta.tags) && meta.tags.length && !record.tags?.length) record.tags = meta.tags;
+    if (meta.pixivUrl && !record.pixivUrl) record.pixivUrl = meta.pixivUrl;
+    if (meta.pageCount && !record.pageCount) record.pageCount = meta.pageCount;
+    await putMeta(record);
+    return { success: true, liked: true, likedAt: record.likedAt, idempotent: alreadyLiked };
+  }
+
+  /**
    * 统计信息。
-   * @returns {{ total: number, saved: number, auto: number, totalSize: number }}
+   * @returns {{ total: number, saved: number, cached: number, totalSize: number }}
    */
   async stats() {
     return await getCacheStats();

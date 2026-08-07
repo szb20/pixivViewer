@@ -219,7 +219,7 @@ export function parseCacheFileName(name) {
 }
 
 /**
- * 获取缓存 key。
+ * 获取数据库缓存 key。
  * 注意：pageIndex 默认为 0，确保同一张图永远产生相同的 key，
  * 避免因 pageIndex 传入 undefined 导致不同的 cacheKey 造成重复。
  * @param {string} illustId
@@ -228,5 +228,5 @@ export function parseCacheFileName(name) {
  * @returns {string}
  */
 export function getCacheKey(illustId, pageIndex = 0, _source = 'pixiv') {
-  return `pixiv_${illustId}_${pageIndex}`;
+  return `pixiv:${illustId}:${pageIndex}`;
 }

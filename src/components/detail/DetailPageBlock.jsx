@@ -108,7 +108,7 @@ export default function DetailPageBlock({
             </div>
           )}
           <img
-            className="image-detail-main image-detail-main--flow"
+            className={`image-detail-main image-detail-main--flow${loaded ? ' is-loaded' : ''}`}
             key={src}
             src={src}
             alt={`第 ${page + 1} 页`}

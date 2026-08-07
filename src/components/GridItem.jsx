@@ -27,6 +27,7 @@ export default memo(function GridItem({
   onHide,
   variant = 'grid',
   thumbSrc,
+  index = 0,
 }) {
   const v = {
     grid:    { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
@@ -36,9 +37,13 @@ export default memo(function GridItem({
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const itemRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const pressStartRef = useRef(null);
+  const src = thumbSrc || img.thumbnailUrl || img.mediumUrl || '';
+  const pageCount = Number(img._totalPages || img.pageCount) || 1;
+  const isGif = img.type === 'gif' || Number(img.illustType) === 2;
 
   const triggerLongPress = useCallback(() => {
     if (longPressTriggeredRef.current) return;
@@ -74,8 +79,24 @@ export default memo(function GridItem({
   const handleClick = useCallback(() => {
     // 长按已触发下载 → 本次合成的 click 不再打开
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    onOpen?.(img);
-  }, [img, onOpen]);
+    const rect = itemRef.current?.getBoundingClientRect?.();
+    const srcForTransition = src || img.thumbnailUrl || img.mediumUrl || img.originalUrl || '';
+    const openImg = rect && srcForTransition
+      ? {
+          ...img,
+          _openTransition: {
+            src: srcForTransition,
+            rect: {
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
+            },
+          },
+        }
+      : img;
+    onOpen?.(openImg);
+  }, [img, onOpen, src]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -87,11 +108,9 @@ export default memo(function GridItem({
     setError(false);
   }, []);
 
-  const src = thumbSrc || img.thumbnailUrl || img.mediumUrl || '';
-  const pageCount = Number(img._totalPages || img.pageCount) || 1;
-  const isGif = img.type === 'gif' || Number(img.illustType) === 2;
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
+  const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}`;
 
   // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
   if (variant === 'gallery') {
@@ -117,7 +136,7 @@ export default memo(function GridItem({
         alt={img.title || ''}
         loading="lazy"
         decoding="async"
-        style={variant === 'grid' ? { opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease' } : undefined}
+        style={variant === 'grid' ? { opacity: loaded ? 1 : 0 } : undefined}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
       />
@@ -134,7 +153,9 @@ export default memo(function GridItem({
 
   return (
     <div
-      className={`${v.item}${shimmerCls}`}
+      ref={itemRef}
+      className={`${v.item}${shimmerCls}${stateCls}`}
+      style={{ '--item-index': index % 24 }}
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}

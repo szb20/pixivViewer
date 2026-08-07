@@ -151,10 +151,11 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (
           <div className="pixiv-grid">
-            {items.map(it => (
+            {items.map((it, index) => (
               <GridItem
                 key={it.illustId}
                 img={it}
+                index={index}
                 onOpen={handleOpen}
                 variant="media"
                 thumbSrc={gridThumbUrl(it.thumbnailUrl)}

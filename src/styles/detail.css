@@ -14,6 +14,39 @@
   isolation: isolate;
 }
 
+.shared-open-transition {
+  position: fixed;
+  z-index: 8;
+  overflow: hidden;
+  border-radius: 0;
+  pointer-events: none;
+  opacity: 0.96;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition:
+    left 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.38s ease,
+    border-radius 0.38s ease;
+  will-change: left, top, width, height, opacity;
+}
+
+.shared-open-transition.is-active {
+  opacity: 0.12;
+  border-radius: 2px;
+}
+
+.shared-open-transition img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
 /* 详情页全局动态背景：用当前作品缩略图做超模糊底图，再盖一层暗色玻璃膜 */
 .detail-glass-bg {
   position: absolute;
@@ -446,7 +479,19 @@
   display: block;
   object-fit: cover;
   z-index: 1;
-  transition: opacity 0.25s ease;
+  opacity: 0;
+  filter: blur(12px) saturate(0.94);
+  transform: scale(1.012);
+  transition:
+    opacity 0.34s ease,
+    filter 0.46s ease,
+    transform 0.46s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.image-detail-main.is-loaded {
+  opacity: 1;
+  filter: blur(0) saturate(1);
+  transform: scale(1);
 }
 
 
@@ -495,7 +540,11 @@
   -webkit-backdrop-filter: blur(14px) saturate(145%);
   backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
-  transition: transform 0.15s;
+  animation: grid-item-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--item-index, 0) * 18ms);
+  transform-origin: center;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
   display: flex;
   flex-direction: column;
 }
@@ -511,6 +560,19 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  filter: blur(10px) saturate(0.92);
+  transform: scale(1.025);
+  transition:
+    opacity 0.34s ease,
+    filter 0.42s ease,
+    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pixiv-grid-item.is-loaded .media-card-thumb {
+  opacity: 1;
+  filter: blur(0) saturate(1);
+  transform: scale(1);
 }
 
 .pixiv-grid-pages {
@@ -593,3 +655,26 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     pointer-events: none;
   }
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-overlay,
+  .author-works-overlay,
+  .shared-open-transition,
+  .image-detail-main,
+  .pixiv-grid-item,
+  .pixiv-grid-item .media-card-thumb {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .shared-open-transition {
+    display: none;
+  }
+
+  .image-detail-main,
+  .pixiv-grid-item .media-card-thumb {
+    opacity: 1;
+    filter: none;
+  }
+}

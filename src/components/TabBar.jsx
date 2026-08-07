@@ -1,6 +1,6 @@
-export default function TabBar({ tabs, active, onChange }) {
+export default function TabBar({ tabs, active, onChange, hidden = false }) {
   return (
-    <nav className="tab-bar frosted">
+    <nav className={`tab-bar frosted${hidden ? ' tab-bar--hidden' : ''}`}>
       {tabs.map(t => (
         <button
           key={t.key}

@@ -263,6 +263,18 @@ button {
   display: flex;
   z-index: 10;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+  will-change: transform, opacity;
+}
+
+.tab-bar--hidden {
+  transform: translateY(calc(100% + env(safe-area-inset-bottom, 0px)));
+  opacity: 0.18;
+  pointer-events: none;
 }
 
 .tab-btn {
@@ -308,6 +320,31 @@ button {
   -webkit-backdrop-filter: blur(14px) saturate(145%);
   backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
+  animation: grid-item-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--item-index, 0) * 18ms);
+  transform-origin: center;
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.16s ease;
+  will-change: transform;
+}
+
+.grid-item:active,
+.gallery-item:active,
+.pixiv-grid-item:active {
+  transform: scale(0.972);
+  z-index: 2;
+}
+
+@keyframes grid-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .grid-thumb {
@@ -315,6 +352,21 @@ button {
   height: 100%;
   object-fit: cover;
   display: block;
+  filter: blur(10px) saturate(0.92);
+  transform: scale(1.025);
+  transition:
+    opacity 0.34s ease,
+    filter 0.42s ease,
+    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: opacity, filter, transform;
+}
+
+.grid-item.is-loaded .grid-thumb,
+.gallery-item.is-loaded .gallery-thumb,
+.pixiv-grid-item.is-loaded .media-card-thumb {
+  opacity: 1;
+  filter: blur(0) saturate(1);
+  transform: scale(1);
 }
 
 .grid-play {
@@ -347,6 +399,22 @@ button {
   align-items: center;
   justify-content: center;
   color: #ff4757;
+  transform-origin: center;
+  animation: like-badge-pop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.grid-like::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--color-like-rgb), 0.72);
+  box-shadow:
+    0 0 14px rgba(var(--color-like-rgb), 0.42),
+    inset 0 0 10px rgba(var(--color-like-rgb), 0.18);
+  opacity: 0;
+  pointer-events: none;
+  animation: like-wave 0.62s ease-out;
 }
 
 .grid-like .heart-icon {
@@ -355,6 +423,23 @@ button {
     height: 14px;
     filter: drop-shadow(0 0 4px rgba(255, 71, 87, 0.6));
   }
+
+@keyframes like-badge-pop {
+  0% { transform: scale(0.76); }
+  58% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+@keyframes like-wave {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.52);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.85);
+  }
+}
 
 /* 网格封面 ✕（不想看/不再推荐） */
 .grid-hide {
@@ -426,6 +511,12 @@ button {
   transition: opacity 0.25s ease, transform 0.25s ease;
   scrollbar-width: none;
   z-index: 5;
+}
+
+.chrome-hidden .chips-bottom:not(.chips-hidden) {
+  opacity: 0;
+  transform: translateY(42px);
+  pointer-events: none;
 }
 
 .chips-bottom::-webkit-scrollbar {
@@ -610,6 +701,11 @@ button {
   -webkit-backdrop-filter: blur(14px) saturate(145%);
   backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
+  animation: grid-item-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--item-index, 0) * 18ms);
+  transform-origin: center;
+  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .gallery-thumb {
@@ -617,6 +713,13 @@ button {
   height: 100%;
   object-fit: cover;
   display: block;
+  opacity: 0;
+  filter: blur(10px) saturate(0.92);
+  transform: scale(1.025);
+  transition:
+    opacity 0.34s ease,
+    filter 0.42s ease,
+    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .gallery-thumb-fallback {
@@ -992,4 +1095,38 @@ button {
 @keyframes overlay-in {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-bar,
+  .chips-bottom,
+  .grid-item,
+  .gallery-item,
+  .pixiv-grid-item,
+  .grid-thumb,
+  .gallery-thumb,
+  .media-card-thumb,
+  .grid-like,
+  .grid-like::after,
+  .toast,
+  .dialog-overlay,
+  .dialog-panel,
+  .ptr-refreshing .ptr-orbit {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .tab-bar--hidden,
+  .chrome-hidden .chips-bottom:not(.chips-hidden) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .grid-thumb,
+  .gallery-thumb,
+  .media-card-thumb {
+    opacity: 1;
+    filter: none;
+  }
 }

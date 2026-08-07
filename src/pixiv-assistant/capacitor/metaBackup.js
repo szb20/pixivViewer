@@ -25,6 +25,10 @@ const LEGACY_META_PNG = 'pixiv_meta.png';
 
 let _timer = null;
 
+function isWorkRecord(record) {
+  return !!record?.cacheKey && !record.cacheKey.startsWith('_meta_') && !!record.illustId;
+}
+
 function plugin() {
   return Capacitor?.Plugins?.GallerySaver;
 }
@@ -265,13 +269,14 @@ export async function restoreMetaBackupIfNeeded() {
   if (!isNative()) return;
   try {
     const existing = await getAllMeta().catch(() => []);
+    const existingWorks = (existing || []).filter(isWorkRecord);
     const { items, hidden, settings } = await readMetaBackup();
     const likedFromBackup = (items || []).filter(it => (it.likedAt || 0) > 0);
-    const existingLikedCount = (existing || []).filter(r => (r.likedAt || 0) > 0).length;
+    const existingLikedCount = existingWorks.filter(r => (r.likedAt || 0) > 0).length;
 
     // 全新安装：库为空 → 全量导入；库已有 saved 但一条喜欢都没有、而备份里有喜欢
     // → 只合并喜欢标记（自愈：首次启动相册权限未就绪导致读不到备份的场景）。
-    const freshInstall = !Array.isArray(existing) || existing.length === 0;
+    const freshInstall = existingWorks.length === 0;
     const needLikeMerge = !freshInstall && existingLikedCount === 0 && likedFromBackup.length > 0;
     if (!freshInstall && !needLikeMerge) return; // 非全新安装且喜欢数据已存在，不覆盖
     if (freshInstall && items.length === 0 && !settings.pixivCookie) return;

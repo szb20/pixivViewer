@@ -85,34 +85,16 @@ export class PixivEntity {
     return `pixiv:${illustId}:${pageIndex}`;
   }
 
-  /** 从原始 DB record 创建（兼容旧格式） */
+  /** 从原始 DB record 创建 */
   static fromRecord(record) {
-    if (!record) return null;
-
-    // 兼容旧格式：saved: 0|1 → state
-    let state = record.state;
-    if (!state) {
-      state = record.saved ? 'saved' : 'cached';
-    }
-
-    // 兼容旧格式：从 cacheKey 推断 type
-    let type = record.type;
-    if (!type) {
-      type = (record.cacheKey?.includes('_g0') || record.cacheKey?.startsWith('ugoira_'))
-        ? 'gif' : 'image';
-    }
-
-    // 生成统一 id
-    const id = record.cacheKey?.includes(':')
-      ? record.cacheKey
-      : PixivEntity.makeId(record.illustId, record.pageIndex ?? 0);
+    if (!record?.cacheKey || record.cacheKey.startsWith('_meta_') || !record.illustId) return null;
 
     return new PixivEntity({
-      id,
+      id: record.cacheKey,
       illustId: record.illustId,
       pageIndex: record.pageIndex ?? 0,
-      type,
-      state,
+      type: record.type || 'image',
+      state: record.state || 'cached',
       flags: record.flags || {},
       fileName: record.fileName || '',
       title: record.title || '',

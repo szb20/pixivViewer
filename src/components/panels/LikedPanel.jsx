@@ -93,10 +93,11 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
         <div className="error-box">还没有喜欢的作品 — 在详情页点击爱心即可收藏</div>
       )}
       <div className="gallery-grid">
-        {feed.items.map(item => (
+        {feed.items.map((item, index) => (
           <GridItem
             key={`${item.illustId}_${item.pageIndex ?? 0}`}
             img={item}
+            index={index}
             isLiked
             onOpen={(it) => onOpen?.({
               illustId: it.illustId,
@@ -109,6 +110,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
               authorName: it.authorName,
               authorAvatar: it.authorAvatar || '',
               thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
+              _openTransition: it._openTransition,
             })}
             variant="gallery"
           />

@@ -20,10 +20,11 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen }) {
   if (!visibleItems?.length) return null;
   return (
     <div className="grid">
-      {visibleItems.map(img => (
+      {visibleItems.map((img, index) => (
         <GridItem
           key={img.illustId}
           img={img}
+          index={index}
           isLiked={likedIllustIds.has(img.illustId)}
           onOpen={onOpen}
           onLongPress={toggleLike}

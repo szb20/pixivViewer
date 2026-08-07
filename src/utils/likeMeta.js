@@ -18,6 +18,6 @@ export function buildLikeMeta(img) {
     pageCount: m.pageCount || m._totalPages || 0,
     width: m.width || 0,
     height: m.height || 0,
-    type: m.type === 'gif' ? 'gif' : 'image',
+    type: m.type === 'gif' || m.illustType === 2 ? 'gif' : 'image',
   };
 }

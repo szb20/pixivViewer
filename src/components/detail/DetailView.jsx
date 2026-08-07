@@ -36,6 +36,7 @@ const captureScrollAnchor = () => {
 export default function DetailView({ image: initialImage, onClose, onExitToHome, onSearchTag, onAuthorWorks }) {
   const [image, setImage] = useState(initialImage);
   const [restoreState, setRestoreState] = useState({ top: 0, anchor: null });
+  const [openTransition, setOpenTransition] = useState(null);
   const stackRef = useRef([initialImage]);
   const handleBackRef = useRef(null);
   const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
@@ -48,6 +49,44 @@ export default function DetailView({ image: initialImage, onClose, onExitToHome,
       setImage(initialImage);
       setRestoreState({ top: 0, anchor: null });
     }
+  }, [initialImage]);
+
+  useEffect(() => {
+    const from = initialImage?._openTransition;
+    if (!from?.rect || !from.src) return;
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if (prefersReducedMotion) return;
+
+    const targetWidth = Math.min(window.innerWidth, 560);
+    const fallbackTarget = {
+      left: (window.innerWidth - targetWidth) / 2,
+      top: Math.max(0, window.innerHeight * 0.12),
+      width: targetWidth,
+      height: Math.min(window.innerHeight * 0.62, from.rect.height * 1.8),
+    };
+    const base = { src: from.src, from: from.rect, to: fallbackTarget, active: false };
+    setOpenTransition(base);
+
+    let raf1 = 0;
+    let raf2 = 0;
+    const timer = setTimeout(() => setOpenTransition(null), 430);
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const target = document.querySelector('.image-detail-hero')?.getBoundingClientRect?.();
+        setOpenTransition({
+          ...base,
+          active: true,
+          to: target
+            ? { left: target.left, top: target.top, width: target.width, height: target.height }
+            : fallbackTarget,
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      clearTimeout(timer);
+    };
   }, [initialImage]);
 
   const getCurrentScrollState = useCallback(() => captureScrollAnchor(), []);
@@ -97,6 +136,20 @@ export default function DetailView({ image: initialImage, onClose, onExitToHome,
       style={detailBgUrl ? { '--detail-bg-image': `url(${JSON.stringify(detailBgUrl)})` } : undefined}
     >
       <div className="detail-glass-bg" aria-hidden="true" />
+      {openTransition && (
+        <div
+          className={`shared-open-transition${openTransition.active ? ' is-active' : ''}`}
+          style={{
+            left: `${openTransition.active ? openTransition.to.left : openTransition.from.left}px`,
+            top: `${openTransition.active ? openTransition.to.top : openTransition.from.top}px`,
+            width: `${openTransition.active ? openTransition.to.width : openTransition.from.width}px`,
+            height: `${openTransition.active ? openTransition.to.height : openTransition.from.height}px`,
+          }}
+          aria-hidden="true"
+        >
+          <img src={openTransition.src} alt="" draggable={false} />
+        </div>
+      )}
       <button className="glass-icon-btn detail-back-home" onClick={onExitToHome} aria-label="返回主页">
         <BackIcon />
       </button>

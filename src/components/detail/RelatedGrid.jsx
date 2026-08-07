@@ -19,7 +19,7 @@ export default function RelatedGrid({
 
   return (
     <div className="pixiv-grid" ref={relatedRef} data-detail-anchor="related">
-      {related.map((img) => {
+      {related.map((img, index) => {
         if (img._pageIndex !== 0) return null;
         if (img.illustId === currentIllustId) return null;
         if (likedOrSavedSet.has(img.illustId)) return null;
@@ -29,6 +29,7 @@ export default function RelatedGrid({
           <GridItem
             key={`rel-${img.illustId}`}
             img={img}
+            index={index}
             onOpen={(it) => onSelectImage?.(allMediaFromRelated(it))}
             onLongPress={onLongPress}
             variant="media"

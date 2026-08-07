@@ -170,7 +170,7 @@ export class PixivStorageService {
 
   /**
    * 统计信息。
-   * @returns {Promise<{total: number, saved: number, auto: number, totalSize: number}>}
+   * @returns {Promise<{total: number, saved: number, cached: number, totalSize: number}>}
    */
   async stats() {
     return await this.repository.stats();
@@ -185,6 +185,19 @@ export class PixivStorageService {
   async toggleLike(illustId, pageIndex = 0, meta = {}) {
     const id = PixivEntity.makeId(illustId, pageIndex);
     const result = await this.repository.toggleLike(id, meta);
+    if (result.success) scheduleMetaBackup();
+    return result;
+  }
+
+  /**
+   * 幂等设为喜欢。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   * @param {object} [meta]
+   */
+  async like(illustId, pageIndex = 0, meta = {}) {
+    const id = PixivEntity.makeId(illustId, pageIndex);
+    const result = await this.repository.like(id, meta);
     if (result.success) scheduleMetaBackup();
     return result;
   }

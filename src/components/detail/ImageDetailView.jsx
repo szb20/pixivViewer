@@ -21,7 +21,7 @@ import { showToast } from '../../utils/toast.js';
 import { buildLikedOrSavedSet } from '../../utils/worksState.js';
 
 const log = createLogger('ImageDetail');
-/** 批量保存时的最大并发页数 */
+const RELATED_PAGE_SIZE = 30;
 
 /**
  * 图片详情页 — 全屏展示大图 + 信息 + 操作 + 相关推荐网格。
@@ -38,7 +38,9 @@ export default function ImageDetailView({
   const likedOrSavedSet = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
-  const relatedCacheRef = useRef({}); // illustId → { related, loadedPages }
+  const [loadingMoreRelated, setLoadingMoreRelated] = useState(false);
+  const [relatedHasMore, setRelatedHasMore] = useState(false);
+  const relatedCacheRef = useRef({}); // illustId → { related, nextStart, hasMore }
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
   const [illustData, setIllustData] = useState(null);
   const authorId = String(image?.authorId || illustData?.illust?.authorId || '');
@@ -50,7 +52,10 @@ export default function ImageDetailView({
   } = useAuthorProfile(authorId, image?.authorAvatar);
   const contentRef = useRef(null);
   const relatedRef = useRef(null); // 相关推荐哨兵
+  const relatedSentinelRef = useRef(null); // 相关推荐分页触底哨兵
   const relatedInViewRef = useRef(false); // 相关推荐是否在视口内
+  const relatedNextStartRef = useRef(0);
+  const loadingRelatedRef = useRef(false);
   const pageRefs = useRef({}); // page → DOM 节点（跳转 / 视口定位）
   const [showFloatingLike, setShowFloatingLike] = useState(true);
   // 已保存到本地的页 → 本地 blob URL（灯箱直接用本地文件，避免重复下载）
@@ -386,34 +391,76 @@ export default function ImageDetailView({
     return () => { io.disconnect(); root.removeEventListener('scroll', update); };
   }, [related.length, image?.illustId]);
 
+  const loadRelatedPage = useCallback(async ({ append = false } = {}) => {
+    if (!image?.illustId || loadingRelatedRef.current) return;
+    const start = append ? relatedNextStartRef.current : 0;
+    loadingRelatedRef.current = true;
+    if (append) setLoadingMoreRelated(true);
+    else setLoadingRelated(true);
+    try {
+      const result = await pixivApi.fetchRelated(image.illustId, {
+        limit: RELATED_PAGE_SIZE,
+        start,
+      });
+      const rawList = result?.illusts || [];
+      const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
+      const nextStart = start + rawList.length;
+      const hasMore = rawList.length >= RELATED_PAGE_SIZE;
+      setRelated(prev => {
+        const base = append ? prev : [];
+        const seen = new Set(base.map(item => item.illustId));
+        const merged = [...base];
+        for (const item of parsed) {
+          if (seen.has(item.illustId)) continue;
+          seen.add(item.illustId);
+          merged.push(item);
+        }
+        relatedCacheRef.current[image.illustId] = { related: merged, nextStart, hasMore };
+        return merged;
+      });
+      relatedNextStartRef.current = nextStart;
+      setRelatedHasMore(hasMore);
+    } catch (e) {
+      log.warn('fetchRelated failed:', e);
+      if (!append) setRelatedHasMore(false);
+    } finally {
+      loadingRelatedRef.current = false;
+      setLoadingRelated(false);
+      setLoadingMoreRelated(false);
+    }
+  }, [image?.illustId]);
+
   // 加载相关推荐（优先缓存）
   useEffect(() => {
     if (!image?.illustId) return;
     const cached = relatedCacheRef.current[image.illustId];
     if (cached) {
       setRelated(cached.related);
+      relatedNextStartRef.current = cached.nextStart || cached.related?.length || 0;
+      setRelatedHasMore(!!cached.hasMore);
       setLoadingRelated(false);
+      setLoadingMoreRelated(false);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      setRelated([]);
-      setLoadingRelated(true);
-      try {
-        const result = await pixivApi.fetchRelated(image.illustId, { limit: 30 });
-        if (cancelled) return;
-        const rawList = result?.illusts || [];
-        const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
-        setRelated(parsed);
-        relatedCacheRef.current[image.illustId] = { related: parsed };
-      } catch (e) {
-        if (cancelled) return;
-        log.warn('fetchRelated failed:', e);
+    setRelated([]);
+    relatedNextStartRef.current = 0;
+    setRelatedHasMore(false);
+    loadRelatedPage({ append: false });
+  }, [image?.illustId, loadRelatedPage]);
+
+  // 相关推荐滚到底部自动追加
+  useEffect(() => {
+    const root = contentRef.current;
+    const el = relatedSentinelRef.current;
+    if (!root || !el || !relatedHasMore) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && relatedHasMore && !loadingRelatedRef.current) {
+        loadRelatedPage({ append: true });
       }
-      if (!cancelled) setLoadingRelated(false);
-    })();
-    return () => { cancelled = true; };
-  }, [image?.illustId]);
+    }, { root, rootMargin: '420px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [relatedHasMore, loadRelatedPage, related.length]);
 
   return (
     <div className="char-state-bar">
@@ -531,14 +578,19 @@ export default function ImageDetailView({
           <div className="hint">正在加载相关推荐...</div>
         )}
         {related.length > 0 && (
-          <RelatedGrid
-            related={related}
-            currentIllustId={image?.illustId}
-            likedOrSavedSet={likedOrSavedSet}
-            relatedRef={relatedRef}
-            onSelectImage={onSelectImage}
-            onLongPress={toggleLike}
-          />
+          <>
+            <RelatedGrid
+              related={related}
+              currentIllustId={image?.illustId}
+              likedOrSavedSet={likedOrSavedSet}
+              relatedRef={relatedRef}
+              onSelectImage={onSelectImage}
+              onLongPress={toggleLike}
+            />
+            {relatedHasMore && <div ref={relatedSentinelRef} style={{ height: 1 }} />}
+            {loadingMoreRelated && <div className="hint">加载更多推荐...</div>}
+            {!loadingMoreRelated && !relatedHasMore && <div className="hint">没有更多推荐了</div>}
+          </>
         )}
 
         {/* 底部间距 */}

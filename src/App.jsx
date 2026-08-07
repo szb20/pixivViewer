@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
@@ -34,6 +34,7 @@ const TABS = [
 const log = createLogger('App');
 
 export default function App() {
+  const [chromeHidden, setChromeHidden] = useState(false);
   const {
     activeTab,
     visitedTabs,
@@ -84,6 +85,30 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const el = document.querySelector('.app-content');
+    if (!el) return;
+    let lastTop = el.scrollTop || 0;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const top = el.scrollTop || 0;
+        const delta = top - lastTop;
+        if (top < 24) {
+          setChromeHidden(false);
+        } else if (Math.abs(delta) > 6) {
+          setChromeHidden(delta > 0);
+        }
+        lastTop = top;
+        ticking = false;
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
   // 启动时代理连通性检测
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +127,7 @@ export default function App() {
   }, [setShowProxyError]);
 
   return (
-    <div className="app">
+    <div className={`app${chromeHidden ? ' chrome-hidden' : ''}`}>
       <ErrorBoundary>
         <main className="app-content">
           <div className="tab-pane" style={{ display: activeTab === 'discover' ? undefined : 'none' }}>
@@ -163,7 +188,7 @@ export default function App() {
 
       <PullToRefresh onRefresh={triggerPullRefresh} />
 
-      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
+      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} hidden={chromeHidden} />
 
       {settingsOpen && <SettingsPage onClose={closeSettings} />}
 
