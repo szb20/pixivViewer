@@ -74,10 +74,12 @@ export default function ImageDetailView({
     image?.pageCount || 0,
     1,
   );
-  // 详情页占位宽高比：优先第 0 页真实尺寸，拿不到用常见 3:4 兜底
+  const ratioOfSize = (w, h) => (w && h ? `${w} / ${h}` : '');
+  // 详情页占位宽高比：优先真实尺寸，拿不到用常见 3:4 兜底
   const defaultRatio = (() => {
-    const w = image?.width || illustData?.illust?.width || 0;
-    const h = image?.height || illustData?.illust?.height || 0;
+    const p0 = illustData?.illust?.images?.[0];
+    const w = p0?.width || image?.width || illustData?.illust?.width || 0;
+    const h = p0?.height || image?.height || illustData?.illust?.height || 0;
     return w && h ? `${w} / ${h}` : '3 / 4';
   })();
   const pageRatios = ratioCacheRef.current[image?.illustId] || {};
@@ -457,7 +459,7 @@ export default function ImageDetailView({
                     totalPages={pageCount}
                     image={image}
                     previewUrl={heroUrl}
-                    defaultRatio={defaultRatio}
+                    defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
                     cachedRatio={pageRatios[p]}
                     registerRef={registerPageRef}
                     onOpenLightbox={(page) => setLightboxIndex(page)}

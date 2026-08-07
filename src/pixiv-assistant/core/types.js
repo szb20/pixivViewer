@@ -31,7 +31,7 @@
  * @property {string}  authorId
  * @property {number}  pageCount
  * @property {number}  illustType
- * @property {Array<{index:number, url:string, thumbnailUrl:string, originalUrl:string}>} images
+ * @property {Array<{index:number, url:string, previewUrl?:string, thumbnailUrl:string, originalUrl:string, width?:number, height?:number}>} images
  * @property {string[]} tags
  * @property {string}  pixivUrl
  * @property {number}  width

@@ -39,6 +39,7 @@ export default function DetailView({ image: initialImage, onClose, onExitToHome,
   const stackRef = useRef([initialImage]);
   const handleBackRef = useRef(null);
   const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
+  const detailBgUrl = image?.thumbnailUrl || image?.previewUrl || image?.mediumUrl || image?.url || '';
 
   // 外部 prop 变化（从列表/推荐直接打开新作品）→ 重置栈
   useEffect(() => {
@@ -91,7 +92,11 @@ export default function DetailView({ image: initialImage, onClose, onExitToHome,
   }, []);
 
   return (
-    <div className="detail-overlay">
+    <div
+      className="detail-overlay"
+      style={detailBgUrl ? { '--detail-bg-image': `url(${JSON.stringify(detailBgUrl)})` } : undefined}
+    >
+      <div className="detail-glass-bg" aria-hidden="true" />
       <button className="glass-icon-btn detail-back-home" onClick={onExitToHome} aria-label="返回主页">
         <BackIcon />
       </button>

@@ -6,8 +6,8 @@
 /* 下载任务弹窗：卡片变体，毛玻璃参数走统一 dialog 变量 */
 .dialog-overlay[data-variant="download"] .dialog-panel {
   --dialog-bg: 22, 25, 32;
-  --dialog-alpha: 0.66;
-  --dialog-blur: 28px;
+  --dialog-alpha: 0.44;
+  --dialog-blur: 20px;
   --dialog-radius: 28px;
   --dialog-border-alpha: 0.12;
   --dialog-max-w: 480px;
@@ -35,12 +35,17 @@
   height: 18px;
   padding: 0 4px;
   border-radius: 999px;
-  background: #ff4757;
+  background: rgba(15, 17, 21, 0.66);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  backdrop-filter: blur(10px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: #fff;
   font-size: 11px;
   line-height: 18px;
   text-align: center;
-  box-shadow: 0 0 8px rgba(255, 71, 87, 0.6);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* ── 列表 ── */
@@ -89,7 +94,7 @@
 }
 
 .download-row--error .download-row-status {
-  color: rgba(252, 165, 165, 0.9);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .download-row-done {
@@ -99,7 +104,7 @@
 }
 
 .download-row-err {
-  color: #ff6b6b;
+  color: rgba(255, 255, 255, 0.82);
   font-size: 15px;
   flex: none;
 }

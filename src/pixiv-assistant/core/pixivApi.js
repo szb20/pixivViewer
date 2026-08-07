@@ -79,9 +79,33 @@ function mapImagePages(basePage0Url, basePage0ThumbUrl, pageCount, baseOriginalU
       thumbnailUrl: p === 0 ? proxyThumb(basePage0ThumbUrl) : pixivPageUrl(basePage0Url, p),
       mediumUrl: pixivPageUrl(basePage0Url, p),
       originalUrl: baseOriginalUrl ? pixivOriginalUrl(baseOriginalUrl, p) : pixivPageUrl(basePage0Url, p),
+      width: 0,
+      height: 0,
     });
   }
   return images;
+}
+
+/** 映射 /ajax/illust/{id}/pages 返回的逐页数据（含每页真实宽高） */
+function mapAjaxPages(pages) {
+  if (!Array.isArray(pages) || pages.length === 0) return [];
+  return pages.map((page, index) => {
+    const urls = page?.urls || {};
+    const regular = urls.regular || urls.small || urls.thumb_mini || urls.original || '';
+    const preview = urls.small || urls.regular || regular;
+    const thumb = urls.thumb_mini || urls.small || regular;
+    const original = urls.original || urls.regular || regular;
+    return {
+      index,
+      url: proxyThumb(regular),
+      previewUrl: proxyThumb(preview),
+      thumbnailUrl: proxyThumb(thumb),
+      mediumUrl: proxyThumb(regular),
+      originalUrl: proxyThumb(original),
+      width: page?.width || 0,
+      height: page?.height || 0,
+    };
+  });
 }
 
 // ── 工厂 ──
@@ -289,6 +313,19 @@ export function createPixivApi(transport) {
       const page0ThumbUrl = body.urls?.thumb || body.urls?.small || userIllustUrl || page0Url;
       const page0OriginalUrl = body.urls?.original || page0Url;
       const page0PreviewUrl = body.urls?.small || body.urls?.regular || page0Url;
+      let pageImages = [];
+      if (pageCount > 1) {
+        try {
+          const pagesData = await apiFetch(`/ajax/illust/${illustId}/pages`, { skipCookie: true });
+          pageImages = mapAjaxPages(pagesData?.body);
+        } catch (pageErr) {
+          log.warn('[fetchIllust] 获取逐页尺寸失败，使用详情兜底:', pageErr?.message || pageErr);
+        }
+      }
+      if (!pageImages.length) {
+        pageImages = mapImagePages(page0Url, page0ThumbUrl, pageCount, page0OriginalUrl, page0PreviewUrl)
+          .map(img => ({ ...img, width: body.width || 0, height: body.height || 0 }));
+      }
 
       const result = {
         illust: {
@@ -300,7 +337,7 @@ export function createPixivApi(transport) {
           authorId: String(body.userId || ''),
           pageCount,
           illustType: body.illustType ?? 0,
-          images: mapImagePages(page0Url, page0ThumbUrl, pageCount, page0OriginalUrl, page0PreviewUrl),
+          images: pageImages,
           tags: (body.tags?.tags || []).map(t => t.tag || t),
           pixivUrl: `https://www.pixiv.net/artworks/${illustId}`,
           width: body.width || 0,

@@ -5,8 +5,34 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: var(--bg);
+  /* 详情页整页毛玻璃：能透出并模糊上一层列表页 */
+  background: rgba(15, 17, 21, 0.32);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
   animation: overlay-in 0.24s ease;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* 详情页全局动态背景：用当前作品缩略图做超模糊底图，再盖一层暗色玻璃膜 */
+.detail-glass-bg {
+  position: absolute;
+  inset: -40px;
+  z-index: -1;
+  pointer-events: none;
+  background: transparent;
+  filter: none;
+  opacity: 0;
+  transform: scale(1.08);
+}
+
+.detail-glass-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* 全屏"作者作品"页 — 叠加在详情页之上 */
@@ -14,7 +40,9 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: var(--bg);
+  background: rgba(15, 17, 21, 0.22);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
   display: flex;
   flex-direction: column;
   animation: overlay-in 0.24s ease;
@@ -98,11 +126,15 @@
   margin: 0 auto;
   height: 100vh;
   height: 100dvh;
-  background: var(--bg);
+  background: rgba(15, 17, 21, 0.10);
+  -webkit-backdrop-filter: blur(8px) saturate(130%);
+  backdrop-filter: blur(8px) saturate(130%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   scrollbar-width: none;
+  border-left: none;
+  border-right: none;
 }
 
 .char-state-bar::-webkit-scrollbar {
@@ -117,6 +149,7 @@
   overflow-x: hidden;
   position: relative;
   scrollbar-width: none;
+  background: transparent;
 }
 
 /* 与 .app-content::before 一致的顶部安全区 */
@@ -133,7 +166,16 @@
 
 /* ---- 标题 & 作者 ---- */
 .image-detail-meta {
-  padding: 16px 12px 4px;
+  margin: 12px 10px 0;
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.16);
 }
 
 .image-detail-title {
@@ -267,14 +309,16 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 12px 12px 20px;
+  padding: 10px 10px 20px;
 }
 
 .image-detail-tag {
   padding: 3px 10px;
   border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -282,8 +326,9 @@
 }
 
 .image-detail-tag:active {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* ---- 页头 ---- */
@@ -367,7 +412,12 @@
   width: 100%;
   position: relative;
   cursor: pointer;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.022);
+  -webkit-backdrop-filter: blur(8px) saturate(132%);
+  backdrop-filter: blur(8px) saturate(132%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05),
+    0 14px 36px rgba(0, 0, 0, 0.18);
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -441,7 +491,9 @@
 .pixiv-grid-item {
   border-radius: 0;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
   transition: transform 0.15s;
   display: flex;

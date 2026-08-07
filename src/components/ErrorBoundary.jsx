@@ -48,9 +48,15 @@ export class ErrorBoundary extends Component {
                     alignItems: 'center',
                     justifyContent: 'center',
                     minHeight: '200px',
+                    margin: '12px',
+                    borderRadius: '18px',
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(18px) saturate(150%)',
+                    WebkitBackdropFilter: 'blur(18px) saturate(150%)',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
                 }}>
                     <h2 style={{ margin: '0 0 12px', fontSize: '18px' }}>出了点问题</h2>
-                    <p style={{ margin: '0 0 16px', color: '#666', fontSize: '14px' }}>
+                    <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
                         {this.state.error?.message || '页面加载失败'}
                     </p>
                     <button
@@ -59,9 +65,11 @@ export class ErrorBoundary extends Component {
                         style={{
                             padding: '8px 20px',
                             borderRadius: '8px',
-                            border: 'none',
-                            background: '#0096fa',
-                            color: '#fff',
+                            border: '1px solid rgba(255, 255, 255, 0.16)',
+                            background: 'rgba(255, 255, 255, 0.1)',
+                            backdropFilter: 'blur(12px) saturate(150%)',
+                            WebkitBackdropFilter: 'blur(12px) saturate(150%)',
+                            color: 'var(--text-primary)',
                             fontSize: '14px',
                             cursor: 'pointer',
                         }}

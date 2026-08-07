@@ -192,13 +192,15 @@ button {
 
 /* ── 毛玻璃通用样式 ── */
 .frosted {
-  background: rgba(15, 17, 21, 0.55);
-  backdrop-filter: blur(12px);
+  background: rgba(15, 17, 21, 0.34);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
 }
 
 .frosted-light {
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.075);
+  -webkit-backdrop-filter: blur(8px) saturate(135%);
+  backdrop-filter: blur(8px) saturate(135%);
 }
 
 /* 玻璃圆形图标按钮（喜欢 / 下载悬浮等通用） */
@@ -302,7 +304,9 @@ button {
   aspect-ratio: 1;
   border-radius: 0;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
 }
 
@@ -525,9 +529,12 @@ button {
 .error-box {
   margin: 12px 0;
   padding: 14px 16px;
-  border-radius: 8px;
-  background: rgba(255, 107, 107, 0.12);
-  color: #fca5a5;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
   font-size: 13px;
   text-align: center;
   display: flex;
@@ -540,10 +547,12 @@ button {
 .error-retry {
   flex: none;
   padding: 6px 16px;
-  border: 1px solid rgba(255, 107, 107, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px;
-  background: rgba(255, 107, 107, 0.15);
-  color: #fca5a5;
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -556,19 +565,24 @@ button {
   gap: 10px;
   margin: 12px 0;
   padding: 12px 14px;
-  border-radius: 8px;
-  background: rgba(79, 140, 255, 0.12);
-  color: #9ec5ff;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .cookie-notice button {
   flex: none;
   padding: 6px 14px;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px;
-  background: var(--accent);
-  color: #0f1115;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -592,7 +606,9 @@ button {
   aspect-ratio: 1;
   border-radius: 0;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
 }
 
@@ -611,7 +627,9 @@ button {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.055);
+  -webkit-backdrop-filter: blur(14px) saturate(145%);
+  backdrop-filter: blur(14px) saturate(145%);
   color: var(--text-tertiary);
   font-size: 11px;
   line-height: 1.4;
@@ -627,9 +645,9 @@ button {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(8, 10, 14, 0.5);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
+  background: rgba(8, 10, 14, 0.26);
+  -webkit-backdrop-filter: blur(10px) saturate(135%);
+  backdrop-filter: blur(10px) saturate(135%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -658,9 +676,9 @@ button {
   overflow-y: var(--dialog-overflow, visible);
   animation: dialog-panel-in 0.3s ease;
   /* 面板材质由 CSS 变量驱动，缺省毛玻璃质感 */
-  background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.72));
-  -webkit-backdrop-filter: blur(var(--dialog-blur, 24px)) saturate(160%);
-  backdrop-filter: blur(var(--dialog-blur, 24px)) saturate(160%);
+  background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.48));
+  -webkit-backdrop-filter: blur(var(--dialog-blur, 18px)) saturate(150%);
+  backdrop-filter: blur(var(--dialog-blur, 18px)) saturate(150%);
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -695,18 +713,20 @@ button {
 .btn {
   flex: 1;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
-  background: var(--bg-secondary);
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
 }
 
 .btn-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #0f1115;
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -779,20 +799,25 @@ button {
   font-size: 13px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   animation: toast-in 0.2s ease;
-  backdrop-filter: blur(12px);
-  /* 由 CSS 变量 --toast-color 驱动颜色，缺省白色 */
-  background: rgba(var(--toast-color, 255, 255, 255), 0.12);
-  border: 1px solid rgba(var(--toast-color, 255, 255, 255), 0.18);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  /* 语义色只作为细微光效，不再把提醒整体染成红色等实色块 */
+  background: rgba(15, 17, 21, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   text-shadow:
     0 0 8px  rgba(var(--toast-color, 255, 255, 255), 0.95),
     0 0 20px rgba(var(--toast-color, 255, 255, 255), 0.65),
     0 0 40px rgba(var(--toast-color, 255, 255, 255), 0.35);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 24px rgba(var(--toast-color, 255, 255, 255), 0.12);
 }
 
 /* 每个语义变体只声明 --toast-color */
 .toast[data-type="info"]    { --toast-color: var(--color-accent-rgb); }
 .toast[data-type="success"] { --toast-color: var(--color-accent-rgb); }
-.toast[data-type="error"]   { --toast-color: var(--color-danger-rgb); }
+.toast[data-type="error"]   { --toast-color: 255, 255, 255; }
 .toast[data-type="warning"] { --toast-color: var(--color-warning-rgb); }
 
 @keyframes toast-in {
@@ -861,7 +886,7 @@ button {
   height: 64px;
   margin: 0 auto 14px;
   animation: proxy-icon-float 2.6s ease-in-out infinite;
-  filter: drop-shadow(0 8px 20px rgba(255, 138, 76, 0.28));
+  filter: drop-shadow(0 8px 20px rgba(255, 255, 255, 0.14));
 }
 
 @keyframes proxy-icon-float {
@@ -918,22 +943,25 @@ button {
 }
 
 .proxy-check-actions .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #0f1115;
-  box-shadow: 0 4px 16px rgba(var(--color-accent-rgb, 79, 140, 255), 0.35);
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* ── 网格占位高光扫描（缩略图加载完成前）── */
 .grid-shimmer {
-  background: linear-gradient(110deg, var(--bg-secondary) 30%, #262b36 50%, var(--bg-secondary) 70%);
-  background-size: 200% 100%;
-  animation: grid-shimmer-sweep 1.2s linear infinite;
-}
-
-@keyframes grid-shimmer-sweep {
-  from { background-position: 200% 0; }
-  to { background-position: -200% 0; }
+  position: relative;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+    rgba(15, 17, 21, 0.16);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045);
 }
 
 /* 子页签切换：新面板叠在上层淡入（旧面板留在文档流中，高度稳定） */

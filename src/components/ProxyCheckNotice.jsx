@@ -38,8 +38,8 @@ export default function ProxyCheckNotice({ proxyUrl, onOpenSettings, onDismiss }
           <svg viewBox="0 0 64 64" width="64" height="64">
             <defs>
               <linearGradient id="proxyWarnGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stopColor="#ffb74d" />
-                <stop offset="100%" stopColor="#ff6b6b" />
+                <stop offset="0%" stopColor="rgba(255, 255, 255, 0.92)" />
+                <stop offset="100%" stopColor="rgba(255, 255, 255, 0.46)" />
               </linearGradient>
             </defs>
             <circle
@@ -63,7 +63,7 @@ export default function ProxyCheckNotice({ proxyUrl, onOpenSettings, onDismiss }
             />
             <path
               d="M32 20 L45 44 H19 Z"
-              fill="rgba(255, 138, 76, 0.14)"
+              fill="rgba(255, 255, 255, 0.08)"
               stroke="url(#proxyWarnGrad)"
               strokeWidth="3"
               strokeLinejoin="round"
