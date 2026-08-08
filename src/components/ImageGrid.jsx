@@ -26,7 +26,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen }) {
           img={img}
           index={index}
           isLiked={likedIllustIds.has(img.illustId)}
-          onOpen={onOpen}
+          onOpen={(openImg) => onOpen?.(openImg, { items: visibleItems, index })}
           onLongPress={toggleLike}
           onHide={(id) => {
             hiddenWorks.add(id);

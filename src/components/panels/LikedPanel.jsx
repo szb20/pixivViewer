@@ -13,6 +13,22 @@ const log = createLogger('LikedPanel');
 const migrateInFlight = new Set();
 const migrateFailed = new Set();
 
+const likedItemToDetail = (it) => ({
+  illustId: it.illustId,
+  _pageIndex: it.pageIndex ?? it._pageIndex ?? 0,
+  _totalPages: it.pageCount || it.frameCount || it._totalPages || 1,
+  type: it.isGif ? 'gif' : (it.type || 'image'),
+  title: it.title,
+  author: it.author,
+  authorId: it.authorId,
+  authorName: it.authorName,
+  authorAvatar: it.authorAvatar || '',
+  thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
+  mediumUrl: it.mediumUrl,
+  originalUrl: it.originalUrl,
+  _openTransition: it._openTransition,
+});
+
 /** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 MePage 聚合，不在此注册。 */
 export default function LikedPanel({ onOpen, onReportLoad }) {
   const offsetRef = useRef(0);
@@ -80,6 +96,8 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
     return () => window.removeEventListener('pixiv:liked-changed', onLikedChanged);
   }, [reload]);
 
+  const detailItems = feed.items.map(likedItemToDetail);
+
   return (
     <>
       {feed.loading && feed.items.length === 0 && <div className="hint">加载中...</div>}
@@ -99,19 +117,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
             img={item}
             index={index}
             isLiked
-            onOpen={(it) => onOpen?.({
-              illustId: it.illustId,
-              _pageIndex: it.pageIndex ?? 0,
-              _totalPages: it.pageCount || it.frameCount || 1,
-              type: it.isGif ? 'gif' : 'image',
-              title: it.title,
-              author: it.author,
-              authorId: it.authorId,
-              authorName: it.authorName,
-              authorAvatar: it.authorAvatar || '',
-              thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
-              _openTransition: it._openTransition,
-            })}
+            onOpen={(it) => onOpen?.(likedItemToDetail(it), { items: detailItems, index })}
             variant="gallery"
           />
         ))}

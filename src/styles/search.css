@@ -157,20 +157,51 @@
   gap: 8px;
 }
 
-.search-page .search-history-tag {
+.search-page .search-history-chip {
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
+  max-width: 100%;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, text-shadow 0.2s ease;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, text-shadow 0.2s ease;
 }
 
-.search-page .search-history-tag:hover {
+.search-page .search-history-tag {
+  min-width: 0;
+  max-width: min(220px, calc(100vw - 96px));
+  padding: 6px 9px 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.search-page .search-history-delete {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-page .search-history-delete:active {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.search-page .search-history-chip:hover {
   color: var(--text-primary);
   border-color: rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.10);
@@ -180,6 +211,10 @@
   text-shadow:
     0 0 8px rgba(255, 255, 255, 0.5),
     0 0 16px rgba(255, 255, 255, 0.25);
+}
+
+.search-page .search-history-chip:hover .search-history-tag {
+  color: var(--text-primary);
 }
 
 /* ══════════════════════════════════════════════
@@ -199,4 +234,29 @@
   width: calc(100% - 24px);
   max-width: 560px;
   z-index: 5;
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .search-page {
+    padding-bottom: 92px;
+  }
+
+  .search-bar--bottom {
+    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
+    left: max(12px, env(safe-area-inset-left, 0px));
+    right: max(12px, env(safe-area-inset-right, 0px));
+    width: auto;
+    max-width: none;
+    padding: 5px 10px;
+  }
+
+  .search-input {
+    font-size: 14px;
+    padding: 5px 4px;
+  }
+
+  .search-submit {
+    width: 30px;
+    height: 30px;
+  }
 }

@@ -125,7 +125,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
     return () => io.disconnect();
   }, [hasMore, loading, loadingMore, loadMore]);
 
-  const handleOpen = useCallback((it) => onOpenImage?.(it), [onOpenImage]);
+  const handleOpen = useCallback((it, index) => onOpenImage?.(it, { items, index }), [items, onOpenImage]);
 
   return (
     <div className="author-works-overlay">
@@ -156,7 +156,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
                 key={it.illustId}
                 img={it}
                 index={index}
-                onOpen={handleOpen}
+                onOpen={(openIt) => handleOpen(openIt, index)}
                 variant="media"
                 thumbSrc={gridThumbUrl(it.thumbnailUrl)}
               />

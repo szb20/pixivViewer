@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import HeartIcon from './icons/HeartIcon.jsx';
 
 const LONG_PRESS_MS = 500;
@@ -37,19 +37,29 @@ export default memo(function GridItem({
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [pressState, setPressState] = useState('idle');
   const itemRef = useRef(null);
   const longPressTimerRef = useRef(null);
+  const pressFeedbackTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const pressStartRef = useRef(null);
   const src = thumbSrc || img.thumbnailUrl || img.mediumUrl || '';
   const pageCount = Number(img._totalPages || img.pageCount) || 1;
   const isGif = img.type === 'gif' || Number(img.illustType) === 2;
 
+  useEffect(() => () => {
+    clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
+  }, []);
+
   const triggerLongPress = useCallback(() => {
     if (longPressTriggeredRef.current) return;
     longPressTriggeredRef.current = true;
     clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
     pressStartRef.current = null;
+    setPressState('confirmed');
+    pressFeedbackTimerRef.current = setTimeout(() => setPressState('idle'), 420);
     onLongPress?.(img);
   }, [img, onLongPress]);
 
@@ -58,7 +68,9 @@ export default memo(function GridItem({
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     pressStartRef.current = { x: e.clientX, y: e.clientY };
     longPressTriggeredRef.current = false;
+    setPressState('pressing');
     clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
     longPressTimerRef.current = setTimeout(triggerLongPress, LONG_PRESS_MS);
   }, [onLongPress, triggerLongPress]);
 
@@ -68,12 +80,14 @@ export default memo(function GridItem({
     if (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10) {
       clearTimeout(longPressTimerRef.current);
       pressStartRef.current = null;
+      setPressState('idle');
     }
   }, []);
 
   const cancelLongPress = useCallback(() => {
     clearTimeout(longPressTimerRef.current);
     pressStartRef.current = null;
+    if (!longPressTriggeredRef.current) setPressState('idle');
   }, []);
 
   const handleClick = useCallback(() => {
@@ -110,7 +124,7 @@ export default memo(function GridItem({
 
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
-  const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}`;
+  const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}${pressState === 'pressing' ? ' is-pressing' : ''}${pressState === 'confirmed' ? ' is-long-pressed' : ''}`;
 
   // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
   if (variant === 'gallery') {

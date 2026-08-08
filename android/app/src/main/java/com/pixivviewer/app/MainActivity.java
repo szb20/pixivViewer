@@ -16,5 +16,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GallerySaverPlugin.class);
         registerPlugin(StreamingDownloadPlugin.class);
         super.onCreate(savedInstanceState);
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            webView.setVerticalScrollBarEnabled(false);
+            webView.setHorizontalScrollBarEnabled(false);
+            webView.setScrollBarStyle(WebView.SCROLLBARS_INSIDE_OVERLAY);
+        }
     }
 }

@@ -11,17 +11,38 @@ import '../styles/search.css';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'search:last';
+const HISTORY_KEY = 'searchHistory';
+const HISTORY_LIMIT = 12;
+
+function normalizeHistory(value) {
+  const list = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const next = [];
+  for (const raw of list) {
+    const item = String(raw || '').trim();
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    next.push(item);
+    if (next.length >= HISTORY_LIMIT) break;
+  }
+  return next;
+}
 
 // 迁移旧版独立历史 key → 统一 key
-migrateFromLegacyKey('pixiv_search_history', 'searchHistory');
+migrateFromLegacyKey('pixiv_search_history', HISTORY_KEY);
 
 export default function SearchPage({ active = true, onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const likedSet = useLikedSet();
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
   const [history, setHistory] = useState(() => {
-    return appStorage.get('searchHistory', []);
+    const normalized = normalizeHistory(appStorage.get(HISTORY_KEY, []));
+    appStorage.set(HISTORY_KEY, normalized);
+    return normalized;
   });
+  const [searchFocused, setSearchFocused] = useState(false);
   const [hideBar, setHideBar] = useState(false); // 滚动时弹入/弹出搜索栏（同筛选栏）
   const queryRef = useRef('');
   const pageRef = useRef(1);
@@ -69,8 +90,8 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     queryRef.current = trimmed;
     setQuery(trimmed);
     setHistory(prev => {
-      const next = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 12);
-      appStorage.set('searchHistory', next);
+      const next = normalizeHistory([trimmed, ...prev]);
+      appStorage.set(HISTORY_KEY, next);
       return next;
     });
     setSearched(true);
@@ -78,11 +99,22 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   }, [reload]);
 
   const clearHistory = useCallback(() => {
-    appStorage.remove('searchHistory');
+    appStorage.remove(HISTORY_KEY);
     setHistory([]);
   }, []);
 
+  const removeHistory = useCallback((item) => {
+    setHistory(prev => {
+      const key = String(item || '').trim().toLowerCase();
+      const next = prev.filter(h => h.toLowerCase() !== key);
+      if (next.length) appStorage.set(HISTORY_KEY, next);
+      else appStorage.remove(HISTORY_KEY);
+      return next;
+    });
+  }, []);
+
   const submit = (e) => { e.preventDefault(); runSearch(query); };
+  const showHistory = history.length > 0 && (!searched || searchFocused);
 
   // 详情页点 Tag → 关闭详情并切到搜索 tab 后直接搜索该 tag
   useEffect(() => {
@@ -112,7 +144,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   return (
     <div className="page search-page">
       <div className="search-head">
-        {!searched && history.length > 0 && (
+        {showHistory && (
           <div className="search-history">
             <div className="search-history-head">
               <span className="search-history-label">最近搜索</span>
@@ -120,12 +152,19 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
             </div>
             <div className="search-history-tags">
               {history.map(h => (
-                <button
-                  key={h}
-                  type="button"
-                  className="search-history-tag"
-                  onClick={() => runSearch(h)}
-                >{h}</button>
+                <span className="search-history-chip" key={h}>
+                  <button
+                    type="button"
+                    className="search-history-tag"
+                    onClick={() => runSearch(h)}
+                  >{h}</button>
+                  <button
+                    type="button"
+                    className="search-history-delete"
+                    aria-label={`删除 ${h}`}
+                    onClick={(e) => { e.stopPropagation(); removeHistory(h); }}
+                  >×</button>
+                </span>
               ))}
             </div>
           </div>
@@ -156,6 +195,8 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
             value={query}
             placeholder="标签 / 作品ID"
             enterKeyHint="search"
+            onFocus={() => { setSearchFocused(true); setHideBar(false); }}
+            onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
             onChange={e => setQuery(e.target.value)}
           />
           <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">

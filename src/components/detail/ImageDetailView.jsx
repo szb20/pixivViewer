@@ -31,6 +31,7 @@ export default function ImageDetailView({
   image, onSelectImage, onAuthorWorks, onSearchTag,
   restoreScroll = 0,
   restoreAnchor = null,
+  className = '',
 }) {
   const { pixivCache, setPixivCache } = usePixivCache();
   const toggleLike = useGridLikeToggle();
@@ -56,6 +57,8 @@ export default function ImageDetailView({
   const relatedInViewRef = useRef(false); // 相关推荐是否在视口内
   const relatedNextStartRef = useRef(0);
   const loadingRelatedRef = useRef(false);
+  const relatedRequestSeqRef = useRef(0);
+  const currentIllustIdRef = useRef('');
   const pageRefs = useRef({}); // page → DOM 节点（跳转 / 视口定位）
   const [showFloatingLike, setShowFloatingLike] = useState(true);
   // 已保存到本地的页 → 本地 blob URL（灯箱直接用本地文件，避免重复下载）
@@ -79,6 +82,7 @@ export default function ImageDetailView({
     image?.pageCount || 0,
     1,
   );
+  currentIllustIdRef.current = image?.illustId ? String(image.illustId) : '';
   const ratioOfSize = (w, h) => (w && h ? `${w} / ${h}` : '');
   // 详情页占位宽高比：优先真实尺寸，拿不到用常见 3:4 兜底
   const defaultRatio = (() => {
@@ -391,22 +395,30 @@ export default function ImageDetailView({
     return () => { io.disconnect(); root.removeEventListener('scroll', update); };
   }, [related.length, image?.illustId]);
 
-  const loadRelatedPage = useCallback(async ({ append = false } = {}) => {
-    if (!image?.illustId || loadingRelatedRef.current) return;
+  const loadRelatedPage = useCallback(async ({ append = false, requestSeq } = {}) => {
+    const illustId = image?.illustId ? String(image.illustId) : '';
+    if (!illustId || loadingRelatedRef.current) return;
+    const activeSeq = requestSeq || relatedRequestSeqRef.current;
+    const isCurrentRequest = () => (
+      relatedRequestSeqRef.current === activeSeq &&
+      currentIllustIdRef.current === illustId
+    );
     const start = append ? relatedNextStartRef.current : 0;
     loadingRelatedRef.current = true;
     if (append) setLoadingMoreRelated(true);
     else setLoadingRelated(true);
     try {
-      const result = await pixivApi.fetchRelated(image.illustId, {
+      const result = await pixivApi.fetchRelated(illustId, {
         limit: RELATED_PAGE_SIZE,
         start,
       });
+      if (!isCurrentRequest()) return;
       const rawList = result?.illusts || [];
       const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
       const nextStart = start + rawList.length;
       const hasMore = rawList.length >= RELATED_PAGE_SIZE;
       setRelated(prev => {
+        if (!isCurrentRequest()) return prev;
         const base = append ? prev : [];
         const seen = new Set(base.map(item => item.illustId));
         const merged = [...base];
@@ -415,25 +427,32 @@ export default function ImageDetailView({
           seen.add(item.illustId);
           merged.push(item);
         }
-        relatedCacheRef.current[image.illustId] = { related: merged, nextStart, hasMore };
+        relatedCacheRef.current[illustId] = { related: merged, nextStart, hasMore };
         return merged;
       });
       relatedNextStartRef.current = nextStart;
       setRelatedHasMore(hasMore);
     } catch (e) {
+      if (!isCurrentRequest()) return;
       log.warn('fetchRelated failed:', e);
       if (!append) setRelatedHasMore(false);
     } finally {
-      loadingRelatedRef.current = false;
-      setLoadingRelated(false);
-      setLoadingMoreRelated(false);
+      if (isCurrentRequest()) {
+        loadingRelatedRef.current = false;
+        setLoadingRelated(false);
+        setLoadingMoreRelated(false);
+      }
     }
   }, [image?.illustId]);
 
   // 加载相关推荐（优先缓存）
   useEffect(() => {
     if (!image?.illustId) return;
-    const cached = relatedCacheRef.current[image.illustId];
+    const illustId = String(image.illustId);
+    relatedRequestSeqRef.current += 1;
+    const requestSeq = relatedRequestSeqRef.current;
+    loadingRelatedRef.current = false;
+    const cached = relatedCacheRef.current[illustId];
     if (cached) {
       setRelated(cached.related);
       relatedNextStartRef.current = cached.nextStart || cached.related?.length || 0;
@@ -445,7 +464,7 @@ export default function ImageDetailView({
     setRelated([]);
     relatedNextStartRef.current = 0;
     setRelatedHasMore(false);
-    loadRelatedPage({ append: false });
+    loadRelatedPage({ append: false, requestSeq });
   }, [image?.illustId, loadRelatedPage]);
 
   // 相关推荐滚到底部自动追加
@@ -463,7 +482,7 @@ export default function ImageDetailView({
   }, [relatedHasMore, loadRelatedPage, related.length]);
 
   return (
-    <div className="char-state-bar">
+    <div className={`char-state-bar${className ? ` ${className}` : ''}`}>
       <div
         className="char-state-content"
         ref={contentRef}
@@ -472,8 +491,9 @@ export default function ImageDetailView({
         onWheelCapture={markUserInteracted}
       >
         {/* GIF 动图：用动图播放器 */}
+        <div className="detail-media-stack">
         {isGif ? (
-          <div style={{ display: 'flex', justifyContent: 'center' }} onClick={() => setLightboxIndex(0)}>
+          <div className="detail-gif-wrap" onClick={() => setLightboxIndex(0)}>
             <UgoiraPlayer
               key={image?.illustId}
               illustId={image?.illustId}
@@ -486,7 +506,7 @@ export default function ImageDetailView({
         ) : (
           <>
             {/* 全部页面上下堆叠：滚动视图显示最小等比预览图（master360），原图在灯箱按需加载 */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="detail-page-stack">
               {Array.from({ length: pageCount }, (_, p) => {
                 const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
                 const isSaved = !!pixivCache[ck]?.saved;
@@ -520,6 +540,9 @@ export default function ImageDetailView({
         )}
 
         {/* 标题 + 作者 */}
+        </div>
+
+        <div className="detail-side-panel">
         <div className="image-detail-meta">
           <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
           <div className="image-detail-author-row">
@@ -595,6 +618,7 @@ export default function ImageDetailView({
 
         {/* 底部间距 */}
         <div style={{ height: 24 }} />
+        </div>
       </div>
 
       {/* 灯箱 — 点击大图弹出全屏预览（缩放/手势） */}
