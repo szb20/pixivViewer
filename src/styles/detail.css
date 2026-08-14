@@ -468,7 +468,7 @@
 
 /* 后续页背景更模糊更暗，视觉上区分首屏内容 */
 .image-detail-bg--deep {
-  filter: blur(40px) brightness(0.4);
+  filter: blur(48px) brightness(0.38);
 }
 
 .image-detail-main {
@@ -480,18 +480,32 @@
   object-fit: cover;
   z-index: 1;
   opacity: 0;
-  filter: blur(12px) saturate(0.94);
-  transform: scale(1.012);
-  transition:
-    opacity 0.34s ease,
-    filter 0.46s ease,
-    transform 0.46s cubic-bezier(0.2, 0.8, 0.2, 1);
+  filter: none;
+  transform: none;
+  transition: opacity 0.34s ease;
 }
 
 .image-detail-main.is-loaded {
   opacity: 1;
   filter: blur(0) saturate(1);
   transform: scale(1);
+}
+
+/* 预览图加载完成前保留清晰缩略图，避免“清晰→模糊”的中间态 */
+.image-detail-thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.image-detail-thumb-placeholder.is-hidden {
+  opacity: 0;
 }
 
 
@@ -529,16 +543,20 @@
 .pixiv-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0;
-  padding: 0;
+  gap: 6px;
+  padding: 4px 8px 8px;
 }
 
 .pixiv-grid-item {
-  border-radius: 0;
+  border-radius: 10px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.045);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
-  backdrop-filter: blur(14px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  backdrop-filter: blur(14px) saturate(160%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   cursor: pointer;
   animation: grid-item-in 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   animation-delay: calc(var(--item-index, 0) * 18ms);

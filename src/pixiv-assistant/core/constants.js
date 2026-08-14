@@ -34,4 +34,4 @@ export const RANKING_MODE_NAMES = {
 };
 
 /** 缓存目录名 */
-export const CACHE_DIR = 'TeyvatWhisper';
+export const CACHE_DIR = 'PixivViewer';

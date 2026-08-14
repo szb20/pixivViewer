@@ -123,7 +123,7 @@ export default function MediaLightbox({
       const t = setTimeout(() => setIwaraQuality(cur.selectedQuality || 'Source'), 0);
       return () => clearTimeout(t);
     }
-  }, [index]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [index]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // ── 主动预加载相邻图片（浏览器缓存预热，避免滑动时等待） ──
   useEffect(() => {

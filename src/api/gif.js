@@ -286,7 +286,7 @@ async function deleteZipFromDisk(id) {
 }
 
 /**
- * 把原版无损 ZIP 从磁盘缓存复制到相册目录（Pictures/TeyvatWhisper/，与保存的图片/动图同目录），
+ * 把原版无损 ZIP 从磁盘缓存复制到相册目录（Pictures/PixivViewer/，与保存的图片/动图同目录），
  * 作为卸载后仍保留的无损副本（尽力而为：缓存被 LRU 淘汰或读取失败就跳过）。
  */
 async function saveLosslessZipToGallery(sid) {
@@ -750,7 +750,7 @@ async function doSaveGifToAlbum(item, onProgress) {
     const bytes = await encodeFramesToGif(first, getFrame, frames.map(f => f.delay), w, h, onProgress);
     const base64 = bytesToBase64(bytes);
 
-    // 只导出系统相册（MediaStore / Pictures/TeyvatWhisper），不写私有副本（避免双写）
+    // 只导出系统相册（MediaStore / Pictures/PixivViewer），不写私有副本（避免双写）
     await exportToGallery(base64, gifFileName, 'image/gif');
 
     // 写元数据（动图统一存 page 0）

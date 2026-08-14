@@ -278,6 +278,22 @@ export class PixivRepository {
   }
 
   /**
+   * 幂等取消喜欢（保留记录与已保存状态，仅清 likedAt）。
+   * @param {string} id
+   * @returns {Promise<{success: boolean, unliked: boolean, likedAt: number}>}
+   */
+  async unlike(id) {
+    const record = await getMeta(id);
+    if (!record) return { success: true, unliked: false, likedAt: 0 };
+    const wasLiked = (record.likedAt || 0) > 0;
+    if (wasLiked) {
+      record.likedAt = 0;
+      await putMeta(record);
+    }
+    return { success: true, unliked: wasLiked, likedAt: 0 };
+  }
+
+  /**
    * 统计信息。
    * @returns {{ total: number, saved: number, cached: number, totalSize: number }}
    */

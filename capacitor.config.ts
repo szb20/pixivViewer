@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
 // 开发模式：显式设置 CAP_DEV=1 时，WebView 才加载局域网内的 Vite dev server（带 pixiv 代理）。
 if (process.env.CAP_DEV === '1') {
   config.server = {
-    url: 'http://192.168.1.2:5182',
+    url: process.env.CAP_DEV_URL || 'http://192.168.1.4:5182',
     cleartext: true,
   };
 }

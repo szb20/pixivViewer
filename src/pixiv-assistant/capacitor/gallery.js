@@ -74,7 +74,7 @@ export async function galleryHasFile(fileName) {
   }
 }
 
-/** 导出到系统相册（MediaStore / Pictures/TeyvatWhisper） */
+/** 导出到系统相册（MediaStore / Pictures/PixivViewer） */
 export async function exportToGallery(data, fileName, mimeType = mimeFor(fileName)) {
   try {
     const saver = Capacitor?.Plugins?.GallerySaver;

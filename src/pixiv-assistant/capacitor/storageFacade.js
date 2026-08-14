@@ -148,6 +148,16 @@ export class StorageFacade {
   }
 
   /**
+   * 幂等取消喜欢。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   */
+  async unlike(illustId, pageIndex = 0) {
+    if (!illustId) return { success: false, unliked: false, likedAt: 0 };
+    return await this.service.unlike(illustId, pageIndex);
+  }
+
+  /**
    * 回填展示元数据（浏览时把完整缩略图 URL / 标题 / 作者 / tags 写回已保存/喜欢的记录）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]

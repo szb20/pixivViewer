@@ -145,7 +145,7 @@ export default function ImageDetailView({
         try { URL.revokeObjectURL(u); } catch { /* 忽略 */ }
       }
     };
-  }, [image?.illustId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [image?.illustId]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 切换作品时恢复滚动位置：用 useLayoutEffect 在浏览器绘制前同步滚动，
   // 避免先闪到顶部/第 0 页、再跳到入口高度（多页作品非首页进入或回退时）。
@@ -176,7 +176,7 @@ export default function ImageDetailView({
       const appliedTop = applyScrollRestore();
       lastRestoreRef.current = { ...last, appliedTop };
     });
-  }, [illustData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [illustData]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 获取作品详情（所有页共享同一份 API 响应，仅依赖 illustId，不随翻页重复请求）
   useEffect(() => {
@@ -221,7 +221,7 @@ export default function ImageDetailView({
         await storageFacade.backfillMeta(image.illustId, p, meta);   // 补 pageCount / pixivUrl
       }
     })().catch(() => {});
-  }, [illustData, image, pixivCache, pageCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [illustData, image, pixivCache, pageCount]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 已保存页 → 本地 blob URL：灯箱直接读相册本地文件，不再走网络重新下载。
   // pixivCache 变化（保存/取消保存）时增量更新：复用已有 URL、新增刚保存的页、回收已取消的页。
@@ -262,7 +262,7 @@ export default function ImageDetailView({
         }
       }
     };
-  }, [image?.illustId, pixivCache, pageCount]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [image?.illustId, pixivCache, pageCount]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 构造保存条目（单页）— 优先用详情接口的完整日期路径 URL（避免走 pixiv.re 短链反查）
   const buildSaveItem = useCallback((page, images) => {

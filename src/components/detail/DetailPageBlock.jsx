@@ -66,9 +66,11 @@ export default function DetailPageBlock({
     onLongPress?.(page);
   }, [page, onLongPress]);
 
-  // 所有页用缩略图模糊铺底，第 0 页用 thumb，其他页更模糊
-  // 缩略图铺底：优先网格带进来的真实缩略图；其他页兜底用 pixiv.re 原图短链（thumb 裁剪路径 404）
-  const bg = image?.thumbnailUrl || pixivReUrl(String(image.illustId), page);
+  // 缩略图铺底：第 0 页用网格带进来的真实缩略图；
+  // 后续页用本页自己的 540px 预览图并加深模糊，绝不拿第 0 页缩略图冒充，避免视觉串图。
+  const bg = page === 0
+    ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), page))
+    : (previewUrl || '');
   const bgClass = page === 0 ? 'image-detail-bg' : 'image-detail-bg image-detail-bg--deep';
   // 展示图：已下载页 → 本地原图（blob）；未下载页 → 540px 等比预览（加载前只保留比例占位块）
   const src = previewUrl;
@@ -96,13 +98,32 @@ export default function DetailPageBlock({
     >
       {bg && <img className={bgClass} src={bg} alt="" draggable={false} />}
       {!src ? (
-        // illustData 尚未加载，先显示转圈占位
-        <div className="image-detail-placeholder">
-          <span className="image-detail-placeholder-spinner" />
-        </div>
+        <>
+          {bg && page === 0 && (
+            <img
+              className="image-detail-thumb-placeholder"
+              src={bg}
+              alt=""
+              draggable={false}
+            />
+          )}
+          {!bg && (
+            <div className="image-detail-placeholder">
+              <span className="image-detail-placeholder-spinner" />
+            </div>
+          )}
+        </>
       ) : !failed ? (
         <>
-          {!loaded && (
+          {bg && page === 0 && (
+            <img
+              className={`image-detail-thumb-placeholder${loaded ? ' is-hidden' : ''}`}
+              src={src || bg}
+              alt=""
+              draggable={false}
+            />
+          )}
+          {!loaded && !bg && (
             <div className="image-detail-placeholder">
               <span className="image-detail-placeholder-spinner" />
             </div>

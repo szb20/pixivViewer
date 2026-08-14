@@ -28,8 +28,8 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * 保存图片到系统相册（MediaStore）。
- * Android 10+ 通过 MediaStore 写入无需任何存储权限，文件进入 Pictures/TeyvatWhisper，
- * 系统相册立即可见（与旧版 TeyvatWhisper 应用行为一致）。
+ * Android 10+ 通过 MediaStore 写入无需任何存储权限，文件进入 Pictures/PixivViewer，
+ * 系统相册立即可见。
  */
 @CapacitorPlugin(
     name = "GallerySaver",
@@ -43,12 +43,12 @@ import java.nio.charset.StandardCharsets;
 )
 public class GallerySaverPlugin extends Plugin {
 
-    // 注意：MediaStore 实际存储的 RELATIVE_PATH 带尾斜杠（Pictures/TeyvatWhisper/），
+    // 注意：MediaStore 实际存储的 RELATIVE_PATH 带尾斜杠（Pictures/PixivViewer/），
     // 查询必须用带斜杠的值，否则 read/exists/delete 全部匹配不到。
-    private static final String RELATIVE_PATH = "Pictures/TeyvatWhisper/";
+    private static final String RELATIVE_PATH = "Pictures/PixivViewer/";
     // 应用元数据备份（JSON）存到「下载」集合：任意 MIME 都接受，卸载后保留
-    private static final String META_RELATIVE_PATH = "Download/TeyvatWhisper/";
-    // 通用 Files 集合：接受任意 MIME（无损 ZIP 副本用，与图片/动图同目录 Pictures/TeyvatWhisper）
+    private static final String META_RELATIVE_PATH = "Download/PixivViewer/";
+    // 通用 Files 集合：接受任意 MIME（无损 ZIP 副本用，与图片/动图同目录 Pictures/PixivViewer）
     private static final Uri FILES_URI = MediaStore.Files.getContentUri("external");
 
     /**
@@ -257,7 +257,7 @@ public class GallerySaverPlugin extends Plugin {
 
     /**
      * 写入应用元数据备份（JSON 字符串 → MediaStore Downloads）。
-     * Android 10+ 无需权限；卸载后文件仍保留在 Download/TeyvatWhisper/。
+     * Android 10+ 无需权限；卸载后文件仍保留在 Download/PixivViewer/。
      */
     @PluginMethod
     public void writeMeta(PluginCall call) {
@@ -431,7 +431,7 @@ public class GallerySaverPlugin extends Plugin {
     }
 
     /**
-     * 写入任意二进制文件到相册目录（Pictures/TeyvatWhisper，与图片/动图同目录，卸载后保留）。
+     * 写入任意二进制文件到相册目录（Pictures/PixivViewer，与图片/动图同目录，卸载后保留）。
      * 用于 ugoira 原版无损 ZIP 的持久副本。图片集合拒绝非 image/* MIME，故走通用 Files 集合。
      */
     @PluginMethod
@@ -480,7 +480,7 @@ public class GallerySaverPlugin extends Plugin {
         }
     }
 
-    /** 列出相册目录（Pictures/TeyvatWhisper）内所有文件名，供启动时相册对账 */
+    /** 列出相册目录（Pictures/PixivViewer）内所有文件名，供启动时相册对账 */
     @PluginMethod
     public void listFiles(PluginCall call) {
         try {

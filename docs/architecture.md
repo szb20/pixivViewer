@@ -14,7 +14,7 @@
 │                  API Layer                       │
 │   api/pixiv.js (传输适配)                         │
 │   api/gif.js (动图下载)                           │
-│   api/index.js (window.api 兼容层)                │
+│   api/index.js (统一保存入口)                     │
 ├─────────────────────────────────────────────────┤
 │               Business Logic Layer                │
 │   pixiv-assistant/core/                          │
@@ -60,9 +60,8 @@ main.jsx ── <PixivCacheProvider>（2 个 context：pixivCache 读写层 / li
 ├─ <main>.app-content
 │  ├─ [discover] DiscoverPage
 │  ├─ [ranking]  RankingPage
-│  ├─ [bookmarks] BookmarksPage
 │  ├─ [search]   SearchPage
-│  └─ [gallery]  GalleryPage
+│  └─ [me]       MePage（本地相册 / 关注 / 喜欢）
 ├─ TabBar               (底部导航)
 ├─ SettingsModal        (设置弹窗)
 ├─ DetailView           (详情页)

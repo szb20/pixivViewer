@@ -69,7 +69,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
             <button className="error-retry" onClick={() => feed.load(false)}>重试</button>
           </div>
         ))}
-      <ImageGrid items={visibleItems} likedSet={likedSet} onOpen={onOpen} />
+      <ImageGrid items={visibleItems} likedSet={likedSet} onOpen={onOpen} layout="masonry" />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
