@@ -38,6 +38,7 @@ export default function App() {
     visitedTabs,
     tabTokens,
     detailImage,
+    detailContext,
     authorWorks,
     searchSeed,
     settingsOpen,
@@ -139,6 +140,7 @@ export default function App() {
         <ErrorBoundary key="detail">
           <DetailView
             image={detailImage}
+            navContext={detailContext}
             onClose={closeDetail}
             onExitToHome={exitToHome}
             onSearchTag={searchByTag}

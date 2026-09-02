@@ -324,6 +324,22 @@ export class PixivStorageService {
       kind: 'image',
       message: '下载原图',
     });
+    // 失败时登记完整重试信息（供下载管理一键重试；item 里带 _silent 时是批量，仍保留）
+    const failMeta = {
+      illustId: item.illustId,
+      page: item._pageIndex ?? 0,
+      type: 'image',
+      illustType: item.illustType,
+      originalUrl: item.originalUrl,
+      mediumUrl: item.mediumUrl,
+      thumbnailUrl: item.thumbnailUrl,
+      title: cleanTitle,
+      author: item.author || item.authorName || '',
+      authorName: item.authorName || item.author || '',
+      authorId: item.authorId || '',
+      tags: item.tags,
+      _liked: item._liked,
+    };
     mon.setProgress(0);
     let data = null;
     let usedUrl = '';
@@ -335,6 +351,7 @@ export class PixivStorageService {
         if (data) { usedUrl = url; break; }
       }
       if (!data) {
+        mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
         mon.finish(false, '下载失败');
         return { success: false, error: 'download_failed' };
       }
@@ -363,6 +380,7 @@ export class PixivStorageService {
 
       const written = await this.fileStore.save(newEntity, data, 'saved');
       if (!written) {
+        mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
         mon.finish(false, '写入相册失败');
         return { success: false, error: 'file_write_failed' };
       }
@@ -371,6 +389,7 @@ export class PixivStorageService {
       scheduleMetaBackup();
       return { success: true, entity: newEntity };
     } catch (e) {
+      mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
       mon.finish(false, e?.message || '保存失败');
       throw e;
     }

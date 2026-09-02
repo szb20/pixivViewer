@@ -45,6 +45,20 @@ VITE_PIXIV_COOKIE=your_phpsessid_here
 
 代理地址环境变量：`PROXY_URL` / `VITE_PROXY_URL`（默认 `http://127.0.0.1:7890`）。
 
+## 桌面端（Electron）
+
+加装独立桌面 App，壳内自带 Pixiv 代理服务（复用 dev 的同款 4 条中间件），
+图片/动图/保存走壳内代理或 `i.pixiv.re`，无需处理 CORS。
+
+```bash
+npm run desktop      # 构建 + 启动桌面 App（生产模式，需本地 Clash 在 7890 + 设置页填 Cookie）
+npm run desktop:dev  # 桌面壳 + Vite dev server（热更新；需要先另开终端 npm run dev）
+npm run desktop:build  # 打包 Windows 安装包/便携版 → release/
+```
+
+桌面「保存」通过系统保存对话框写文件（Electron 壳内 IPC），
+替代手机端「保存到相册」。启动时代理不可达会弹提示，可在设置里改代理地址。
+
 ## Android（Capacitor）
 
 ```bash

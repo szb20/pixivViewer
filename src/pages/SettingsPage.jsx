@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
 import { registerBackHandler } from '../utils/backHandler.js';
-import { THEMES, getSavedTheme, applyTheme } from '../utils/theme.js';
 import '../styles/settings.css';
 
 const QUALITY_OPTIONS = [
@@ -9,9 +8,9 @@ const QUALITY_OPTIONS = [
   { value: 'mini', label: 'mini 48px' },
 ];
 
-const DETAIL_OPTIONS = [
-  { value: 'original', label: 'original 原图' },
-  { value: 'regular', label: 'regular 1200px' },
+const LAYOUT_OPTIONS = [
+  { value: 'waterfall', label: '瀑布流' },
+  { value: 'grid', label: '方形宫格' },
 ];
 
 /**
@@ -23,7 +22,7 @@ export default function SettingsPage({ onClose }) {
   const [cookie, setCookie] = useState('');
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridQuality, setGridQuality] = useState('thumb');
-  const [detailQuality, setDetailQuality] = useState('original');
+  const [gridLayout, setGridLayout] = useState('waterfall');
 
   // Cookie 收起/展开
   const [cookieOpen, setCookieOpen] = useState(false);
@@ -33,9 +32,6 @@ export default function SettingsPage({ onClose }) {
   const toastTimer = useRef(null);
 
   // 加载设置
-  const [themeKey, setThemeKey] = useState(() => getSavedTheme());
-
-  // 加载设置
   useEffect(() => {
     let cancelled = false;
     getSettings().then(s => {
@@ -43,7 +39,7 @@ export default function SettingsPage({ onClose }) {
       setCookie(s.pixivCookie || '');
       setProxyUrl(s.proxyUrl || '');
       setGridQuality(s.gridQuality || 'thumb');
-      setDetailQuality(s.detailQuality || 'original');
+      setGridLayout(s.gridLayout || 'waterfall');
       loadedRef.current = true;
     });
     return () => { cancelled = true; };
@@ -83,32 +79,6 @@ export default function SettingsPage({ onClose }) {
 
       {/* 可滚动内容 */}
       <div className="settings-content">
-        {/* ── 外观 ── */}
-        <div className="settings-group">
-          <div className="settings-group-label">外观</div>
-          <div className="settings-row" style={{ flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ width: '100%' }}>
-              <div className="settings-row-label">主题色</div>
-              <div className="settings-row-hint">按钮、激活态、辉光等强调色</div>
-            </div>
-            <div className="settings-theme-swatches">
-              {THEMES.map(t => (
-                <button
-                  key={t.key}
-                  className={`settings-swatch${themeKey === t.key ? ' settings-swatch--active' : ''}`}
-                  style={{ '--swatch-color': t.color }}
-                  title={t.label}
-                  onClick={() => {
-                    setThemeKey(t.key);
-                    applyTheme(t.key);
-                    doSave({ theme: t.key });
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
         {/* ── 账号 ── */}
         <div className="settings-group">
           <div className="settings-group-label">账号</div>
@@ -191,20 +161,25 @@ export default function SettingsPage({ onClose }) {
               ))}
             </div>
           </div>
+        </div>
 
+        {/* ── 布局 ── */}
+        <div className="settings-group">
+          <div className="settings-group-label">布局</div>
           <div className="settings-row">
             <div>
-              <div className="settings-row-label">详情大图</div>
-              <div className="settings-row-hint">详情页加载的原图画质</div>
+              <div className="settings-row-label">网格样式</div>
+              <div className="settings-row-hint">瀑布流按真实比例密铺，方形宫格整齐等分</div>
             </div>
             <div className="settings-pill-group">
-              {DETAIL_OPTIONS.map(opt => (
+              {LAYOUT_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
-                  className={`settings-pill${detailQuality === opt.value ? ' settings-pill--active' : ''}`}
+                  className={`settings-pill${gridLayout === opt.value ? ' settings-pill--active' : ''}`}
                   onClick={() => {
-                    setDetailQuality(opt.value);
-                    doSave({ detailQuality: opt.value });
+                    setGridLayout(opt.value);
+                    doSave({ gridLayout: opt.value });
+                    window.dispatchEvent(new CustomEvent('pixiv:grid-layout-changed', { detail: opt.value }));
                   }}
                 >{opt.label}</button>
               ))}

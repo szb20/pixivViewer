@@ -71,6 +71,7 @@ export function useTouchGesture({
 
   // 手势模式
   const touchActiveRef = useRef(false); // 触摸序列是否由本 overlay 的 touchstart 发起
+  const mouseActiveRef = useRef(false); // 鼠标拖拽序列是否由本 overlay 的 mousedown 发起
   const edgeSwipeRef = useRef(false);
   const swipeModeRef = useRef(null); // 'nav' | 'dismiss' | null
   const gestureLockedRef = useRef(false); // 方向锁
@@ -126,7 +127,7 @@ export function useTouchGesture({
       track.style.transition = 'none';
       track.style.transform = `translateX(calc(-${clampedIdx * 100}%))`;
     }
-  }, [getCurSlideEl, images.length, onIndexChange]);  
+  }, [getCurSlideEl, images.length, onIndexChange]);
   // index 通过 ref 访问避免级联重建；setIndex/setSwipeOff 是稳定 setter
 
   // 直接操作 track DOM 实现 60fps 滑动（绕过 React 渲染管线）
@@ -702,6 +703,241 @@ export function useTouchGesture({
     pinchRef.current.fingers = 0;
   }, [zoomDisabled, disableSwipe, handleDoubleTap, nav, springBack, hardClamp, startInertia, animateNavSwipe, index]);
 
+  // ── 鼠标手势（桌面端）───────────────────────────────────
+  // 仅处理真实鼠标事件：排除触摸设备上浏览器合成的 mousedown，避免与 touch 手势重复触发
+  const isInteractiveTarget = useCallback((target) => {
+    if (!target || typeof target.closest !== 'function') return false;
+    return !!target.closest('video, iframe, button, a, .video-player-wrapper, .video-embed-iframe, .quality-selector');
+  }, []);
+
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return; // 仅左键
+    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+    if (isInteractiveTarget(e.target)) return;
+    e.stopPropagation();
+    if (zoomDisabled && disableSwipe) return;
+
+    mouseActiveRef.current = true;
+    touchActiveRef.current = true;
+
+    cancelSpring();
+    if (trackAnimRef.current) { trackAnimRef.current.cleanup(); resetTrackDOM(); trackAnimRef.current = null; }
+
+    edgeSwipeRef.current = false;
+    swipeModeRef.current = null;
+    gestureLockedRef.current = false;
+    pinchRef.current.fingers = 1;
+
+    touchRef.current = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY };
+    touchTimeRef.current = Date.now();
+    setSwipeOff(0);
+    setOverlayOpacity(1);
+
+    velocityRef.current = {
+      vx: 0, vy: 0,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      lastTime: Date.now(),
+      history: [],
+    };
+  }, [zoomDisabled, disableSwipe, cancelSpring, setOverlayOpacity, resetTrackDOM, isInteractiveTarget]);
+
+  const handleMouseMove = useCallback((e) => {
+    e.stopPropagation();
+    if (!mouseActiveRef.current || !touchActiveRef.current) return;
+    if (zoomDisabled && disableSwipe) return;
+
+    const dx = e.clientX - touchRef.current.x;
+    const dy = e.clientY - touchRef.current.y;
+    const totalDx = e.clientX - touchRef.current.startX;
+    const totalDy = e.clientY - touchRef.current.startY;
+    const now = Date.now();
+    const dt = now - velocityRef.current.lastTime;
+
+    if (dt > 0) {
+      velocityRef.current.history.push({ vx: dx, vy: dy, dt: dt });
+      if (velocityRef.current.history.length > 5) {
+        velocityRef.current.history.shift();
+      }
+    }
+    velocityRef.current.lastX = e.clientX;
+    velocityRef.current.lastY = e.clientY;
+    velocityRef.current.lastTime = now;
+
+    const scale = pinchRef.current.scale;
+
+    if (scale > 1 && !zoomDisabled) {
+      const rawPan = {
+        x: pinchRef.current.x + dx,
+        y: pinchRef.current.y + dy,
+      };
+      const max = getMaxPan(scale);
+      const atLeftEdge = rawPan.x < -max.x;
+      const atRightEdge = rawPan.x > max.x;
+
+      if ((atLeftEdge && dx > 0) || (atRightEdge && dx < 0)) {
+        if (!edgeSwipeRef.current && Math.abs(totalDx) > 30) {
+          edgeSwipeRef.current = true;
+        }
+      } else if (edgeSwipeRef.current && Math.abs(totalDx) < 20) {
+        edgeSwipeRef.current = false;
+      }
+
+      const damped = applyDrag(rawPan, scale);
+      pinchRef.current.x = damped.x;
+      pinchRef.current.y = damped.y;
+      applyTransform(scale, damped);
+    } else if (!disableSwipe && !gestureLockedRef.current) {
+      if (Math.abs(totalDx) > 20 && Math.abs(totalDx) > Math.abs(totalDy)) {
+        swipeModeRef.current = 'nav';
+        gestureLockedRef.current = true;
+      }
+    }
+
+    if (!disableSwipe && gestureLockedRef.current && swipeModeRef.current === 'nav') {
+      applyTrackSwipe(totalDx);
+    }
+
+    touchRef.current.x = e.clientX;
+    touchRef.current.y = e.clientY;
+  }, [zoomDisabled, disableSwipe, getMaxPan, applyDrag, applyTransform, applyTrackSwipe]);
+
+  const handleMouseUp = useCallback((e) => {
+    e.stopPropagation();
+    if (!mouseActiveRef.current || !touchActiveRef.current) return;
+    mouseActiveRef.current = false;
+    touchActiveRef.current = false;
+    if (zoomDisabled && disableSwipe) return;
+
+    const totalDx = touchRef.current.x - touchRef.current.startX;
+    const scale = pinchRef.current.scale;
+
+    // ── 缩放后的拖拽结束 ──
+    if (scale > 1 && !zoomDisabled) {
+      if (edgeSwipeRef.current && !disableSwipe) {
+        edgeSwipeRef.current = false;
+        const velocity = velocityRef.current.history.length > 0
+          ? velocityRef.current.history.reduce((s, h) => s + h.vx, 0) / velocityRef.current.history.length
+          : 0;
+
+        if (Math.abs(totalDx) > 60 || Math.abs(velocity) > 3) {
+          nav(totalDx > 0 ? -1 : 1);
+          return;
+        }
+      }
+
+      let finalScale = scale;
+      if (finalScale < 1) finalScale = 1;
+      if (finalScale > 5) finalScale = 5;
+
+      let avgVx = 0, avgVy = 0;
+      const hist = velocityRef.current.history;
+      if (hist.length > 0) {
+        let totalWeight = 0;
+        for (let i = 0; i < hist.length; i++) {
+          const weight = i + 1;
+          avgVx += hist[i].vx * weight;
+          avgVy += hist[i].vy * weight;
+          totalWeight += weight;
+        }
+        avgVx /= totalWeight;
+        avgVy /= totalWeight;
+      }
+
+      const clamped = hardClamp({ x: pinchRef.current.x, y: pinchRef.current.y }, finalScale);
+      pinchRef.current.scale = finalScale;
+      pinchRef.current.x = clamped.x;
+      pinchRef.current.y = clamped.y;
+
+      if (Math.abs(avgVx) > 1 || Math.abs(avgVy) > 1) {
+        setPinchScale(finalScale);
+        setPinchPan(clamped);
+        setZoomTrans(true);
+        startInertia(avgVx, avgVy, finalScale);
+      } else {
+        setPinchScale(finalScale);
+        setPinchPan(clamped);
+        setZoomTrans(true);
+      }
+
+      pinchRef.current.fingers = 0;
+      return;
+    }
+
+    // ── 未缩放时的翻页手势结束 ──
+    if (!disableSwipe && gestureLockedRef.current) {
+      if (swipeModeRef.current === 'nav') {
+        const avgVx = velocityRef.current.history.reduce((s, h) => s + h.vx, 0) / (velocityRef.current.history.length || 1);
+
+        if (Math.abs(totalDx) > 60 || Math.abs(avgVx) > 3) {
+          animateNavSwipe(totalDx > 0 ? -1 : 1);
+        } else {
+          if (trackRef.current) {
+            trackRef.current.style.transform = `translateX(calc(-${index * 100}% + 0px))`;
+            trackRef.current.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)';
+          }
+          setSwipeOff(0);
+        }
+      }
+      swipeModeRef.current = null;
+      gestureLockedRef.current = false;
+      pinchRef.current.fingers = 0;
+      return;
+    }
+
+    pinchRef.current.fingers = 0;
+  }, [zoomDisabled, disableSwipe, nav, hardClamp, startInertia, animateNavSwipe, index, setPinchScale, setPinchPan, setZoomTrans]);
+
+  // ── 滚轮缩放（以光标为锚点）─────────────────────────────
+  const handleWheel = useCallback((e) => {
+    if (zoomDisabled) return;
+    if (isInteractiveTarget(e.target)) return;
+    e.stopPropagation();
+    cancelSpring();
+
+    const curScale = pinchRef.current.scale;
+    const factor = Math.exp(-e.deltaY * 0.002);
+    let newScale = curScale * factor;
+    newScale = Math.max(1, Math.min(6, newScale));
+
+    const el = getCurSlideEl();
+    const rect = el?.getBoundingClientRect();
+    if (!rect) return;
+
+    const px = e.clientX - rect.left - rect.width / 2;
+    const py = e.clientY - rect.top - rect.height / 2;
+    const scaleDelta = newScale / curScale;
+
+    if (newScale <= 1) {
+      pinchRef.current.scale = 1;
+      pinchRef.current.x = 0;
+      pinchRef.current.y = 0;
+      setPinchScale(1);
+      setPinchPan({ x: 0, y: 0 });
+      setZoomTrans(false);
+      return;
+    }
+
+    const rawX = pinchRef.current.x + px * (1 - scaleDelta);
+    const rawY = pinchRef.current.y + py * (1 - scaleDelta);
+    const clamped = hardClamp({ x: rawX, y: rawY }, newScale);
+
+    pinchRef.current.scale = newScale;
+    pinchRef.current.x = clamped.x;
+    pinchRef.current.y = clamped.y;
+    setPinchScale(newScale);
+    setPinchPan(clamped);
+    setZoomTrans(true);
+  }, [zoomDisabled, isInteractiveTarget, cancelSpring, getCurSlideEl, hardClamp]);
+
+  // ── 鼠标双击缩放 ─────────────────────────────────────────
+  const handleDoubleClick = useCallback((e) => {
+    if (zoomDisabled) return;
+    if (isInteractiveTarget(e.target)) return;
+    e.stopPropagation();
+    handleDoubleTap(e);
+  }, [zoomDisabled, isInteractiveTarget, handleDoubleTap]);
+
   // ── 点击遮罩 ─────────────────────────────────────────────
   const handleOverlayClick = useCallback((e) => {
     if (e.target === e.currentTarget) {
@@ -740,6 +976,8 @@ export function useTouchGesture({
 
     // Handlers
     handleTouchStart, handleTouchMove, handleTouchEnd,
+    handleMouseDown, handleMouseMove, handleMouseUp,
+    handleWheel, handleDoubleClick,
     handleClose, handleOverlayClick, handleDoubleTap,
     nav, navPage, findAdjacentPage, cancelSpring,
     applyTransform,

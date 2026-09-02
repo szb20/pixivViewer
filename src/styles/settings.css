@@ -218,37 +218,6 @@
   font-weight: 600;
 }
 
-/* ── 主题色色块选择 ── */
-.settings-theme-swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
-}
-
-.settings-swatch {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 2px solid transparent;
-  border-radius: 50%;
-  background: var(--swatch-color);
-  cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
-  outline: none;
-}
-
-.settings-swatch:active {
-  transform: scale(0.9);
-}
-
-.settings-swatch--active {
-  border-color: #fff;
-  box-shadow:
-    0 0 0 2px var(--swatch-color),
-    0 0 16px rgba(var(--color-accent-rgb), 0.5);
-}
-
 /* ── 保存提示（floating toast 样式） ── */
 .settings-toast {
   position: fixed;
@@ -269,6 +238,13 @@
 }
 
 @keyframes settings-toast-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }

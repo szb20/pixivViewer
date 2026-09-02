@@ -2,7 +2,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { pixivApi } from '../../api/pixiv.js';
 import { saveItem } from '../../api/index.js';
 import { saveAllPages as saveAllPagesShared } from '../../api/saveAllPages.js';
-import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
+import { pixivReUrl, pixivPageUrl } from '../../pixiv-assistant/core/utils.js';
+import { masonryThumbUrl } from '../ImageGrid.jsx';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
@@ -14,7 +15,7 @@ import { usePixivCache } from '../../context/pixivCacheContext.js';
 import { parsePixivResults } from './helpers.js';
 import { useAuthorProfile } from '../../hooks/useAuthorProfile.js';
 import { useGridLikeToggle } from '../../hooks/useGridLikeToggle.js';
-import { getSettingsSync, storageFacade } from '../../pixiv-assistant/index.js';
+import { storageFacade } from '../../pixiv-assistant/index.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
 import { showToast } from '../../utils/toast.js';
@@ -31,6 +32,7 @@ export default function ImageDetailView({
   image, onSelectImage, onAuthorWorks, onSearchTag,
   restoreScroll = 0,
   restoreAnchor = null,
+  className = '',
 }) {
   const { pixivCache, setPixivCache } = usePixivCache();
   const toggleLike = useGridLikeToggle();
@@ -56,6 +58,8 @@ export default function ImageDetailView({
   const relatedInViewRef = useRef(false); // 相关推荐是否在视口内
   const relatedNextStartRef = useRef(0);
   const loadingRelatedRef = useRef(false);
+  const relatedRequestSeqRef = useRef(0);
+  const currentIllustIdRef = useRef('');
   const pageRefs = useRef({}); // page → DOM 节点（跳转 / 视口定位）
   const [showFloatingLike, setShowFloatingLike] = useState(true);
   // 已保存到本地的页 → 本地 blob URL（灯箱直接用本地文件，避免重复下载）
@@ -79,6 +83,7 @@ export default function ImageDetailView({
     image?.pageCount || 0,
     1,
   );
+  currentIllustIdRef.current = image?.illustId ? String(image.illustId) : '';
   const ratioOfSize = (w, h) => (w && h ? `${w} / ${h}` : '');
   // 详情页占位宽高比：优先真实尺寸，拿不到用常见 3:4 兜底
   const defaultRatio = (() => {
@@ -220,7 +225,7 @@ export default function ImageDetailView({
         await storageFacade.fillMeta(image.illustId, p, meta);       // 补 tags / URL / 标题
         await storageFacade.backfillMeta(image.illustId, p, meta);   // 补 pageCount / pixivUrl
       }
-    })().catch(() => {});
+    })().catch(() => { });
   }, [illustData, image, pixivCache, pageCount]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 已保存页 → 本地 blob URL：灯箱直接读相册本地文件，不再走网络重新下载。
@@ -246,12 +251,12 @@ export default function ImageDetailView({
       for (const [p, u] of Object.entries(prev)) {
         if (map[p] !== u) URL.revokeObjectURL(u);
       }
-        const unchanged = Object.keys(map).length === Object.keys(prev).length
-          && Object.keys(map).every(p => map[p] === prev[p]);
-        prevLocalSrcsRef.current = map;
-        if (!unchanged) setLocalSrcs(map);
-        setLocalResolved(true);
-      })();
+      const unchanged = Object.keys(map).length === Object.keys(prev).length
+        && Object.keys(map).every(p => map[p] === prev[p]);
+      prevLocalSrcsRef.current = map;
+      if (!unchanged) setLocalSrcs(map);
+      setLocalResolved(true);
+    })();
     return () => {
       cancelled = true;
       // 仅回收尚未提交到 prevLocalSrcsRef 的新建 URL（异步加载中途被卸载/切换）
@@ -326,24 +331,31 @@ export default function ImageDetailView({
     }
   }, [image, buildSaveItem, pixivCache, setPixivCache, illustData]);
 
-  // 灯箱媒体项：点击大图弹出全屏预览（按 detailQuality 加载原图档）。
-  // 滚动视图只显示最小等比预览图，原图在灯箱按需加载。
+  // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
   const lightboxMedia = (() => {
     if (!image?.illustId) return [];
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const items = [];
     const imgs = illustData?.illust?.images || [];
-    const useRegular = getSettingsSync().detailQuality === 'regular';
     for (let p = 0; p < totalPages; p++) {
-      // 已保存的页优先用本地 blob URL；未保存才走网络原图
-      let src = localSrcs[p] || (useRegular ? imgs[p]?.url : imgs[p]?.originalUrl) || imgs[p]?.url || imgs[p]?.originalUrl;
-      if (!src) {
-        const p0 = imgs[0]?.url || imgs[0]?.originalUrl || '';
-        src = p0 ? p0.replace(/_p0\./, `_p${p}.`).replace(/_p0_/, `_p${p}_`) : '';
-      }
+      // 灯箱候选链：本地原图 → master1200 → 按日期路径推导 master1200 → pixiv.re 原图短链 → 网格缩略图。
+      // master 档与网格缩略图同源（i.pixiv.re/img-master 日期路径），命中率最高；
+      // 原图短链（i.pixiv.re/{id}.jpg）可能 404，仅作兜底；i.pixiv.re/img-original 路径
+      // 可能返回错误图（见 utils.js 注释），不进链。MediaLightbox 失败时逐个降级。
+      const masterUrl = imgs[p]?.url || imgs[p]?.mediumUrl || '';
+      const p0Master = imgs[0]?.url || imgs[0]?.mediumUrl || image?.thumbnailUrl || '';
+      const candidates = [...new Set([
+        localSrcs[p] || '',
+        masterUrl,
+        p0Master ? pixivPageUrl(p0Master, p) : '',
+        imgs[p]?.originalUrl || '',
+        pixivReUrl(String(image.illustId), p),
+        p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '',
+      ].filter(Boolean))];
       items.push({
         type: isGif ? 'gif' : 'image',
-        src,
+        src: candidates[0] || '',
+        candidates,
         illustId: image.illustId,
         _pageIndex: p,
         _totalPages: totalPages,
@@ -391,22 +403,30 @@ export default function ImageDetailView({
     return () => { io.disconnect(); root.removeEventListener('scroll', update); };
   }, [related.length, image?.illustId]);
 
-  const loadRelatedPage = useCallback(async ({ append = false } = {}) => {
-    if (!image?.illustId || loadingRelatedRef.current) return;
+  const loadRelatedPage = useCallback(async ({ append = false, requestSeq } = {}) => {
+    const illustId = image?.illustId ? String(image.illustId) : '';
+    if (!illustId || loadingRelatedRef.current) return;
+    const activeSeq = requestSeq || relatedRequestSeqRef.current;
+    const isCurrentRequest = () => (
+      relatedRequestSeqRef.current === activeSeq &&
+      currentIllustIdRef.current === illustId
+    );
     const start = append ? relatedNextStartRef.current : 0;
     loadingRelatedRef.current = true;
     if (append) setLoadingMoreRelated(true);
     else setLoadingRelated(true);
     try {
-      const result = await pixivApi.fetchRelated(image.illustId, {
+      const result = await pixivApi.fetchRelated(illustId, {
         limit: RELATED_PAGE_SIZE,
         start,
       });
+      if (!isCurrentRequest()) return;
       const rawList = result?.illusts || [];
       const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
       const nextStart = start + rawList.length;
       const hasMore = rawList.length >= RELATED_PAGE_SIZE;
       setRelated(prev => {
+        if (!isCurrentRequest()) return prev;
         const base = append ? prev : [];
         const seen = new Set(base.map(item => item.illustId));
         const merged = [...base];
@@ -415,25 +435,32 @@ export default function ImageDetailView({
           seen.add(item.illustId);
           merged.push(item);
         }
-        relatedCacheRef.current[image.illustId] = { related: merged, nextStart, hasMore };
+        relatedCacheRef.current[illustId] = { related: merged, nextStart, hasMore };
         return merged;
       });
       relatedNextStartRef.current = nextStart;
       setRelatedHasMore(hasMore);
     } catch (e) {
+      if (!isCurrentRequest()) return;
       log.warn('fetchRelated failed:', e);
       if (!append) setRelatedHasMore(false);
     } finally {
-      loadingRelatedRef.current = false;
-      setLoadingRelated(false);
-      setLoadingMoreRelated(false);
+      if (isCurrentRequest()) {
+        loadingRelatedRef.current = false;
+        setLoadingRelated(false);
+        setLoadingMoreRelated(false);
+      }
     }
   }, [image?.illustId]);
 
   // 加载相关推荐（优先缓存）
   useEffect(() => {
     if (!image?.illustId) return;
-    const cached = relatedCacheRef.current[image.illustId];
+    const illustId = String(image.illustId);
+    relatedRequestSeqRef.current += 1;
+    const requestSeq = relatedRequestSeqRef.current;
+    loadingRelatedRef.current = false;
+    const cached = relatedCacheRef.current[illustId];
     if (cached) {
       setRelated(cached.related);
       relatedNextStartRef.current = cached.nextStart || cached.related?.length || 0;
@@ -445,7 +472,7 @@ export default function ImageDetailView({
     setRelated([]);
     relatedNextStartRef.current = 0;
     setRelatedHasMore(false);
-    loadRelatedPage({ append: false });
+    loadRelatedPage({ append: false, requestSeq });
   }, [image?.illustId, loadRelatedPage]);
 
   // 相关推荐滚到底部自动追加
@@ -463,7 +490,7 @@ export default function ImageDetailView({
   }, [relatedHasMore, loadRelatedPage, related.length]);
 
   return (
-    <div className="char-state-bar">
+    <div className={`char-state-bar${className ? ` ${className}` : ''}`}>
       <div
         className="char-state-content"
         ref={contentRef}
@@ -472,129 +499,137 @@ export default function ImageDetailView({
         onWheelCapture={markUserInteracted}
       >
         {/* GIF 动图：用动图播放器 */}
-        {isGif ? (
-          <div style={{ display: 'flex', justifyContent: 'center' }} onClick={() => setLightboxIndex(0)}>
-            <UgoiraPlayer
-              key={image?.illustId}
-              illustId={image?.illustId}
-              thumbnailUrl={image?.thumbnailUrl}
-              hideInfo
-              _lazy
-              clickable={false}
-            />
-          </div>
-        ) : (
-          <>
-            {/* 全部页面上下堆叠：滚动视图显示最小等比预览图（master360），原图在灯箱按需加载 */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {Array.from({ length: pageCount }, (_, p) => {
-                const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
-                const isSaved = !!pixivCache[ck]?.saved;
-                const localUrl = localSrcs[p];
-                // 已保存页：本地原图优先；本地尚未解析完成时先显示模糊托底，
-                // 避免「网络预览 → 原图」的闪烁
-                let heroUrl = localUrl;
-                if (!heroUrl && !(isSaved && !localResolved)) {
-                  heroUrl = illustData?.illust?.images?.[p]?.previewUrl
-                    || illustData?.illust?.images?.[p]?.url
-                    || '';
-                }
-                return (
-                  <DetailPageBlock
-                    key={`${image.illustId}-${p}`}
-                    page={p}
-                    totalPages={pageCount}
-                    image={image}
-                    previewUrl={heroUrl}
-                    defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
-                    cachedRatio={pageRatios[p]}
-                    registerRef={registerPageRef}
-                    onOpenLightbox={(page) => setLightboxIndex(page)}
-                    onLongPress={downloadPage}
-                    onRatioReady={rememberPageRatio}
-                  />
-                );
-              })}
+        <div className="detail-media-stack">
+          {isGif ? (
+            <div className="detail-gif-wrap" onClick={() => setLightboxIndex(0)}>
+              <UgoiraPlayer
+                key={image?.illustId}
+                illustId={image?.illustId}
+                thumbnailUrl={image?.thumbnailUrl}
+                hideInfo
+                _lazy
+                clickable={false}
+              />
             </div>
-          </>
-        )}
+          ) : (
+            <>
+              {/* 全部页面上下堆叠：滚动视图显示最小等比预览图（master360），原图在灯箱按需加载 */}
+              <div className="detail-page-stack">
+                {Array.from({ length: pageCount }, (_, p) => {
+                  const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
+                  const isSaved = !!pixivCache[ck]?.saved;
+                  const localUrl = localSrcs[p];
+                  // 已保存页：本地原图优先；本地尚未解析完成时先显示模糊托底，
+                  // 避免「网络预览 → 原图」的闪烁
+                  let heroUrl = localUrl;
+                  if (!heroUrl && !(isSaved && !localResolved)) {
+                    heroUrl = illustData?.illust?.images?.[p]?.previewUrl
+                      || illustData?.illust?.images?.[p]?.url
+                      // fetchIllust 未返回时，直接用网格已加载的 small 档缩略图（同一 URL 已被浏览器缓存，秒开）
+                      || (p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '')
+                      // 多页作品非首页：由 p0 缩略图按日期路径推导 master1200，避免等待详情接口
+                      || pixivPageUrl(image?.thumbnailUrl || '', p);
+                  }
+                  return (
+                    <DetailPageBlock
+                      key={`${image.illustId}-${p}`}
+                      page={p}
+                      totalPages={pageCount}
+                      image={image}
+                      previewUrl={heroUrl}
+                      defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
+                      cachedRatio={pageRatios[p]}
+                      registerRef={registerPageRef}
+                      onOpenLightbox={(page) => setLightboxIndex(page)}
+                      onLongPress={downloadPage}
+                      onRatioReady={rememberPageRatio}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
 
-        {/* 标题 + 作者 */}
-        <div className="image-detail-meta">
-          <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
-          <div className="image-detail-author-row">
-            {image?.authorName || image?.author ? (
-              <span className="image-detail-author"
-                onClick={() => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar)}>
-                <span className="image-detail-avatar-wrap">
-                  {authorAvatar
-                    ? <img className="image-detail-author-avatar" src={authorAvatar} alt="" loading="lazy" />
-                    : <span className="image-detail-author-avatar image-detail-author-avatar--placeholder" />}
-                  {authorId && (
-                    <button
-                      className={`follow-btn${authorIsFollowed ? ' followed' : ''}`}
-                      disabled={followUpdating}
-                      aria-label={authorIsFollowed ? '已关注' : '关注'}
-                      onClick={(e) => { e.stopPropagation(); toggleFollow(); }}
-                    >
-                      <FollowIcon followed={authorIsFollowed} />
-                    </button>
-                  )}
-                </span>
-                <span className="image-detail-author-text">
-                  <span className="image-detail-author-name">{image.authorName || image.author}</span>
-                  <span className="image-detail-author-sub">
-                    {illustData?.illust?.authorAccount && (
-                      <span className="image-detail-author-account">@{illustData.illust.authorAccount}</span>
-                    )}
-                  </span>
-                </span>
-              </span>
-            ) : null}
-            <a className="image-detail-pixiv-link"
-              href={image?.pixivUrl || `https://www.pixiv.net/artworks/${image.illustId}`}
-              target="_blank" rel="noreferrer"
-              onClick={e => e.stopPropagation()}>
-              Pixiv
-            </a>
-          </div>
+          {/* 标题 + 作者 */}
         </div>
 
-        {/* Tag 展示栏：点击跳搜索 */}
-        {tags.length > 0 && (
-          <div className="image-detail-tags">
-            {tags.map(tag => (
-              <button
-                key={tag}
-                className="image-detail-tag"
-                onClick={() => onSearchTag?.(tag)}
-              >{tag}</button>
-            ))}
+        <div className="detail-side-panel">
+          <div className="image-detail-meta">
+            <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
+            <div className="image-detail-author-row">
+              {image?.authorName || image?.author ? (
+                <span className="image-detail-author"
+                  onClick={() => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar)}>
+                  <span className="image-detail-avatar-wrap">
+                    {authorAvatar
+                      ? <img className="image-detail-author-avatar" src={authorAvatar} alt="" loading="lazy" />
+                      : <span className="image-detail-author-avatar image-detail-author-avatar--placeholder" />}
+                    {authorId && (
+                      <button
+                        className={`follow-btn${authorIsFollowed ? ' followed' : ''}`}
+                        disabled={followUpdating}
+                        aria-label={authorIsFollowed ? '已关注' : '关注'}
+                        onClick={(e) => { e.stopPropagation(); toggleFollow(); }}
+                      >
+                        <FollowIcon followed={authorIsFollowed} />
+                      </button>
+                    )}
+                  </span>
+                  <span className="image-detail-author-text">
+                    <span className="image-detail-author-name">{image.authorName || image.author}</span>
+                    <span className="image-detail-author-sub">
+                      {illustData?.illust?.authorAccount && (
+                        <span className="image-detail-author-account">@{illustData.illust.authorAccount}</span>
+                      )}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+              <a className="image-detail-pixiv-link"
+                href={image?.pixivUrl || `https://www.pixiv.net/artworks/${image.illustId}`}
+                target="_blank" rel="noreferrer"
+                onClick={e => e.stopPropagation()}>
+                Pixiv
+              </a>
+            </div>
           </div>
-        )}
 
-        {/* 相关推荐网格 */}
-        {loadingRelated && (
-          <div className="hint">正在加载相关推荐...</div>
-        )}
-        {related.length > 0 && (
-          <>
-            <RelatedGrid
-              related={related}
-              currentIllustId={image?.illustId}
-              likedOrSavedSet={likedOrSavedSet}
-              relatedRef={relatedRef}
-              onSelectImage={onSelectImage}
-              onLongPress={toggleLike}
-            />
-            {relatedHasMore && <div ref={relatedSentinelRef} style={{ height: 1 }} />}
-            {loadingMoreRelated && <div className="hint">加载更多推荐...</div>}
-            {!loadingMoreRelated && !relatedHasMore && <div className="hint">没有更多推荐了</div>}
-          </>
-        )}
+          {/* Tag 展示栏：点击跳搜索 */}
+          {tags.length > 0 && (
+            <div className="image-detail-tags">
+              {tags.map(tag => (
+                <button
+                  key={tag}
+                  className="image-detail-tag"
+                  onClick={() => onSearchTag?.(tag)}
+                >{tag}</button>
+              ))}
+            </div>
+          )}
 
-        {/* 底部间距 */}
-        <div style={{ height: 24 }} />
+          {/* 相关推荐网格 */}
+          {loadingRelated && (
+            <div className="hint">正在加载相关推荐...</div>
+          )}
+          {related.length > 0 && (
+            <>
+              <RelatedGrid
+                related={related}
+                currentIllustId={image?.illustId}
+                likedOrSavedSet={likedOrSavedSet}
+                relatedRef={relatedRef}
+                onSelectImage={onSelectImage}
+                onLongPress={toggleLike}
+              />
+              {relatedHasMore && <div ref={relatedSentinelRef} style={{ height: 1 }} />}
+              {loadingMoreRelated && <div className="hint">加载更多推荐...</div>}
+              {!loadingMoreRelated && !relatedHasMore && <div className="hint">没有更多推荐了</div>}
+            </>
+          )}
+
+          {/* 底部间距 */}
+          <div style={{ height: 24 }} />
+        </div>
       </div>
 
       {/* 灯箱 — 点击大图弹出全屏预览（缩放/手势） */}

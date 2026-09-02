@@ -34,7 +34,7 @@ export function getSettingsSync() {
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
     pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
     gridQuality: stored.gridQuality || 'thumb',       // 'mini' | 'thumb'
-    detailQuality: stored.detailQuality || 'original', // 'regular' | 'original'
+    gridLayout: stored.gridLayout || 'waterfall',      // 桌面（≥900px）内容页布局：'waterfall' | 'grid'
   };
 }
 

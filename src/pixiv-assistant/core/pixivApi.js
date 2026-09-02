@@ -31,6 +31,7 @@ import { createSocialApi } from './pixiv/social.js';
 
 const log = createLogger('pixivApi');
 
+// ── 工厂 ──
 export function createPixivApi(transport) {
   const client = createApiClient(transport);
   const ctx = { ...client, transport, log };

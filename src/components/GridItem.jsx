@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import HeartIcon from './icons/HeartIcon.jsx';
 
 const LONG_PRESS_MS = 500;
@@ -31,27 +31,36 @@ export default memo(function GridItem({
   ratio,
 }) {
   const v = {
-    grid:    { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    media:   { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
+    grid: { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
+    media: { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
     gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false, cap: 'grid-cap' },
+    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
   }[variant] || { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false };
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
-  const itemRef = useRef(null);
+  const [pressState, setPressState] = useState('idle');
   const longPressTimerRef = useRef(null);
+  const pressFeedbackTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const pressStartRef = useRef(null);
   const src = thumbSrc || img.thumbnailUrl || img.mediumUrl || '';
   const pageCount = Number(img._totalPages || img.pageCount) || 1;
   const isGif = img.type === 'gif' || Number(img.illustType) === 2;
 
+  useEffect(() => () => {
+    clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
+  }, []);
+
   const triggerLongPress = useCallback(() => {
     if (longPressTriggeredRef.current) return;
     longPressTriggeredRef.current = true;
     clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
     pressStartRef.current = null;
+    setPressState('confirmed');
+    pressFeedbackTimerRef.current = setTimeout(() => setPressState('idle'), 420);
     onLongPress?.(img);
   }, [img, onLongPress]);
 
@@ -60,7 +69,9 @@ export default memo(function GridItem({
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     pressStartRef.current = { x: e.clientX, y: e.clientY };
     longPressTriggeredRef.current = false;
+    setPressState('pressing');
     clearTimeout(longPressTimerRef.current);
+    clearTimeout(pressFeedbackTimerRef.current);
     longPressTimerRef.current = setTimeout(triggerLongPress, LONG_PRESS_MS);
   }, [onLongPress, triggerLongPress]);
 
@@ -70,35 +81,21 @@ export default memo(function GridItem({
     if (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10) {
       clearTimeout(longPressTimerRef.current);
       pressStartRef.current = null;
+      setPressState('idle');
     }
   }, []);
 
   const cancelLongPress = useCallback(() => {
     clearTimeout(longPressTimerRef.current);
     pressStartRef.current = null;
+    if (!longPressTriggeredRef.current) setPressState('idle');
   }, []);
 
   const handleClick = useCallback(() => {
     // 长按已触发下载 → 本次合成的 click 不再打开
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    const rect = itemRef.current?.getBoundingClientRect?.();
-    const srcForTransition = src || img.thumbnailUrl || img.mediumUrl || img.originalUrl || '';
-    const openImg = rect && srcForTransition
-      ? {
-          ...img,
-          _openTransition: {
-            src: srcForTransition,
-            rect: {
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-            },
-          },
-        }
-      : img;
-    onOpen?.(openImg);
-  }, [img, onOpen, src]);
+    onOpen?.(img);
+  }, [img, onOpen]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -112,7 +109,7 @@ export default memo(function GridItem({
 
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
-  const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}`;
+  const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}${pressState === 'pressing' ? ' is-pressing' : ''}${pressState === 'confirmed' ? ' is-long-pressed' : ''}`;
 
   // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
   if (variant === 'gallery') {
@@ -155,9 +152,14 @@ export default memo(function GridItem({
 
   return (
     <div
-      ref={itemRef}
       className={`${v.item}${shimmerCls}${stateCls}`}
-      style={ratio ? { aspectRatio: ratio, '--item-index': index % 24 } : { '--item-index': index % 24 }}
+      style={
+        variant === 'masonry'
+          ? { aspectRatio: loaded ? 'auto' : (ratio || 1), '--item-index': index % 24 }
+          : ratio
+            ? { aspectRatio: ratio, '--item-index': index % 24 }
+            : { '--item-index': index % 24 }
+      }
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}
@@ -167,12 +169,6 @@ export default memo(function GridItem({
       onContextMenu={handleContextMenu}
     >
       {v.wrap ? <div className={v.wrap}>{thumb}</div> : thumb}
-      {loaded && v.cap && (
-        <div className={v.cap}>
-          <p className="grid-cap-title">{img.title || ''}</p>
-          <p className="grid-cap-author">{img.authorName || img.author || ''}</p>
-        </div>
-      )}
       {loaded && isLiked && v.like && (
         <span className={v.like}><HeartIcon filled /></span>
       )}
