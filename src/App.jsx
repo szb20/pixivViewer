@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
@@ -14,9 +13,9 @@ import MePage from './pages/MePage.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
-import { runBackHandlers } from './utils/backHandler.js';
-import { checkProxyReachable } from './utils/proxyCheck.js';
-import { createLogger } from './utils/logger.js';
+import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
+import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
+import { useStartupProxyCheck } from './hooks/useStartupProxyCheck.js';
 import './index.css';
 import './styles/detail.css';
 
@@ -31,10 +30,9 @@ const TABS = [
   { key: 'search', label: '搜索' },
 ];
 
-const log = createLogger('App');
-
 export default function App() {
-  const [chromeHidden, setChromeHidden] = useState(false);
+  const [chromeHidden] = useChromeAutoHide();
+  useAndroidBackButton();
   const {
     activeTab,
     visitedTabs,
@@ -60,71 +58,8 @@ export default function App() {
     setShowProxyError,
   } = useAppStore();
 
-  useEffect(() => {
-    if (!window.Capacitor?.isNativePlatform?.()) return;
-    let cancelled = false;
-    let listener;
-    (async () => {
-      try {
-        const { App } = await import('@capacitor/app');
-        if (cancelled) return;
-        listener = await App.addListener('backButton', (event) => {
-          try { event.preventDefault(); } catch { }
-          if (runBackHandlers()) return;
-          if (event.canGoBack) {
-            window.history.back();
-          } else {
-            App.exitApp();
-          }
-        });
-      } catch { /* 非原生环境 */ }
-    })();
-    return () => {
-      cancelled = true;
-      listener?.remove?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = document.querySelector('.app-content');
-    if (!el) return;
-    let lastTop = el.scrollTop || 0;
-    let ticking = false;
-    const onScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const top = el.scrollTop || 0;
-        const delta = top - lastTop;
-        if (top < 24) {
-          setChromeHidden(false);
-        } else if (Math.abs(delta) > 6) {
-          setChromeHidden(delta > 0);
-        }
-        lastTop = top;
-        ticking = false;
-      });
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, []);
-
-  // 启动时代理连通性检测
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { reachable, proxyUrl } = await checkProxyReachable(3000);
-        if (cancelled) return;
-        if (!reachable) {
-          setShowProxyError(true, proxyUrl);
-        }
-      } catch (e) {
-        log.warn('启动时代理检测异常:', e?.message || e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [setShowProxyError]);
+  // 启动时代理连通性检测（zustand action 引用稳定，可直接作为回调传入）
+  useStartupProxyCheck(setShowProxyError);
 
   return (
     <div className={`app${chromeHidden ? ' chrome-hidden' : ''}`}>

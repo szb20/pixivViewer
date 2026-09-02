@@ -7,6 +7,7 @@
  * - getFS: Capacitor Filesystem（原生环境），非原生环境返回 null
  */
 import { appStorage, migrateFromLegacyKey } from '../../utils/appStorage.js';
+import { isDesktop } from '../../utils/platform.js';
 
 let _getSettings = null;
 let _getFS = null;
@@ -45,6 +46,16 @@ let _fsCache = null;
 
 async function defaultGetFS() {
   if (_fsCache !== null) return _fsCache;
+  // 桌面端（Electron）：桌面 FS 适配器（接口与 Capacitor Filesystem 一致，底层走 Node fs）
+  if (isDesktop) {
+    try {
+      const { createDesktopFilesystem } = await import('../../utils/desktopFs.js');
+      _fsCache = { plugin: createDesktopFilesystem() };
+    } catch {
+      _fsCache = null;
+    }
+    return _fsCache;
+  }
   const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
   if (!isNative) {
     _fsCache = null;

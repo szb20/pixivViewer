@@ -8,7 +8,7 @@
 import JSZip from 'jszip';
 import { Unzip } from 'fflate';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
-import { browserFetch, prodFetch } from './pixiv.js';
+import { browserFetch, prodFetch, desktopFetch } from './pixiv.js';
 import {
   PixivEntity, PixivRepository, getSettings, safeFileName, getFS, CACHE_DIR,
 } from '../pixiv-assistant/index.js';
@@ -16,6 +16,7 @@ import { createLogger } from '../utils/logger.js';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
 import { exportToGallery, galleryHasFile } from '../pixiv-assistant/capacitor/gallery.js';
 import { scheduleMetaBackup } from '../pixiv-assistant/capacitor/metaBackup.js';
+import { isDesktop, desktop, getGallerySaver } from '../utils/platform.js';
 
 const log = createLogger('gif');
 const IS_DEV = import.meta.env.DEV;
@@ -76,8 +77,8 @@ async function getPixivCookie() {
   return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
 }
 
-/** dev 走 Vite 代理，prod 走 CapacitorHttp（原生直连，绕过 WebView CORS） */
-const apiFetch = IS_DEV ? browserFetch : prodFetch;
+/** 桌面走 Electron 主进程；dev 走 Vite 代理；prod 安卓走 CapacitorHttp（原生直连，绕过 WebView CORS） */
+const apiFetch = isDesktop ? desktopFetch : IS_DEV ? browserFetch : prodFetch;
 
 /** 查询 ugoira 元数据（只发小请求，不下载 ZIP） */
 async function fetchUgoiraMeta(id) {
@@ -217,11 +218,11 @@ async function trimZipCache(fs) {
     withTime.sort((a, b) => a.mtime - b.mtime);
     for (let i = 0; i < withTime.length - ZIP_CACHE_MAX; i++) {
       const name = withTime[i].name;
-      await fs.plugin.deleteFile({ path: `${ZIP_CACHE_SUBDIR}/${name}`, directory: 'DATA' }).catch(() => {});
+      await fs.plugin.deleteFile({ path: `${ZIP_CACHE_SUBDIR}/${name}`, directory: 'DATA' }).catch(() => { });
       await fs.plugin.deleteFile({
         path: `${ZIP_CACHE_SUBDIR}/${name.replace(/\.zip$/, '.meta.json')}`,
         directory: 'DATA',
-      }).catch(() => {});
+      }).catch(() => { });
     }
   } catch (e) {
     log.debug('[gif] 清理 ZIP 缓存失败:', e?.message || e);
@@ -242,7 +243,7 @@ async function saveZipToDisk(id, meta, chunks) {
     await ensureZipCacheDir(fs);
 
     const zipPath = zipCachePath(id);
-    await fs.plugin.deleteFile({ path: zipPath, directory: 'DATA' }).catch(() => {});
+    await fs.plugin.deleteFile({ path: zipPath, directory: 'DATA' }).catch(() => { });
 
     const pieces = [];
     let acc = 0;
@@ -280,8 +281,8 @@ async function deleteZipFromDisk(id) {
   try {
     const fs = await getFS();
     if (!fs?.plugin) return;
-    await fs.plugin.deleteFile({ path: zipCachePath(id), directory: 'DATA' }).catch(() => {});
-    await fs.plugin.deleteFile({ path: metaCachePath(id), directory: 'DATA' }).catch(() => {});
+    await fs.plugin.deleteFile({ path: zipCachePath(id), directory: 'DATA' }).catch(() => { });
+    await fs.plugin.deleteFile({ path: metaCachePath(id), directory: 'DATA' }).catch(() => { });
   } catch { /* ignore */ }
 }
 
@@ -291,8 +292,7 @@ async function deleteZipFromDisk(id) {
  */
 async function saveLosslessZipToGallery(sid) {
   try {
-    const isNative = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
-    const S = isNative ? Capacitor?.Plugins?.GallerySaver : null;
+    const S = getGallerySaver();
     if (!S) return;
     const fs = await getFS();
     if (!fs?.plugin) return;
@@ -419,7 +419,7 @@ async function streamUgoira(id, meta, onProgress) {
 
     (async () => {
       try {
-        for (;;) {
+        for (; ;) {
           const { done, value } = await reader.read();
           if (done) break;
           received += value.byteLength || 0;
@@ -434,7 +434,7 @@ async function streamUgoira(id, meta, onProgress) {
 
         // 落盘缓存（不阻塞播放；失败只记日志）
         if (zipChunks) {
-          saveZipToDisk(id, meta, zipChunks).catch(() => {});
+          saveZipToDisk(id, meta, zipChunks).catch(() => { });
         }
         resolve(frames);
       } catch (e) {
@@ -479,6 +479,19 @@ async function extractZipFrames(zipBuf, body, onProgress) {
  * dev：走 /pixiv-zip 代理；prod：CapacitorHttp 原生下载（可带 pixiv Referer），分块 base64 解码。
  */
 async function downloadZip(url) {
+  // 桌面端：主进程 Node HTTP（带 Clash 代理、无 CORS），返回 base64
+  if (isDesktop) {
+    const resp = await desktop.http.request({
+      url, method: 'GET',
+      headers: { Referer: 'https://www.pixiv.net/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      responseType: 'base64', timeout: 120000,
+    });
+    if (resp.status < 200 || resp.status >= 300) throw new Error(`ZIP 下载失败: HTTP ${resp.status}`);
+    let base64 = typeof resp.data === 'string' ? resp.data : '';
+    base64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    if (!base64) throw new Error('ZIP 下载失败: 数据为空');
+    return base64ToBytes(base64).buffer;
+  }
   if (IS_DEV) {
     const zipResp = await fetch(`/pixiv-zip/${encodeURIComponent(url)}`);
     if (!zipResp.ok) throw new Error(`ZIP 下载失败: HTTP ${zipResp.status}`);
@@ -577,7 +590,7 @@ export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
         log.info('[fetchUgoiraFrames] 流式下载失败，回退缓冲下载:', e.message);
         const zipBuf = await downloadZip(body.originalSrc);
         frames = await extractZipFrames(zipBuf, body, broadcast);
-        saveZipToDisk(id, body, [new Uint8Array(zipBuf)]).catch(() => {});
+        saveZipToDisk(id, body, [new Uint8Array(zipBuf)]).catch(() => { });
       }
     }
 
@@ -675,13 +688,13 @@ export async function saveGifToAlbum(item, onProgress) {
   const promise = doSaveGifToAlbum(item, wrapped).then(
     (r) => {
       mon.finish(!!r?.success, r?.error || '');
-      if (r?.success) saveLosslessZipToGallery(sid).catch(() => {});
+      if (r?.success) saveLosslessZipToGallery(sid).catch(() => { });
       return r;
     },
     (e) => { mon.finish(false, e?.message || '动图保存失败'); throw e; },
   );
   saveInFlight.set(sid, promise);
-  promise.finally(() => saveInFlight.delete(sid)).catch(() => {});
+  promise.finally(() => saveInFlight.delete(sid)).catch(() => { });
   return promise;
 }
 

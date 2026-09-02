@@ -12,6 +12,7 @@
 import { CapacitorHttp } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
 import { isNativeDownloadAvailable, nativeDownload } from '../../utils/nativeDownload.js';
+import { isDesktopDownloadAvailable, desktopDownload } from '../../utils/desktopDownload.js';
 
 const log = createLogger('NetworkStore');
 const IS_DEV = import.meta.env.DEV;
@@ -31,6 +32,15 @@ export class NetworkStore {
     if (!url) return null;
     const abs = this._absUrl(url);
     log.debug('downloadImage:', { raw: url, abs });
+    // 桌面端（Electron）：主进程 Node 流式下载（带 Clash 代理、真实字节进度、无 CORS），失败再降级
+    if (isDesktopDownloadAvailable()) {
+      try {
+        const data = await desktopDownload(abs, onProgress);
+        if (data) return data;
+      } catch (e) {
+        log.info('桌面下载失败，降级后续通道:', e?.message || e);
+      }
+    }
     // 生产环境：优先原生流式下载（真实字节进度、不受 CORS 限制），失败降级 CapacitorHttp
     if (!IS_DEV) {
       if (isNativeDownloadAvailable()) {

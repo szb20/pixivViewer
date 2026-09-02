@@ -4,6 +4,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
+import { getGallerySaver } from '../../utils/platform.js';
 
 const log = createLogger('gallery');
 
