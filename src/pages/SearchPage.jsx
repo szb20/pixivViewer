@@ -185,7 +185,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
 
       {createPortal(
         <form
-          className={`search-bar search-bar--bottom${hideBar ? ' search-bar--hidden' : ''}`}
+          className={`search-bar search-bar--top${hideBar ? ' search-bar--hidden' : ''}`}
           style={{ display: active ? 'flex' : 'none' }}
           onSubmit={submit}
         >

@@ -89,6 +89,8 @@ export default function MediaLightbox({
     swipeOff, pinchScale, pinchPan, zoomTrans,
     cur, isGif,
     handleTouchStart, handleTouchMove, handleTouchEnd,
+    handleMouseDown, handleMouseMove, handleMouseUp,
+    handleWheel, handleDoubleClick,
     handleClose,
   } = useTouchGesture({
     images: items,
@@ -132,10 +134,12 @@ export default function MediaLightbox({
       if (idx < 0 || idx >= items.length) continue;
       const item = items[idx];
       if (item.type !== 'image') continue;
+      // 预热候选链首选项（本地 blob → 日期路径原图 → master1200 …）
+      const preSrc = item.candidates?.[0] || item.src;
       // 本地/缓存 URL 无需预热
-      if (item.src?.startsWith('blob:') || item.src?.startsWith('file:')) continue;
+      if (preSrc?.startsWith('blob:') || preSrc?.startsWith('file:')) continue;
       const img = new Image();
-      img.src = item.src;
+      img.src = preSrc;
     }
   }, [index, items]);
 
@@ -263,7 +267,16 @@ export default function MediaLightbox({
 
     // ── 图片类 ──
     if (item.type === 'image') {
-      const failed = (retryMap[idx] || 0) >= MAX_IMG_RETRY;
+      // 候选 URL 链逐个降级（本地 → 日期路径原图 → master1200 → 短链 …）：
+      // 每个候选先各试一次，落到最后一个候选后再带缓存穿透参数重试 MAX_IMG_RETRY 次。
+      const candidates = (item.candidates?.length ? item.candidates : [item.src]).filter(Boolean);
+      const errCount = retryMap[idx] || 0;
+      const lastIdx = Math.max(0, candidates.length - 1);
+      const candIdx = Math.min(errCount, lastIdx);
+      const attempt = errCount - candIdx; // 当前候选的第几次尝试（0 = 首次）
+      const activeSrc = candidates[candIdx] || '';
+      const failed = !candidates.length
+        || (candIdx === lastIdx && attempt >= MAX_IMG_RETRY);
       if (failed) {
         return (
           <div
@@ -285,9 +298,9 @@ export default function MediaLightbox({
           className="lightbox-img-wrap"
           style={idx === index && zoomTrans
             ? {
-                transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
-                willChange: 'transform',
-              }
+              transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
+              willChange: 'transform',
+            }
             : undefined}
         >
           {/* sharp small 图托底：原图逐行渲染时，底部未渲染区域先由同比例 small 图垫着 */}
@@ -296,13 +309,15 @@ export default function MediaLightbox({
           )}
           <img
             className="lightbox-img-full"
-            src={item.src + (retryMap[idx] && !/^(blob:|file:|content:)/.test(item.src) ? `?r=${retryMap[idx]}` : '')}
+            src={attempt > 0 && !/^(blob:|file:|content:)/.test(activeSrc) ? `${activeSrc}?r=${attempt}` : activeSrc}
             alt={item.title || ''}
             draggable={false}
             onError={() => {
-              const next = (retryMap[idx] || 0) + 1;
-              if (next >= MAX_IMG_RETRY) {
-                log.warn('图片加载失败，已停止自动重试:', item.src, 'retry:', next);
+              const next = errCount + 1;
+              if (candIdx < lastIdx) {
+                log.warn('灯箱图片加载失败，切换下一个候选:', activeSrc, '→', candidates[candIdx + 1]);
+              } else if (attempt >= MAX_IMG_RETRY) {
+                log.warn('灯箱图片所有候选均加载失败:', activeSrc);
               }
               setRetryMap(prev => ({ ...prev, [idx]: next }));
             }}
@@ -329,8 +344,8 @@ export default function MediaLightbox({
             justifyContent: 'center',
             ...(idx === index && zoomTrans
               ? {
-                  transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
-                }
+                transform: `scale(${pinchScale}) translate(${pinchPan.x / pinchScale}px, ${pinchPan.y / pinchScale}px)`,
+              }
               : {}),
           }}
         >
@@ -367,6 +382,11 @@ export default function MediaLightbox({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onWheel={handleWheel}
+      onDoubleClick={handleDoubleClick}
       style={{ zIndex }}
     >
       <div className="lightbox-stage-wrap" onClick={e => e.stopPropagation()}>

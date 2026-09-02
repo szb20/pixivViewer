@@ -6,13 +6,13 @@
   padding: 0 12px;
 }
 
-/* ── 搜索栏：毛玻璃（通过 Portal 渲染到 body）── */
+/* ── 搜索栏：毛玻璃（通过 Portal 渲染到 .app）── */
 .search-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 22px;
+  border-radius: 26px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(24px) saturate(180%);
@@ -23,11 +23,18 @@
   transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
 }
 
-/* 弹入/弹出：下滚隐藏、上滚显示（同筛选栏） */
+/* 收起时：顶部搜索栏向上滑出，底部搜索栏向下滑出 */
 .search-bar--hidden {
   opacity: 0;
-  transform: translateY(calc(100% + 20px));
   pointer-events: none;
+}
+
+.search-bar--top.search-bar--hidden {
+  transform: translateX(-50%) translateY(calc(-100% - 24px));
+}
+
+.search-bar--bottom.search-bar--hidden {
+  transform: translateY(calc(100% + 20px));
 }
 
 .search-bar:focus-within {
@@ -41,13 +48,13 @@
 .search-icon {
   flex: none;
   color: rgba(255, 255, 255, 0.9);
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.6));
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.22));
   transition: color 0.25s ease;
 }
 
 .search-bar:focus-within .search-icon {
   color: #fff;
-  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.85));
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
 }
 
 .search-input {
@@ -78,18 +85,18 @@
   border: 1px solid rgba(255, 255, 255, 0.5);
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
-    font-size: 0;
-    cursor: pointer;
-    box-shadow:
-      0 0 12px rgba(255, 255, 255, 0.3);
+  font-size: 0;
+  cursor: pointer;
+  box-shadow:
+    0 0 8px rgba(255, 255, 255, 0.14);
   transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
 }
 
-  .search-submit:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.24);
-    box-shadow:
-      0 0 18px rgba(255, 255, 255, 0.5);
-  }
+.search-submit:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow:
+    0 0 12px rgba(255, 255, 255, 0.2);
+}
 
 .search-submit:active:not(:disabled) {
   transform: scale(0.96);
@@ -104,7 +111,7 @@
   width: 16px;
   height: 16px;
   color: #fff;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.8));
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
 }
 
 .search-submit-spinner {
@@ -207,10 +214,8 @@
   background: rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    0 0 10px rgba(255, 255, 255, 0.10);
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.5),
-    0 0 16px rgba(255, 255, 255, 0.25);
+    0 0 8px rgba(255, 255, 255, 0.08);
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.18);
 }
 
 .search-page .search-history-chip:hover .search-history-tag {
@@ -218,13 +223,26 @@
 }
 
 /* ══════════════════════════════════════════════
-   搜索栏 · 固定底部（毛玻璃）
+   搜索栏 · 固定顶部（毛玻璃，桌面优先）
+   手机端保持底部弹出（search-bar--bottom）
    ══════════════════════════════════════════════ */
 
 .search-page {
   padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px));
 }
 
+/* 桌面/宽屏：固定顶部居中，视口宽度内不溢出（宽屏图标 42px，底部留 14px） */
+.search-bar--top {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 28px));
+  max-width: 560px;
+  z-index: 5;
+}
+
+/* 底部弹出（手机端原形态保留，双栏时代柱同理窄栏） */
 .search-bar--bottom {
   position: fixed;
   bottom: calc(80px + env(safe-area-inset-bottom, 0px));
@@ -234,6 +252,14 @@
   width: calc(100% - 24px);
   max-width: 560px;
   z-index: 5;
+}
+
+@media (min-width: 900px) {
+  /* 桌面顶部搜索栏与底部 Tab 栏在宽度上对齐 */
+  .search-bar--top {
+    width: calc(100vw - 120px);
+    max-width: 1200px;
+  }
 }
 
 @media (orientation: landscape) and (max-height: 560px) {
@@ -247,6 +273,13 @@
     right: max(12px, env(safe-area-inset-right, 0px));
     width: auto;
     max-width: none;
+    padding: 5px 10px;
+  }
+
+  .search-bar--top {
+    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    width: calc(100vw - 120px);
+    max-width: 1200px;
     padding: 5px 10px;
   }
 

@@ -667,6 +667,21 @@ export async function saveGifToAlbum(item, onProgress) {
     kind: 'gif',
     message: '下载动图',
   });
+  // 失败时登记完整重试信息（供下载管理一键重试）
+  const failMeta = {
+    illustId: sid,
+    page: 0,
+    type: 'gif',
+    illustType: 2,
+    originalUrl: item.originalUrl,
+    mediumUrl: item.mediumUrl,
+    thumbnailUrl: item.thumbnailUrl,
+    title: item.title || sid,
+    author: item.authorName || item.author || '',
+    authorName: item.authorName || item.author || '',
+    authorId: item.authorId || '',
+    tags: item.tags,
+  };
   const wrapped = (pct) => {
     if (pct == null) return;
     mon.setProgress(Math.round(pct));
@@ -674,11 +689,20 @@ export async function saveGifToAlbum(item, onProgress) {
   };
   const promise = doSaveGifToAlbum(item, wrapped).then(
     (r) => {
-      mon.finish(!!r?.success, r?.error || '');
-      if (r?.success) saveLosslessZipToGallery(sid).catch(() => {});
+      if (r?.success) {
+        mon.finish(true);
+        saveLosslessZipToGallery(sid).catch(() => {});
+      } else {
+        mon.recordFailure(`${sid}_0`, failMeta);
+        mon.finish(false, r?.error || '动图保存失败');
+      }
       return r;
     },
-    (e) => { mon.finish(false, e?.message || '动图保存失败'); throw e; },
+    (e) => {
+      mon.recordFailure(`${sid}_0`, failMeta);
+      mon.finish(false, e?.message || '动图保存失败');
+      throw e;
+    },
   );
   saveInFlight.set(sid, promise);
   promise.finally(() => saveInFlight.delete(sid)).catch(() => {});

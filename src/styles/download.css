@@ -109,6 +109,92 @@
   flex: none;
 }
 
+/* ── 失败行：常驻 + 一键重试 ── */
+.download-row--error {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 107, 107, 0.06);
+}
+
+.download-row-retry {
+  flex: none;
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.download-row-retry:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.14);
+}
+
+.download-row-retry:active {
+  transform: scale(0.96);
+}
+
+.download-row-retrying {
+  opacity: 0.8;
+}
+
+/* 重试中转圈 */
+.download-row-spinner {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ptr-spin 0.8s linear infinite;
+}
+
+/* ── 弹窗头：标题 + 清除已完成 ── */
+.download-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.download-head-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.download-head-clear {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.download-head-clear:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* 失败数角标：红色，与队列数角标错开 */
+.download-fab-badge--fail {
+  top: -6px;
+  right: -8px;
+  background: rgba(255, 107, 107, 0.85);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 4px 12px rgba(255, 107, 107, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
 /* ── 圆环进度 ── */
 
 .download-row-ring {

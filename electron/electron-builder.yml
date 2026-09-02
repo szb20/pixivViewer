@@ -1,0 +1,18 @@
+appId: com.pixivviewer.app
+productName: PixivViewer
+directories:
+  output: release
+files:
+  - dist/**
+  - electron/**
+  - package.json
+win:
+  target:
+    - nsis
+    - portable
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+portable:
+  artifactName: ${productName}-${version}-portable-${arch}.${ext}

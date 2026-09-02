@@ -31,16 +31,15 @@ export default memo(function GridItem({
   ratio,
 }) {
   const v = {
-    grid:    { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    media:   { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
+    grid: { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
+    media: { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
     gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false, cap: 'grid-cap' },
+    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
   }[variant] || { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false };
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [pressState, setPressState] = useState('idle');
-  const itemRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const pressFeedbackTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
@@ -95,24 +94,8 @@ export default memo(function GridItem({
   const handleClick = useCallback(() => {
     // 长按已触发下载 → 本次合成的 click 不再打开
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    const rect = itemRef.current?.getBoundingClientRect?.();
-    const srcForTransition = src || img.thumbnailUrl || img.mediumUrl || img.originalUrl || '';
-    const openImg = rect && srcForTransition
-      ? {
-          ...img,
-          _openTransition: {
-            src: srcForTransition,
-            rect: {
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-            },
-          },
-        }
-      : img;
-    onOpen?.(openImg);
-  }, [img, onOpen, src]);
+    onOpen?.(img);
+  }, [img, onOpen]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();
@@ -169,9 +152,14 @@ export default memo(function GridItem({
 
   return (
     <div
-      ref={itemRef}
       className={`${v.item}${shimmerCls}${stateCls}`}
-      style={ratio ? { aspectRatio: ratio, '--item-index': index % 24 } : { '--item-index': index % 24 }}
+      style={
+        variant === 'masonry'
+          ? { aspectRatio: loaded ? 'auto' : (ratio || 1), '--item-index': index % 24 }
+          : ratio
+            ? { aspectRatio: ratio, '--item-index': index % 24 }
+            : { '--item-index': index % 24 }
+      }
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}
@@ -181,12 +169,6 @@ export default memo(function GridItem({
       onContextMenu={handleContextMenu}
     >
       {v.wrap ? <div className={v.wrap}>{thumb}</div> : thumb}
-      {loaded && v.cap && (
-        <div className={v.cap}>
-          <p className="grid-cap-title">{img.title || ''}</p>
-          <p className="grid-cap-author">{img.authorName || img.author || ''}</p>
-        </div>
-      )}
       {loaded && isLiked && v.like && (
         <span className={v.like}><HeartIcon filled /></span>
       )}

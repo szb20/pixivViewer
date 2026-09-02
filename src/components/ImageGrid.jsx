@@ -1,8 +1,10 @@
 import { memo, useMemo } from 'react';
 import GridItem from './GridItem.jsx';
+import { pixivPageUrl } from '../pixiv-assistant/core/utils.js';
 import { buildLikedIllustIdSet } from '../utils/worksState.js';
 import { hiddenWorks, useHiddenWorks } from '../utils/hiddenWorks.js';
 import { useGridLikeToggle } from '../hooks/useGridLikeToggle.js';
+import { useGridLayout } from '../hooks/useGridLayout.js';
 import { showToast } from '../utils/toast.js';
 
 /* ===== 推荐页瀑布流：按真实宽高比排双列，无尺寸时用稳定的伪随机比例兜底 ===== */
@@ -30,49 +32,79 @@ function getCardRatio(img, featured = false) {
   return featured ? clampRatio(r, FEATURED_MIN, FEATURED_MAX) : clampRatio(r, RATIO_MIN, RATIO_MAX);
 }
 
+// 方形缩略图（c/250x250_80_a2/.../square1200.jpg）→ small 档（c/540x540_70/.../master1200.jpg）。
+// 与详情页 small 预览图同档同路径：540px 长边等比、不裁剪，内容和比例一致。
+export function masonryThumbUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  // 先转成 img-master 等比底座（已处理 dev 代理），再补上 small 档的 c/540x540_70 前缀
+  const base = pixivPageUrl(url, 0, 1200);
+  if (!base) return url;
+  return base
+    .replace('https://i.pixiv.re/img-master', 'https://i.pixiv.re/c/540x540_70/img-master')
+    .replace('/pixiv-img/img-master', '/pixiv-img/c/540x540_70/img-master');
+}
+
 function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
   const ratios = useMemo(() => items.map(img => getCardRatio(img)), [items]);
   const plan = useMemo(() => {
     if (!items.length) return null;
-    const cols = [[], []];
-    const heights = [0, 0];
-    // 第 0 张作为全宽精选位，其余按估算高度均衡分配到两列
-    for (let i = 1; i < items.length; i++) {
-      const col = heights[0] <= heights[1] ? 0 : 1;
+    // 列数自适应：手机 <900px 固定 2 列；桌面按窗口宽度/最小卡片宽(140px)推算，
+    // 上不封顶到 14 列（密铺瀑布流，Pinterest 风格）
+    const colCount = typeof window !== 'undefined'
+      ? (window.innerWidth >= 900
+        ? Math.min(14, Math.max(4, Math.floor(window.innerWidth / 140)))
+        : 2)
+      : 2;
+    const cols = Array.from({ length: colCount }, () => []);
+    const heights = new Array(colCount).fill(0);
+    // 全部条目（含首条）按估算高度均衡分配到各列 → 真正的瀑布流，无全宽精选位
+    for (let i = 0; i < items.length; i++) {
+      const col = heights.indexOf(Math.min(...heights));
       cols[col].push(i);
       heights[col] += 1 / Math.max(ratios[i], 0.3);
     }
-    return { cols };
+    return { cols, colCount };
   }, [items, ratios]);
 
   if (!plan) return null;
 
-  const renderItem = (i) => (
-    <GridItem
-      key={items[i].illustId}
-      img={items[i]}
-      index={i}
-      ratio={ratios[i]}
-      isLiked={likedIllustIds.has(items[i].illustId)}
-      onOpen={onOpen}
-      onLongPress={toggleLike}
-      onHide={onHide}
-      variant="masonry"
-    />
-  );
+  const renderItem = (i) => {
+    const img = items[i];
+    // 瀑布流用等比缩略图（540px），不用方形 250px 裁剪图，避免"方像素拼成瀑布"。
+    const thumbSrc = masonryThumbUrl(img.thumbnailUrl || img.mediumUrl || '')
+      || img.thumbnailUrl
+      || img.mediumUrl;
+    return (
+      <GridItem
+        key={img.illustId}
+        img={img}
+        index={i}
+        ratio={ratios[i]}
+        isLiked={likedIllustIds.has(img.illustId)}
+        onOpen={onOpen}
+        onLongPress={toggleLike}
+        onHide={onHide}
+        variant="masonry"
+        thumbSrc={thumbSrc}
+      />
+    );
+  };
 
   return (
-    <div className="grid--masonry">
-      <div className="masonry-featured">{renderItem(0)}</div>
+    <div className="grid--masonry" style={{ '--masonry-cols': plan.colCount }}>
       <div className="masonry-cols">
-        <div className="masonry-col">{plan.cols[0].map(renderItem)}</div>
-        <div className="masonry-col">{plan.cols[1].map(renderItem)}</div>
+        {plan.cols.map((col, ci) => (
+          <div className="masonry-col" key={ci}>{col.map(renderItem)}</div>
+        ))}
       </div>
     </div>
   );
 }
 
-const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'grid' }) {
+const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'auto' }) {
+  // layout='auto'（默认，绝大多数调用方）：跟随设置页「网格样式」开关（瀑布流/方形宫格）
+  const gridLayout = useGridLayout();
+  const resolvedLayout = layout === 'auto' ? gridLayout : layout;
   const hiddenSet = useHiddenWorks();
   const toggleLike = useGridLikeToggle();
   // 同作品任意页点过喜欢都显示红心（不只看第 0 页）
@@ -91,7 +123,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'g
     showToast('已隐藏，不再推荐', { type: 'info' });
   };
 
-  if (layout === 'masonry') {
+  if (resolvedLayout === 'masonry') {
     return (
       <MasonryFeed
         items={visibleItems}

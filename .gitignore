@@ -16,6 +16,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Electron 打包产物（与 web 产物 dist/ 区分）
+release
+
 # Android 构建缓存（临时 gradle home）
 android/gradle-home/
 

@@ -60,7 +60,6 @@ const captureScrollAnchor = () => {
 export default function DetailView({ image: initialImage, navContext, onClose, onExitToHome, onSearchTag, onAuthorWorks }) {
   const [image, setImage] = useState(initialImage);
   const [restoreState, setRestoreState] = useState({ top: 0, anchor: null });
-  const [openTransition, setOpenTransition] = useState(null);
   const [slideDirection, setSlideDirection] = useState(0);
   const stackRef = useRef([initialImage]);
   const navStateRef = useRef(normalizeNavState(initialImage, navContext));
@@ -69,7 +68,6 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
   const slideTimerRef = useRef(null);
   const handleBackRef = useRef(null);
   const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
-  const detailBgUrl = image?.thumbnailUrl || image?.previewUrl || image?.mediumUrl || image?.url || '';
 
   // 外部 prop 变化（从列表/推荐直接打开新作品）→ 重置栈
   useEffect(() => {
@@ -81,44 +79,6 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       setRestoreState({ top: 0, anchor: null });
     }
   }, [initialImage, navContext]);
-
-  useEffect(() => {
-    const from = initialImage?._openTransition;
-    if (!from?.rect || !from.src) return;
-    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    if (prefersReducedMotion) return;
-
-    const targetWidth = Math.min(window.innerWidth, 560);
-    const fallbackTarget = {
-      left: (window.innerWidth - targetWidth) / 2,
-      top: Math.max(0, window.innerHeight * 0.12),
-      width: targetWidth,
-      height: Math.min(window.innerHeight * 0.62, from.rect.height * 1.8),
-    };
-    const base = { src: from.src, from: from.rect, to: fallbackTarget, active: false };
-    setOpenTransition(base);
-
-    let raf1 = 0;
-    let raf2 = 0;
-    const timer = setTimeout(() => setOpenTransition(null), 430);
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => {
-        const target = document.querySelector('.image-detail-hero')?.getBoundingClientRect?.();
-        setOpenTransition({
-          ...base,
-          active: true,
-          to: target
-            ? { left: target.left, top: target.top, width: target.width, height: target.height }
-            : fallbackTarget,
-        });
-      });
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      clearTimeout(timer);
-    };
-  }, [initialImage]);
 
   const getCurrentScrollState = useCallback(() => captureScrollAnchor(), []);
 
@@ -248,29 +208,69 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     }
   }, [handleSibling]);
 
+  // ── 桌面端：鼠标拖拽切换作品（镜像触摸滑动逻辑） ──
+  const handleMouseDown = useCallback((e) => {
+    if (e.button !== 0) return;
+    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+    if (isInteractiveTarget(e.target)) {
+      swipeRef.current = null;
+      return;
+    }
+    swipeRef.current = { x: e.clientX, y: e.clientY, t: Date.now(), locked: null, mouse: true };
+  }, []);
+
+  const handleMouseMove = useCallback((e) => {
+    const swipe = swipeRef.current;
+    if (!swipe || !swipe.mouse) return;
+    const dx = e.clientX - swipe.x;
+    const dy = e.clientY - swipe.y;
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    if (!swipe.locked && (ax > 18 || ay > 18)) {
+      swipe.locked = ax > ay * 1.2 ? 'x' : 'y';
+    }
+    if (swipe.locked === 'x') e.preventDefault();
+  }, []);
+
+  const handleMouseUp = useCallback((e) => {
+    const swipe = swipeRef.current;
+    swipeRef.current = null;
+    if (!swipe || !swipe.mouse || swipe.locked !== 'x') return;
+    const dx = e.clientX - swipe.x;
+    const dy = e.clientY - swipe.y;
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    const elapsed = Math.max(1, Date.now() - swipe.t);
+    const velocity = ax / elapsed;
+    if (ax >= SWIPE_TRIGGER_PX && ax > ay * SWIPE_DIRECTION_RATIO && (velocity > 0.18 || ax > window.innerWidth * 0.22)) {
+      handleSibling(dx < 0 ? 1 : -1);
+    }
+  }, [handleSibling]);
+
+  // ── 桌面端：方向键切换作品 ──
+  useEffect(() => {
+    function onKeyDown(e) {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      // 有子级弹层（灯箱/作者作品）打开时不截获方向键
+      if (typeof document !== 'undefined' && document.querySelector('.lightbox-overlay, .author-works-overlay')) return;
+      if (e.key === 'ArrowLeft') handleSibling(-1);
+      if (e.key === 'ArrowRight') handleSibling(1);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleSibling]);
+
   return (
     <div
       className="detail-overlay"
-      style={detailBgUrl ? { '--detail-bg-image': `url(${JSON.stringify(detailBgUrl)})` } : undefined}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
     >
-      <div className="detail-glass-bg" aria-hidden="true" />
-      {openTransition && (
-        <div
-          className={`shared-open-transition${openTransition.active ? ' is-active' : ''}`}
-          style={{
-            left: `${openTransition.active ? openTransition.to.left : openTransition.from.left}px`,
-            top: `${openTransition.active ? openTransition.to.top : openTransition.from.top}px`,
-            width: `${openTransition.active ? openTransition.to.width : openTransition.from.width}px`,
-            height: `${openTransition.active ? openTransition.to.height : openTransition.from.height}px`,
-          }}
-          aria-hidden="true"
-        >
-          <img src={openTransition.src} alt="" draggable={false} />
-        </div>
-      )}
       <button className="glass-icon-btn detail-back-home" onClick={onExitToHome} aria-label="返回主页">
         <BackIcon />
       </button>
