@@ -13,6 +13,9 @@ const LAYOUT_OPTIONS = [
   { value: 'grid', label: '方形宫格' },
 ];
 
+// 桌面壳（Electron）才支持选择保存目录；Web / Android 隐藏该设置项
+const isDesktopShell = typeof window !== 'undefined' && !!window.desktopProxy?.chooseDirectory;
+
 /**
  * 全屏设置页。
  * 覆盖在 tab 页之上，毛玻璃 sticky header + 卡片式分组 + 即时保存。
@@ -23,6 +26,7 @@ export default function SettingsPage({ onClose }) {
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridQuality, setGridQuality] = useState('thumb');
   const [gridLayout, setGridLayout] = useState('waterfall');
+  const [saveDirectory, setSaveDirectory] = useState('');
 
   // Cookie 收起/展开
   const [cookieOpen, setCookieOpen] = useState(false);
@@ -40,6 +44,7 @@ export default function SettingsPage({ onClose }) {
       setProxyUrl(s.proxyUrl || '');
       setGridQuality(s.gridQuality || 'thumb');
       setGridLayout(s.gridLayout || 'waterfall');
+      setSaveDirectory(s.saveDirectory || '');
       loadedRef.current = true;
     });
     return () => { cancelled = true; };
@@ -67,6 +72,21 @@ export default function SettingsPage({ onClose }) {
     setToast('已保存');
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(''), 1500);
+  };
+
+  // 选择图片保存目录（仅桌面壳，经 Electron 文件夹选择对话框）
+  const chooseDir = async () => {
+    const dir = await window.desktopProxy?.chooseDirectory?.();
+    if (dir) {
+      setSaveDirectory(dir);
+      doSave({ saveDirectory: dir });
+    }
+  };
+
+  // 恢复系统默认（图片文件夹）
+  const resetDir = () => {
+    setSaveDirectory('');
+    doSave({ saveDirectory: '' });
   };
 
   return (
@@ -186,6 +206,25 @@ export default function SettingsPage({ onClose }) {
             </div>
           </div>
         </div>
+
+        {/* ── 保存 ── 仅桌面壳 */}
+        {isDesktopShell && (
+          <div className="settings-group">
+            <div className="settings-group-label">保存</div>
+            <div className="settings-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="settings-row-label">图片保存目录</div>
+                <div className="settings-row-hint" style={{ wordBreak: 'break-all' }}>{saveDirectory || '系统「图片」文件夹'}</div>
+              </div>
+              <div className="settings-pill-group">
+                <button className="settings-pill" onClick={chooseDir}>选择文件夹</button>
+                {saveDirectory && (
+                  <button className="settings-pill" onClick={resetDir}>恢复默认</button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
 

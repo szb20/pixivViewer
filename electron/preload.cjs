@@ -11,4 +11,5 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktopProxy', {
   getPort: () => ipcRenderer.invoke('proxy:get-port'),
   saveFile: (payload) => ipcRenderer.invoke('dialog:save-file', payload),
+  chooseDirectory: () => ipcRenderer.invoke('dialog:choose-directory'),
 });

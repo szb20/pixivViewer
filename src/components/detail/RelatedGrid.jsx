@@ -1,13 +1,14 @@
+import { useEffect, useRef, useState } from 'react';
 import GridItem from '../GridItem.jsx';
 import { masonryThumbUrl } from '../ImageGrid.jsx';
 import { allMediaFromRelated } from './helpers.js';
 
-// 列数：手机 2 列；桌面按窗口宽度推算
-function relatedColCount() {
-  if (typeof window === 'undefined') return 2;
-  return window.innerWidth >= 900
-    ? Math.min(6, Math.max(3, Math.floor(window.innerWidth / 180)))
-    : 2;
+const MIN_COL_WIDTH = 250;
+
+// 列数：根据容器实际宽度推算，每列至少 MIN_COL_WIDTH 宽
+function relatedColCount(containerWidth) {
+  if (!containerWidth || containerWidth <= 0) return 2;
+  return Math.max(1, Math.round(containerWidth / MIN_COL_WIDTH));
 }
 
 /**
@@ -22,6 +23,23 @@ export default function RelatedGrid({
   onSelectImage,
   onLongPress,
 }) {
+  const containerRef = useRef(null);
+  const [colCount, setColCount] = useState(2);
+
+  // 用 ResizeObserver 监听容器实际宽度，动态计算列数
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.getBoundingClientRect().width;
+      setColCount(relatedColCount(w));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   if (!related?.length) return null;
   const seen = new Set();
   const visibleRelated = [];
@@ -36,7 +54,6 @@ export default function RelatedGrid({
   const navItems = visibleRelated.map(allMediaFromRelated);
 
   // 按估算高度均衡分配到各列（等比例高度=1/宽高比）；同时给每项算真实宽高比用于加载前占位
-  const colCount = relatedColCount();
   const cols = Array.from({ length: colCount }, () => []);
   const heights = new Array(colCount).fill(0);
   const ratios = visibleRelated.map((img) => {
@@ -52,7 +69,11 @@ export default function RelatedGrid({
   });
 
   return (
-    <div className="grid--masonry" ref={relatedRef} data-detail-anchor="related">
+    <div className="grid--masonry" ref={(node) => {
+      containerRef.current = node;
+      if (typeof relatedRef === 'function') relatedRef(node);
+      else if (relatedRef) relatedRef.current = node;
+    }} data-detail-anchor="related">
       <div className="masonry-cols">
         {cols.map((col, ci) => (
           <div className="masonry-col" key={ci}>

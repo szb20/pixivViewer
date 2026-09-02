@@ -35,6 +35,7 @@ export function getSettingsSync() {
     pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
     gridQuality: stored.gridQuality || 'thumb',       // 'mini' | 'thumb'
     gridLayout: stored.gridLayout || 'waterfall',      // 桌面（≥900px）内容页布局：'waterfall' | 'grid'
+    saveDirectory: stored.saveDirectory || '',         // 桌面端图片保存目录（空 = 系统图片文件夹）
   };
 }
 

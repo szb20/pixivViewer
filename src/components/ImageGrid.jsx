@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useEffect, useRef, useState } from 'react';
 import GridItem from './GridItem.jsx';
 import { pixivPageUrl } from '../pixiv-assistant/core/utils.js';
 import { buildLikedIllustIdSet } from '../utils/worksState.js';
@@ -38,23 +38,35 @@ export function masonryThumbUrl(url) {
   if (!url || typeof url !== 'string') return '';
   // 先转成 img-master 等比底座（已处理 dev 代理），再补上 small 档的 c/540x540_70 前缀
   const base = pixivPageUrl(url, 0, 1200);
-  if (!base) return url;
+  if (!base) return '';
   return base
     .replace('https://i.pixiv.re/img-master', 'https://i.pixiv.re/c/540x540_70/img-master')
     .replace('/pixiv-img/img-master', '/pixiv-img/c/540x540_70/img-master');
 }
 
+const MIN_COL_WIDTH = 250;
+
 function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
+  const containerRef = useRef(null);
+  const [colCount, setColCount] = useState(2);
+
+  // 用 ResizeObserver 监听容器实际宽度，动态计算列数
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => {
+      const w = el.getBoundingClientRect().width;
+      setColCount(Math.max(2, Math.round(w / MIN_COL_WIDTH)));
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const ratios = useMemo(() => items.map(img => getCardRatio(img)), [items]);
   const plan = useMemo(() => {
     if (!items.length) return null;
-    // 列数自适应：手机 <900px 固定 2 列；桌面按窗口宽度/最小卡片宽(140px)推算，
-    // 上不封顶到 14 列（密铺瀑布流，Pinterest 风格）
-    const colCount = typeof window !== 'undefined'
-      ? (window.innerWidth >= 900
-        ? Math.min(14, Math.max(4, Math.floor(window.innerWidth / 140)))
-        : 2)
-      : 2;
     const cols = Array.from({ length: colCount }, () => []);
     const heights = new Array(colCount).fill(0);
     // 全部条目（含首条）按估算高度均衡分配到各列 → 真正的瀑布流，无全宽精选位
@@ -64,7 +76,7 @@ function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
       heights[col] += 1 / Math.max(ratios[i], 0.3);
     }
     return { cols, colCount };
-  }, [items, ratios]);
+  }, [items, ratios, colCount]);
 
   if (!plan) return null;
 
@@ -91,7 +103,7 @@ function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
   };
 
   return (
-    <div className="grid--masonry" style={{ '--masonry-cols': plan.colCount }}>
+    <div className="grid--masonry" ref={containerRef} style={{ '--masonry-cols': plan.colCount }}>
       <div className="masonry-cols">
         {plan.cols.map((col, ci) => (
           <div className="masonry-col" key={ci}>{col.map(renderItem)}</div>

@@ -137,15 +137,14 @@ export default function DetailPageBlock({
             draggable={false}
             onLoad={(e) => {
               setLoaded(true);
-              // 仅等比预览图参与宽高比校准，方形缩略图不参与
-              if (previewUrl) {
-                const nw = e.currentTarget.naturalWidth;
-                const nh = e.currentTarget.naturalHeight;
-                if (nw && nh) {
-                  const nextRatio = `${nw} / ${nh}`;
-                  setRatio(nextRatio);
-                  onRatioReady?.(page, nextRatio);
-                }
+              const nw = e.currentTarget.naturalWidth;
+              const nh = e.currentTarget.naturalHeight;
+              const isSquareCrop = nw === nh && (nw === 540 || nw === 250);
+              // 仅等比预览图参与宽高比校准，跳过 Pixiv 方形裁剪缩略图（540×540, 250×250）
+              if (nw && nh && !isSquareCrop) {
+                const nextRatio = `${nw} / ${nh}`;
+                setRatio(nextRatio);
+                onRatioReady?.(page, nextRatio);
               }
             }}
             onError={() => {

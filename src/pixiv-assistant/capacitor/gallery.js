@@ -8,6 +8,7 @@
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
 import { getGallerySaver } from '../../utils/platform.js';
+import { getSettingsSync } from './config.js';
 
 const log = createLogger('gallery');
 
@@ -89,7 +90,8 @@ export async function exportToGallery(data, fileName, mimeType = mimeFor(fileNam
     // 桌面壳：弹系统保存对话框写文件
     if (isDesktop()) {
       try {
-        const ok = await window.desktopProxy.saveFile({ data, fileName, mimeType });
+        const directory = getSettingsSync().saveDirectory || '';
+        const ok = await window.desktopProxy.saveFile({ data, fileName, mimeType, directory });
         if (!ok) log.warn('桌面保存被取消或失败:', fileName);
         return !!ok;
       } catch (e) {

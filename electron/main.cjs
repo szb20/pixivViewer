@@ -155,6 +155,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -172,11 +173,13 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('proxy:get-port', () => proxyPort);
 
-  ipcMain.handle('dialog:save-file', async (_event, { data, fileName, mimeType } = {}) => {
+  ipcMain.handle('dialog:save-file', async (_event, { data, fileName, mimeType, directory } = {}) => {
     try {
       if (!data) return false;
       const baseName = String(fileName || 'pixiv_untitled.jpg').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
-      const defaultPath = path.join(app.getPath('downloads'), baseName);
+      // 保存目录优先取用户设置，未设置时默认系统图片文件夹
+      const dir = typeof directory === 'string' && directory ? directory : app.getPath('pictures');
+      const defaultPath = path.join(dir, baseName);
       const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
         defaultPath,
         filters: [{ name: mimeType || 'Image', extensions: [baseName.split('.').pop() || 'jpg'] }],
@@ -188,6 +191,21 @@ app.whenReady().then(async () => {
     } catch (e) {
       console.warn('[desktop] 保存文件失败:', e?.message || e);
       return false;
+    }
+  });
+
+  ipcMain.handle('dialog:choose-directory', async () => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: '选择图片保存目录',
+        defaultPath: app.getPath('pictures'),
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (canceled || !filePaths?.length) return null;
+      return filePaths[0];
+    } catch (e) {
+      console.warn('[desktop] 选择目录失败:', e?.message || e);
+      return null;
     }
   });
 

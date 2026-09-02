@@ -338,17 +338,15 @@ export default function ImageDetailView({
     const items = [];
     const imgs = illustData?.illust?.images || [];
     for (let p = 0; p < totalPages; p++) {
-      // 灯箱候选链：本地原图 → master1200 → 按日期路径推导 master1200 → pixiv.re 原图短链 → 网格缩略图。
-      // master 档与网格缩略图同源（i.pixiv.re/img-master 日期路径），命中率最高；
-      // 原图短链（i.pixiv.re/{id}.jpg）可能 404，仅作兜底；i.pixiv.re/img-original 路径
-      // 可能返回错误图（见 utils.js 注释），不进链。MediaLightbox 失败时逐个降级。
+      // 灯箱候选链：本地原图 → 原图（全分辨率）→ master1200 降级 → pixiv.re 短链 → 网格缩略图。
+      // 原图优先，保证灯箱显示全分辨率画质；master1200 及以下仅作降级兜底。
       const masterUrl = imgs[p]?.url || imgs[p]?.mediumUrl || '';
       const p0Master = imgs[0]?.url || imgs[0]?.mediumUrl || image?.thumbnailUrl || '';
       const candidates = [...new Set([
         localSrcs[p] || '',
+        imgs[p]?.originalUrl || '',
         masterUrl,
         p0Master ? pixivPageUrl(p0Master, p) : '',
-        imgs[p]?.originalUrl || '',
         pixivReUrl(String(image.illustId), p),
         p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '',
       ].filter(Boolean))];
@@ -523,12 +521,12 @@ export default function ImageDetailView({
                   // 避免「网络预览 → 原图」的闪烁
                   let heroUrl = localUrl;
                   if (!heroUrl && !(isSaved && !localResolved)) {
-                    heroUrl = illustData?.illust?.images?.[p]?.previewUrl
+                    heroUrl = (p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '')
                       || illustData?.illust?.images?.[p]?.url
-                      // fetchIllust 未返回时，直接用网格已加载的 small 档缩略图（同一 URL 已被浏览器缓存，秒开）
-                      || (p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '')
-                      // 多页作品非首页：由 p0 缩略图按日期路径推导 master1200，避免等待详情接口
-                      || pixivPageUrl(image?.thumbnailUrl || '', p);
+                      || illustData?.illust?.images?.[p]?.mediumUrl
+                      || pixivPageUrl(image?.thumbnailUrl || '', p)
+                      // 方形裁剪图（square1200）作为最后兜底，仅当等比候选全部失败时才使用
+                      || illustData?.illust?.images?.[p]?.previewUrl;
                   }
                   return (
                     <DetailPageBlock
@@ -549,11 +547,9 @@ export default function ImageDetailView({
               </div>
             </>
           )}
-
-          {/* 标题 + 作者 */}
         </div>
 
-        <div className="detail-side-panel">
+        <div className="detail-author-panel">
           <div className="image-detail-meta">
             <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
             <div className="image-detail-author-row">
@@ -606,13 +602,15 @@ export default function ImageDetailView({
               ))}
             </div>
           )}
+        </div>
 
-          {/* 相关推荐网格 */}
+        <div className="detail-related-panel">
           {loadingRelated && (
             <div className="hint">正在加载相关推荐...</div>
           )}
           {related.length > 0 && (
             <>
+              <div className="detail-related-panel-header">相关推荐</div>
               <RelatedGrid
                 related={related}
                 currentIllustId={image?.illustId}
@@ -626,7 +624,6 @@ export default function ImageDetailView({
               {!loadingMoreRelated && !relatedHasMore && <div className="hint">没有更多推荐了</div>}
             </>
           )}
-
           {/* 底部间距 */}
           <div style={{ height: 24 }} />
         </div>

@@ -1557,7 +1557,7 @@ button,
 
   .grid,
   .gallery-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 
   .chips-bottom {
@@ -1573,7 +1573,7 @@ button,
 
   .grid,
   .gallery-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 }
 
