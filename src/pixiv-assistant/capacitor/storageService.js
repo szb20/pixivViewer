@@ -203,6 +203,18 @@ export class PixivStorageService {
   }
 
   /**
+   * 幂等取消喜欢（不清除记录/文件，仅清 likedAt）。
+   * @param {string} illustId
+   * @param {number} [pageIndex=0]
+   */
+  async unlike(illustId, pageIndex = 0) {
+    const id = PixivEntity.makeId(illustId, pageIndex);
+    const result = await this.repository.unlike(id);
+    if (result.success) scheduleMetaBackup();
+    return result;
+  }
+
+  /**
    * 回填展示元数据（浏览时把完整缩略图 URL / 标题 / 作者 / tags 写回已保存/喜欢的记录）。
    * @param {string} illustId
    * @param {number} [pageIndex=0]

@@ -11,16 +11,70 @@
 }
 
 .me-page {
-  /* 底部留出固定子标签栏（bottom:48px，高约40px）+ 主 TabBar 的空间 */
-  padding: 0 0 96px;
+  /* 底部留出独立二级菜单（bottom:78px，高约 40px）+ 主底栏的空间 */
+  padding: 0 0 calc(150px + env(safe-area-inset-bottom, 0px));
 }
 
-/* ── 子标签栏：复用主底边栏（tab-bar frosted + tab-btn）样式，
-     位置浮在主 TabBar 上方（bottom:48px），弹入弹出复用 chips-hidden ── */
+/* ── 二级菜单条：独立悬浮在主底栏上方，圆形按钮，不与主底栏相连 ── */
 .sub-tab-bar {
-  bottom: 48px;
-  /* 弹入弹出过渡（chips-hidden 驱动） */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  margin: 0 auto;
+  width: 100%;
+  max-width: 560px;
+  padding: 4px 14px;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 10px;
+  z-index: 9;
+  opacity: 1;
+  transform: translateY(0);
   transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.sub-tab-bar--hidden {
+  opacity: 0;
+  transform: translateY(20px);
+  pointer-events: none;
+}
+
+.sub-tab-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+  color: #d6d9df;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+  transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.sub-tab-btn.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: #fff;
+  box-shadow:
+    0 0 10px rgba(255, 255, 255, 0.7),
+    0 0 20px rgba(255, 255, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 18px rgba(255, 255, 255, 0.7),
+    0 0 32px rgba(255, 255, 255, 0.45);
 }
 
 /* ── 面板容器 ── */

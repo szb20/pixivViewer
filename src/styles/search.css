@@ -222,12 +222,12 @@
    ══════════════════════════════════════════════ */
 
 .search-page {
-  padding-bottom: 120px;
+  padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px));
 }
 
 .search-bar--bottom {
   position: fixed;
-  bottom: 48px;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
   left: 12px;
   right: 12px;
   margin: 0;

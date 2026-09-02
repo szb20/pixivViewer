@@ -16,28 +16,23 @@
 
 .shared-open-transition {
   position: fixed;
-  z-index: 8;
+  z-index: 60;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: 12px;
   pointer-events: none;
-  opacity: 0.96;
+  opacity: 1;
   background: rgba(255, 255, 255, 0.04);
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.42),
     0 0 0 1px rgba(255, 255, 255, 0.08);
   transition:
-    left 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 0.38s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.38s ease,
-    border-radius 0.38s ease;
-  will-change: left, top, width, height, opacity;
+    transform 0.36s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.16s ease 0.24s;
+  will-change: transform;
 }
 
 .shared-open-transition.is-active {
-  opacity: 0.12;
-  border-radius: 2px;
+  opacity: 0;
 }
 
 .shared-open-transition img {
@@ -45,27 +40,6 @@
   height: 100%;
   display: block;
   object-fit: cover;
-}
-
-/* 详情页全局动态背景：用当前作品缩略图做超模糊底图，再盖一层暗色玻璃膜 */
-.detail-glass-bg {
-  position: absolute;
-  inset: -40px;
-  z-index: -1;
-  pointer-events: none;
-  background: transparent;
-  filter: none;
-  opacity: 0;
-  transform: scale(1.08);
-}
-
-.detail-glass-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
 }
 
 /* 全屏"作者作品"页 — 叠加在详情页之上 */
@@ -187,6 +161,7 @@
     opacity: 0.34;
     transform: translateX(42px) scale(0.992);
   }
+
   to {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -198,6 +173,7 @@
     opacity: 0.34;
     transform: translateX(-42px) scale(0.992);
   }
+
   to {
     opacity: 1;
     transform: translateX(0) scale(1);
@@ -518,7 +494,7 @@
 
 /* 后续页背景更模糊更暗，视觉上区分首屏内容 */
 .image-detail-bg--deep {
-  filter: blur(40px) brightness(0.4);
+  filter: blur(48px) brightness(0.38);
 }
 
 .image-detail-main {
@@ -530,12 +506,9 @@
   object-fit: cover;
   z-index: 1;
   opacity: 0;
-  filter: blur(12px) saturate(0.94);
-  transform: scale(1.012);
-  transition:
-    opacity 0.34s ease,
-    filter 0.46s ease,
-    transform 0.46s cubic-bezier(0.2, 0.8, 0.2, 1);
+  filter: none;
+  transform: none;
+  transition: opacity 0.34s ease;
 }
 
 .image-detail-main.is-loaded {
@@ -544,56 +517,78 @@
   transform: scale(1);
 }
 
+/* 预览图加载完成前保留清晰缩略图，避免“清晰→模糊”的中间态 */
+.image-detail-thumb-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.image-detail-thumb-placeholder.is-hidden {
+  opacity: 0;
+}
+
 
 
 /* 堆叠页的主图：由图片自身比例撑起高度（不锁容器比例，避免裁剪/跳变） */
-  .image-detail-main--flow {
-    position: relative;
-    inset: auto;
-    width: 100%;
-    height: auto;
-    display: block;
-    object-fit: initial;
-  }
+.image-detail-main--flow {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: initial;
+}
 
-  /* 详情页预览图加载占位（居中转圈） */
-  .image-detail-placeholder {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 2;
-    pointer-events: none;
-  }
-  .image-detail-placeholder-spinner {
-    width: 22px;
-    height: 22px;
-    border: 2px solid rgba(255, 255, 255, 0.15);
-    border-top-color: rgba(255, 255, 255, 0.7);
-    border-radius: 50%;
-    animation: ptr-spin 0.8s linear infinite;
-  }
+/* 详情页预览图加载占位（居中转圈） */
+.image-detail-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.image-detail-placeholder-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  animation: ptr-spin 0.8s linear infinite;
+}
 
 /* ---- 相关推荐网格 ---- */
 .pixiv-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0;
-  padding: 0;
+  gap: 6px;
+  padding: 4px 8px 8px;
 }
 
 .pixiv-grid-item {
   position: relative;
   border-radius: 0;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.045);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
-  backdrop-filter: blur(14px) saturate(145%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   cursor: pointer;
   transform-origin: center;
-  transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
-  will-change: transform;
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.16s ease;
   display: flex;
   flex-direction: column;
 }
@@ -659,51 +654,47 @@
 .gif-play-icon {
   font-size: 48px;
   color: rgba(255, 255, 255, 0.96);
-  text-shadow:
-    0 0 3px rgba(255, 255, 255, 0.95),
-    0 0 8px rgba(255, 255, 255, 0.75),
-    0 0 16px rgba(255, 255, 255, 0.5),
-    0 0 32px rgba(255, 255, 255, 0.3);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
 }
 
 /* 详情页右下角悬浮 like 按钮 */
 .detail-floating-like {
-    position: fixed;
-    right: 16px;
-    bottom: max(48px, calc(env(safe-area-inset-bottom, 16px) + 32px));
-    z-index: 100;
-  }
+  position: fixed;
+  right: 16px;
+  bottom: max(48px, calc(env(safe-area-inset-bottom, 16px) + 32px));
+  z-index: 100;
+}
 
 /* 详情页左上角"返回主页"按钮 — 复用 .glass-icon-btn（与 like 按钮同尺寸同风格），此处只管定位 */
 .detail-back-home {
-    position: fixed;
-    top: max(16px, env(safe-area-inset-top, 16px));
-    left: 16px;
-    z-index: 100;
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  left: 16px;
+  z-index: 100;
 }
 
-  /* 多图作品页数标注（标在本页图片右下角） */
-  .detail-hero-pages {
-    position: absolute;
-    right: 8px;
-    bottom: 8px;
-    z-index: 2;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(15, 17, 21, 0.55);
-    backdrop-filter: blur(10px) saturate(150%);
-    color: rgba(255, 255, 255, 0.9);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    pointer-events: none;
-  }
+/* 多图作品页数标注（标在本页图片右下角） */
+.detail-hero-pages {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(10px) saturate(150%);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
 
 @media (orientation: landscape) and (max-height: 560px) {
   .detail-overlay {
@@ -814,7 +805,104 @@
   }
 }
 
+/* ── 桌面端：分屏布局（左侧图片 / 右侧信息 + 相关推荐） ── */
+@media (min-width: 900px) {
+  .char-state-bar {
+    max-width: none;
+    width: 100vw;
+    background: rgba(15, 17, 21, 0.14);
+  }
+
+  .char-state-content {
+    flex-direction: row;
+    align-items: stretch;
+    overflow: hidden;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .char-state-content::before {
+    display: none;
+  }
+
+  .detail-media-stack {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+
+  .detail-side-panel {
+    flex: 0 0 clamp(320px, 34vw, 460px);
+    width: clamp(320px, 34vw, 460px);
+    max-width: 44vw;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(15, 17, 21, 0.22);
+    -webkit-backdrop-filter: blur(10px) saturate(130%);
+    backdrop-filter: blur(10px) saturate(130%);
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .detail-page-stack {
+    min-height: 100%;
+  }
+
+  .detail-gif-wrap {
+    min-height: 100%;
+    align-items: center;
+    padding: 12px;
+  }
+
+  .image-detail-hero {
+    width: min(100%, calc(100dvh * 1.2));
+    margin: 0 auto;
+  }
+
+  .pixiv-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 分屏后悬浮爱心移到图片区一侧，避免压住右侧面板 */
+  .detail-floating-like {
+    left: max(16px, env(safe-area-inset-left, 0px));
+    right: auto;
+  }
+}
+
+/* ── 桌面端：详情页悬停反馈 ── */
+@media (hover: hover) and (pointer: fine) {
+  .image-detail-author:hover {
+    color: var(--text-primary);
+  }
+
+  .image-detail-author:hover .image-detail-author-name {
+    text-decoration: underline;
+  }
+
+  .image-detail-tag:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .follow-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.24);
+  }
+
+  .image-detail-pixiv-link:hover {
+    color: var(--text-secondary);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+
   .detail-overlay,
   .author-works-overlay,
   .shared-open-transition,

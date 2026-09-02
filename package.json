@@ -1,7 +1,10 @@
 {
   "name": "pixivviewer",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Pixiv 图片浏览 / 下载应用（个人自用）",
+  "author": "sirius25",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",

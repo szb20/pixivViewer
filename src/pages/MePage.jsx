@@ -27,7 +27,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
   const [visitedSubs, setVisitedSubs] = useState(() => new Set(['liked']));
   // 子页签切换动画：旧面板淡出后再隐藏
   const [subAnim, setSubAnim] = useState(null);
-  // 子标签栏显隐：仿照排行页筛选栏，下滑隐藏、双击"我"tab 切换
+  // 二级菜单显隐：下滑隐藏、上滑显示、回到顶部强制显示
   const [showBar, setShowBar] = useState(true);
   const subTabRef = useRef(subTab);
   subTabRef.current = subTab;
@@ -37,7 +37,7 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
     panelLoadsRef.current[key] = load;
   }, []);
 
-  // 每次切回"我"tab 都默认弹出子标签栏（避免上次下滑隐藏的状态残留）
+  // 每次切回"我" tab 都默认弹出二级菜单
   useEffect(() => {
     if (active) setShowBar(true);
   }, [active]);
@@ -51,27 +51,29 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
     });
   }, [registerRefresh]);
 
-  // 双击"我" tab（refreshToken 变化）→ 切换子标签栏显隐 + 刷新当前活跃子面板
+  // 点击当前"我" tab（refreshToken 变化）→ 刷新当前活跃子面板
   useEffect(() => {
     if (refreshToken > 0) {
-      setShowBar(v => !v);
       panelLoadsRef.current[subTabRef.current]?.();
     }
   }, [refreshToken]);
 
-  // 仅"用户主动下滑"隐藏子标签栏：用 touchmove/wheel 判定，
-  // 切 tab 时恢复滚动位置是程序化的（不产生 touchmove/wheel），不会误隐藏。
+  // 二级菜单显隐与主 TabBar 一致：下滑隐藏、上滑显示、回到顶部强制显示。
+  // 用 touchmove/wheel 判定，切 tab 时恢复滚动位置是程序化的（不产生 touchmove/wheel），不会误触发。
   useEffect(() => {
     const el = getMainScrollEl();
     if (!el) return;
-    // 手势起点：一次触摸/滚动会话内，滚动超过起点 +20px 视为下滑
     let gestureStart = el.scrollTop;
     const onTouchStart = () => { gestureStart = el.scrollTop; };
     const onTouchMove = () => {
-      if (el.scrollTop > gestureStart + 20) setShowBar(false);
+      const top = el.scrollTop;
+      if (top < 24) setShowBar(true);
+      else if (top > gestureStart + 20) setShowBar(false);
+      else if (top < gestureStart - 20) setShowBar(true);
     };
     const onWheel = (e) => {
       if (e.deltaY > 0) setShowBar(false);
+      else if (e.deltaY < 0) setShowBar(true);
     };
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: true });

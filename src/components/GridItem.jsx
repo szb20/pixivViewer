@@ -28,11 +28,13 @@ export default memo(function GridItem({
   variant = 'grid',
   thumbSrc,
   index = 0,
+  ratio,
 }) {
   const v = {
     grid:    { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
     media:   { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
     gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
+    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false, cap: 'grid-cap' },
   }[variant] || { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false };
 
   const [loaded, setLoaded] = useState(false);
@@ -169,7 +171,7 @@ export default memo(function GridItem({
     <div
       ref={itemRef}
       className={`${v.item}${shimmerCls}${stateCls}`}
-      style={{ '--item-index': index % 24 }}
+      style={ratio ? { aspectRatio: ratio, '--item-index': index % 24 } : { '--item-index': index % 24 }}
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}
@@ -179,6 +181,12 @@ export default memo(function GridItem({
       onContextMenu={handleContextMenu}
     >
       {v.wrap ? <div className={v.wrap}>{thumb}</div> : thumb}
+      {loaded && v.cap && (
+        <div className={v.cap}>
+          <p className="grid-cap-title">{img.title || ''}</p>
+          <p className="grid-cap-author">{img.authorName || img.author || ''}</p>
+        </div>
+      )}
       {loaded && isLiked && v.like && (
         <span className={v.like}><HeartIcon filled /></span>
       )}

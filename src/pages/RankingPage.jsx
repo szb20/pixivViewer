@@ -149,22 +149,24 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
     load(false);
   }, [load, hydrated]);
 
-  // 重点当前 tab → 切换筛选栏显示
+  // 点击当前 tab → 刷新当前档位
   useEffect(() => {
     if (refreshToken > 0) {
-      setShowFilters(v => !v);
       loadRef.current(false);
     }
   }, [refreshToken]);
 
-  // 下滑时收起筛选栏
+  // 与主 TabBar 保持一致：下滑收起、上滑显示、回到顶部强制显示
   useEffect(() => {
     const el = getMainScrollEl();
     if (!el) return;
     let last = el.scrollTop;
     const onScroll = () => {
-      if (el.scrollTop > last + 20) setShowFilters(false);
-      last = el.scrollTop;
+      const top = el.scrollTop;
+      if (top < 24) setShowFilters(true);
+      else if (top > last + 20) setShowFilters(false);
+      else if (top < last - 20) setShowFilters(true);
+      last = top;
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
@@ -209,7 +211,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
       )}
       {loadingMore && <div className="hint">加载中...</div>}
       {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
-      <div className={`chips chips-bottom frosted${showFilters ? '' : ' chips-hidden'}`}>
+      <div className={`chips chips-bottom${showFilters ? '' : ' chips-hidden'}`}>
         {MODES.map(m => (
           <button
             key={m.key}

@@ -3,7 +3,7 @@
  *
  * 问题：IndexedDB 位于应用私有 WebView 数据，卸载即清空；而系统相册文件保留。
  * 方案：把「喜欢/已保存」元数据 + cookie 写成一个真正的 JSON 文件，
- *      通过原生 GallerySaver.writeMeta 存到「下载」集合（Download/TeyvatWhisper/），
+ *      通过原生 GallerySaver.writeMeta 存到「下载」集合（Download/PixivViewer/），
  *      随系统存储一起存活；重装后若 IndexedDB 为空则从备份自动恢复。
  */
 import { Capacitor } from '@capacitor/core';
@@ -360,7 +360,7 @@ export async function restoreMetaBackupIfNeeded() {
 }
 
 /**
- * 相册对账（每次启动调用）：扫描 Pictures/TeyvatWhisper 目录，
+ * 相册对账（每次启动调用）：扫描 Pictures/PixivViewer 目录，
  * 为「有文件但没有元数据」的保存图补建最小实体（只填 已保存/下载 字段，
  * 标题/作者/tags 留空，后续由浏览时回填补全）。
  * 幂等：已有元数据的文件跳过；纯数字帧文件跳过。

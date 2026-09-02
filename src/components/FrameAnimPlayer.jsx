@@ -126,7 +126,7 @@ export default function FrameAnimPlayer({
     setLoadProgress(0);
     setError(null);
     cancelAnimationFrame(timerRef.current);
-  }, [illustId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [illustId]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 挂载时检查共享帧缓存：直接恢复帧，跳过 loading 态
   useEffect(() => {
@@ -145,7 +145,7 @@ export default function FrameAnimPlayer({
       autoLoadRef.current = true;
       loadFrames();
     }
-  }, [compact, needsFetch]); // eslint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守护
+  }, [compact, needsFetch]); // oxlint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守护
 
   // 懒加载：点击时下载完整帧（支持后台下载不中断）
   const loadFrames = async (retry = false) => {
@@ -290,7 +290,7 @@ export default function FrameAnimPlayer({
     });
 
     return () => { cancelled = true; };
-  }, [frames, illustId]); // eslint-disable-line react-hooks/exhaustive-deps -- playFrame 定义在后，frames 变化时自动重建
+  }, [frames, illustId]); // oxlint-disable-line react-hooks/exhaustive-deps -- playFrame 定义在后，frames 变化时自动重建
 
   // 播放动画 —— 由 rAF + 累计时间驱动，比 setTimeout 更流畅
   const playFrame = useCallback((timestamp) => {
@@ -378,7 +378,7 @@ export default function FrameAnimPlayer({
       const ctx = canvas.getContext('2d');
       ctx.drawImage(imagesRef.current[0], 0, 0, canvas.width, canvas.height);
     }
-  }, [illustId, frames]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [illustId, frames]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 尺寸计算
   const hasValidSize = canvasSize.width > 0 && canvasSize.height > 0;
