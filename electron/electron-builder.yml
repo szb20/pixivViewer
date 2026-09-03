@@ -5,7 +5,9 @@ directories:
 files:
   - dist/**
   - electron/**
+  - scripts/**
   - package.json
+  - "!**/*.map"
 win:
   target:
     - nsis
@@ -14,5 +16,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # 桌面壳内嵌 Pixiv 代理：关闭自动更新检查（个人工具，避免打包后启动弹更新提示）
+  runAfterFinish: true
 portable:
   artifactName: ${productName}-${version}-portable-${arch}.${ext}

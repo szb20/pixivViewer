@@ -150,14 +150,14 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
         {loading && <div className="hint">加载中...</div>}
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (
-          <div className="pixiv-grid">
+          <div className="grid">
             {items.map((it, index) => (
               <GridItem
                 key={it.illustId}
                 img={it}
                 index={index}
                 onOpen={(openIt) => handleOpen(openIt, index)}
-                variant="media"
+                variant="grid"
                 thumbSrc={gridThumbUrl(it.thumbnailUrl)}
               />
             ))}

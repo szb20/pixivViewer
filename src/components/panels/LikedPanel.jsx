@@ -110,7 +110,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
       {!feed.loading && !feed.error && feed.items.length === 0 && (
         <div className="error-box">还没有喜欢的作品 — 在详情页点击爱心即可收藏</div>
       )}
-      <div className="gallery-grid">
+      <div className="grid">
         {feed.items.map((item, index) => (
           <GridItem
             key={`${item.illustId}_${item.pageIndex ?? 0}`}

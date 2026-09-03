@@ -48,6 +48,10 @@
   --font-md: 14px;
   --font-base: 13px;
   --radius-sm: 8px;
+  /* 作品网格统一规格：间隙 / 侧边留白 / 卡片圆角（所有作品网格共用，勿在各处重复硬编码） */
+  --grid-gap: 2px;
+  --grid-pad-x: 2px;
+  --grid-radius: 8px;
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
@@ -98,9 +102,7 @@ button {
 /* 消除双击缩放手势延迟，点击更跟手（灯箱内部按需覆盖为 touch-action: none） */
 button,
 .chip,
-.grid-item,
-.gallery-item,
-.pixiv-grid-item {
+.grid-item {
   touch-action: manipulation;
 }
 
@@ -293,7 +295,7 @@ button,
   }
 }
 
-/* 顶部状态栏毛玻璃（复用 .frosted） */
+/* 顶部状态栏毛玻璃 */
 .status-bar-frosted {
   position: fixed;
   top: 0;
@@ -342,7 +344,7 @@ button,
 .tab-btn {
   flex: 1;
   padding: 0;
-  font-size: 17px;
+  font-size: 15px;
   border: none;
   background: transparent;
   color: #d9dce2;
@@ -366,11 +368,31 @@ button,
   padding: 0 0 24px;
 }
 
+/* ===== 作品网格统一规格（唯一来源）=====
+   首页瀑布流 / 排行宫格 / 我页收藏 / 作者页 / 相关推荐共用的
+   间隙、侧边留白、卡片圆角在此集中定义，取值来自 :root 变量。
+   各网格只保留自身独有的列数与上下留白，禁止再单独硬编码这三项。 */
+.grid,
+.grid--masonry {
+  padding-left: var(--grid-pad-x);
+  padding-right: var(--grid-pad-x);
+}
+
+.grid,
+.grid--masonry .masonry-cols,
+.grid--masonry .masonry-col {
+  gap: var(--grid-gap);
+}
+
+.grid-item {
+  border-radius: var(--grid-radius);
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 4px;
-  padding: 0 8px 4px;
+  padding-top: 0;
+  padding-bottom: 4px;
 }
 
 /* ===== 推荐页：杂志风瀑布流 ===== */
@@ -424,7 +446,8 @@ button,
 }
 
 .grid--masonry {
-  padding: 6px 8px 0;
+  padding-top: 6px;
+  padding-bottom: 0;
 }
 
 /* 全宽精选位：仅移动端（<900px）保留，桌面瀑布流已移除 */
@@ -436,7 +459,6 @@ button,
 .grid--masonry .masonry-cols {
   display: flex;
   align-items: flex-start;
-  gap: 4px;
 }
 
 .grid--masonry .masonry-col {
@@ -444,53 +466,28 @@ button,
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
 @media (min-width: 900px) {
   .grid--masonry {
-    padding: 6px 12px 0;
+    padding: 6px 8px 0;
   }
 
   .grid--masonry .masonry-cols {
-    gap: 8px;
+    gap: 4px;
   }
 
   .grid--masonry .masonry-col {
-    gap: 8px;
+    gap: 4px;
   }
 }
 
-.masonry-cols {
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.masonry-col {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.grid-item--masonry {
-  border-radius: 12px;
-  /* 加载完成后让图片自然高度撑开卡片，容器不再强制 aspect-ratio，避免 object-fit 截取 */
-}
-
-.grid-item--masonry .grid-thumb {
-  border-radius: 12px;
-  /* 瀑布流按图片自身宽高比等比显示，不裁切 */
-  height: auto;
-  object-fit: contain;
-}
+/* 瀑布流卡片：容器钳制在 >=1 的比例，图片 cover 裁剪填充（占位与成品不再变形） */
 
 /* 角标（页数/GIF/红心/隐藏）保持在文字渐变层之上 */
-.grid-item--masonry .grid-pages,
-.grid-item--masonry .grid-like,
-.grid-item--masonry .grid-play {
+.grid--masonry .grid-item .grid-pages,
+.grid--masonry .grid-item .grid-like,
+.grid--masonry .grid-item .grid-play {
   z-index: 2;
 }
 
@@ -541,7 +538,6 @@ button,
 .grid-item {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.10);
   background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
@@ -556,9 +552,7 @@ button,
     box-shadow 0.16s ease;
 }
 
-.grid-item::before,
-.gallery-item::before,
-.pixiv-grid-item::before {
+.grid-item::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -574,9 +568,7 @@ button,
   transition: opacity 0.16s ease;
 }
 
-.grid-item::after,
-.gallery-item::after,
-.pixiv-grid-item::after {
+.grid-item::after {
   content: '♥';
   position: absolute;
   left: 50%;
@@ -601,57 +593,28 @@ button,
   filter: drop-shadow(0 0 12px rgba(var(--color-like-rgb), 0.55));
 }
 
-.grid-item:active:not(.is-pressing):not(.is-long-pressed),
-.gallery-item:active:not(.is-pressing):not(.is-long-pressed),
-.pixiv-grid-item:active:not(.is-pressing):not(.is-long-pressed) {
-  transform: scale(0.986);
+.grid-item:active:not(.is-pressing):not(.is-long-pressed) {
   z-index: 2;
 }
 
-.grid-item.is-pressing,
-.gallery-item.is-pressing,
-.pixiv-grid-item.is-pressing {
-  transform: scale(0.988);
+.grid-item.is-pressing {
   z-index: 3;
   box-shadow: 0 0 0 1px rgba(var(--color-like-rgb), 0.22);
 }
 
-.grid-item.is-pressing::before,
-.gallery-item.is-pressing::before,
-.pixiv-grid-item.is-pressing::before {
-  opacity: 1;
-  animation: grid-hold-focus 0.5s ease-out forwards;
-}
+/* 按压不再压暗图片：::before 仅用于长按喜欢的确认闪光 */
 
-.grid-item.is-long-pressed,
-.gallery-item.is-long-pressed,
-.pixiv-grid-item.is-long-pressed {
+.grid-item.is-long-pressed {
   z-index: 4;
 }
 
-.grid-item.is-long-pressed::before,
-.gallery-item.is-long-pressed::before,
-.pixiv-grid-item.is-long-pressed::before {
+.grid-item.is-long-pressed::before {
   opacity: 1;
   animation: grid-confirm-flash 0.42s ease-out forwards;
 }
 
-.grid-item.is-long-pressed::after,
-.gallery-item.is-long-pressed::after,
-.pixiv-grid-item.is-long-pressed::after {
+.grid-item.is-long-pressed::after {
   animation: grid-confirm-heart 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-@keyframes grid-hold-focus {
-  0% {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 @keyframes grid-confirm-flash {
@@ -686,6 +649,7 @@ button,
   height: 100%;
   object-fit: cover;
   display: block;
+  opacity: 0;
   filter: blur(10px) saturate(0.92);
   transform: scale(1.025);
   transition:
@@ -694,9 +658,7 @@ button,
     transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.grid-item.is-loaded .grid-thumb,
-.gallery-item.is-loaded .gallery-thumb,
-.pixiv-grid-item.is-loaded .media-card-thumb {
+.grid-item.is-loaded .grid-thumb {
   opacity: 1;
   filter: blur(0) saturate(1);
   transform: scale(1);
@@ -1020,46 +982,7 @@ button,
   padding: 8px 0 4px;
 }
 
-.gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 4px;
-  padding: 0 8px 4px;
-}
-
-.gallery-item {
-  position: relative;
-  aspect-ratio: 1;
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  transform-origin: center;
-  transition:
-    transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.16s ease;
-}
-
-.gallery-thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  opacity: 0;
-  filter: blur(10px) saturate(0.92);
-  transform: scale(1.025);
-  transition:
-    opacity 0.34s ease,
-    filter 0.42s ease,
-    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.gallery-thumb-fallback {
+.grid-thumb-fallback {
   width: 100%;
   height: 100%;
   display: flex;
@@ -1526,11 +1449,10 @@ button,
   }
 
   .tab-btn {
-    font-size: 17px;
+    font-size: 15px;
   }
 
-  .grid,
-  .gallery-grid {
+  .grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
@@ -1555,8 +1477,7 @@ button,
     max-width: none;
   }
 
-  .grid,
-  .gallery-grid {
+  .grid {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 
@@ -1571,8 +1492,7 @@ button,
 
 @media (min-width: 1400px) {
 
-  .grid,
-  .gallery-grid {
+  .grid {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 }
@@ -1631,9 +1551,7 @@ button,
     background: rgba(255, 255, 255, 0.12);
   }
 
-  .grid-item:hover,
-  .gallery-item:hover,
-  .pixiv-grid-item:hover {
+  .grid-item:hover {
     transform: translateY(-3px);
     box-shadow:
       0 12px 34px rgba(0, 0, 0, 0.42),
@@ -1642,9 +1560,7 @@ button,
     z-index: 2;
   }
 
-  .grid-item:hover .grid-thumb,
-  .gallery-item:hover .gallery-thumb,
-  .pixiv-grid-item:hover .media-card-thumb {
+  .grid-item:hover .grid-thumb {
     transform: scale(1.045);
   }
 
@@ -1667,15 +1583,7 @@ button,
   .grid-item,
   .grid-item::before,
   .grid-item::after,
-  .gallery-item,
-  .gallery-item::before,
-  .gallery-item::after,
-  .pixiv-grid-item,
-  .pixiv-grid-item::before,
-  .pixiv-grid-item::after,
   .grid-thumb,
-  .gallery-thumb,
-  .media-card-thumb,
   .grid-like,
   .grid-like::after,
   .toast,
@@ -1693,9 +1601,7 @@ button,
     pointer-events: auto;
   }
 
-  .grid-thumb,
-  .gallery-thumb,
-  .media-card-thumb {
+  .grid-thumb {
     opacity: 1;
     filter: none;
   }

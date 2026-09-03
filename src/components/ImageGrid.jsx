@@ -9,9 +9,10 @@ import { showToast } from '../utils/toast.js';
 
 /* ===== 推荐页瀑布流：按真实宽高比排双列，无尺寸时用稳定的伪随机比例兜底 ===== */
 const MASONRY_RATIOS = [1, 4 / 5, 3 / 4, 1, 4 / 5, 3 / 4, 2 / 3, 1];
-const RATIO_MIN = 0.58;
+// 下限 1：横图压成扁条在网格里观感差，也和加载前的占位比例对不上，统一按方图处理
+const RATIO_MIN = 1;
 const RATIO_MAX = 1.9;
-const FEATURED_MIN = 0.8;
+const FEATURED_MIN = 1;
 const FEATURED_MAX = 1.5;
 
 function clampRatio(v, lo, hi) {
@@ -46,16 +47,31 @@ export function masonryThumbUrl(url) {
 
 const MIN_COL_WIDTH = 250;
 
-function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
-  const containerRef = useRef(null);
+/**
+ * 瀑布流网格 — 唯一实现，首页 feed 与详情页相关推荐共用。
+ * 按估算高度（1/宽高比）均衡分配到各列，列数由容器宽度实时推算。
+ *
+ * @param {array}    items          作品条目
+ * @param {Set}      likedIllustIds 可选，命中则显示红心
+ * @param {function} onOpen         (img, index) => void
+ * @param {function} toggleLike     可选，长按触发
+ * @param {function} onHide         可选，提供则显示 ✕
+ * @param {ref|function} containerRef  可选，转发容器 ref
+ * @param {object}   containerProps 可选，附加到容器（如 data-detail-anchor）
+ */
+export function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide, containerRef, containerProps }) {
+  const innerRef = useRef(null);
   const [colCount, setColCount] = useState(2);
 
   // 用 ResizeObserver 监听容器实际宽度，动态计算列数
   useEffect(() => {
-    const el = containerRef.current;
+    const el = innerRef.current;
     if (!el) return;
     const update = () => {
       const w = el.getBoundingClientRect().width;
+      // 容器 display:none 时宽度为 0：跳过，避免列数被重置为 2，
+      // 恢复可见后列数变化会导致条目跨列搬家（React 重挂 → 图片重新淡入）
+      if (!w) return;
       setColCount(Math.max(2, Math.round(w / MIN_COL_WIDTH)));
     };
     update();
@@ -92,7 +108,7 @@ function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
         img={img}
         index={i}
         ratio={ratios[i]}
-        isLiked={likedIllustIds.has(img.illustId)}
+        isLiked={likedIllustIds?.has(img.illustId) ?? false}
         onOpen={onOpen}
         onLongPress={toggleLike}
         onHide={onHide}
@@ -103,7 +119,16 @@ function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide }) {
   };
 
   return (
-    <div className="grid--masonry" ref={containerRef} style={{ '--masonry-cols': plan.colCount }}>
+    <div
+      className="grid--masonry"
+      ref={(node) => {
+        innerRef.current = node;
+        if (typeof containerRef === 'function') containerRef(node);
+        else if (containerRef) containerRef.current = node;
+      }}
+      {...containerProps}
+      style={{ '--masonry-cols': plan.colCount }}
+    >
       <div className="masonry-cols">
         {plan.cols.map((col, ci) => (
           <div className="masonry-col" key={ci}>{col.map(renderItem)}</div>
@@ -128,8 +153,6 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
     [items, hiddenSet],
   );
 
-  if (!visibleItems?.length) return null;
-
   const handleHide = useCallback((id) => {
     hiddenWorks.add(id);
     showToast('已隐藏，不再推荐', { type: 'info' });
@@ -139,6 +162,8 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
   const handleGridOpen = useCallback((img, index) => {
     onOpen?.(img, { items: visibleItems, index });
   }, [onOpen, visibleItems]);
+
+  if (!visibleItems?.length) return null;
 
   if (resolvedLayout === 'masonry') {
     return (

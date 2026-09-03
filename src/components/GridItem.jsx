@@ -6,10 +6,10 @@ const LONG_PRESS_MS = 500;
 /**
  * 网格项 — 统一复用：缩略图 + 页数角标 + GIF 指示 + 红心 + 点击 + 长按 + 失败占位。
  *
- * variant 决定使用的类名（视觉样式各自独立，逻辑共享）：
- * - grid     → 主 feed（.grid-item/.grid-thumb/.grid-pages/.grid-play/.grid-like）
- * - media    → 相关推荐 / 作者页（.pixiv-grid-item/.media-card-thumb/.pixiv-grid-pages/.gif-play-overlay）
- * - gallery  → 喜欢页（.gallery-item/.gallery-thumb/.gallery-thumb-fallback）
+ * variant 只区分布局与失败处理，视觉类名全局统一为 .grid-item 一套：
+ * - grid     → 宫格（主 feed / 排行 / 收藏 / 作者页 / 相关推荐）
+ * - masonry  → 瀑布流（类名同宫格，样式由 .grid--masonry 容器作用域接管）
+ * - gallery  → 喜欢页（同 .grid-item，额外支持加载失败占位重试）
  *
  * @param {object}  img         作品条目（illustId / thumbnailUrl / mediumUrl / pageCount / type ...）
  * @param {boolean} isLiked     是否显示红心
@@ -31,11 +31,12 @@ export default memo(function GridItem({
   ratio,
 }) {
   const v = {
-    grid: { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    media: { item: 'pixiv-grid-item', thumb: 'media-card-thumb', badge: 'pixiv-grid-pages', play: '', like: '', wrap: 'media-card-thumb-wrap', gifOverlay: true },
-    gallery: { item: 'gallery-item', thumb: 'gallery-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-    masonry: { item: 'grid-item grid-item--masonry', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false },
-  }[variant] || { item: 'grid-item', thumb: 'grid-thumb', badge: 'grid-pages', play: 'grid-play', like: 'grid-like', wrap: '', gifOverlay: false };
+    item: 'grid-item',
+    thumb: 'grid-thumb',
+    badge: 'grid-pages',
+    play: 'grid-play',
+    like: 'grid-like',
+  };
 
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
@@ -119,7 +120,7 @@ export default memo(function GridItem({
     if (error) {
       return (
         <div className={v.item} onClick={retryThumb}>
-          <div className="gallery-thumb-fallback">加载失败<br />点此重试</div>
+          <div className="grid-thumb-fallback">加载失败<br />点此重试</div>
         </div>
       );
     }
@@ -135,18 +136,13 @@ export default memo(function GridItem({
         alt={img.title || ''}
         loading="lazy"
         decoding="async"
-        style={variant === 'grid' ? { opacity: loaded ? 1 : 0 } : undefined}
         onLoad={() => setLoaded(true)}
         onError={() => setError(true)}
       />
-      {loaded && v.badge && pageCount > 1 && (
+      {loaded && pageCount > 1 && (
         <span className={`${v.badge} frosted`}>{pageCount}</span>
       )}
-      {loaded && isGif && (v.gifOverlay ? (
-        <div className="gif-play-overlay"><span className="gif-play-icon">▶</span></div>
-      ) : v.play ? (
-        <span className={v.play}>▶</span>
-      ) : null)}
+      {loaded && isGif && <span className={v.play}>▶</span>}
     </>
   );
 
@@ -155,7 +151,7 @@ export default memo(function GridItem({
       className={`${v.item}${shimmerCls}${stateCls}`}
       style={
         variant === 'masonry'
-          ? { aspectRatio: loaded ? 'auto' : (ratio || 1), '--item-index': index % 24 }
+          ? { aspectRatio: ratio || 1, '--item-index': index % 24 }
           : ratio
             ? { aspectRatio: ratio, '--item-index': index % 24 }
             : { '--item-index': index % 24 }
@@ -168,8 +164,8 @@ export default memo(function GridItem({
       onPointerCancel={cancelLongPress}
       onContextMenu={handleContextMenu}
     >
-      {v.wrap ? <div className={v.wrap}>{thumb}</div> : thumb}
-      {loaded && isLiked && v.like && (
+      {thumb}
+      {loaded && isLiked && (
         <span className={v.like}><HeartIcon filled /></span>
       )}
       {loaded && onHide && (

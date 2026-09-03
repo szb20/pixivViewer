@@ -538,12 +538,25 @@ export default function ImageDetailView({
                   // 避免「网络预览 → 原图」的闪烁
                   let heroUrl = localUrl;
                   if (!heroUrl && !(isSaved && !localResolved)) {
-                    heroUrl = (p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '')
-                      || illustData?.illust?.images?.[p]?.url
-                      || illustData?.illust?.images?.[p]?.mediumUrl
-                      || pixivPageUrl(image?.thumbnailUrl || '', p)
-                      // 方形裁剪图（square1200）作为最后兜底，仅当等比候选全部失败时才使用
-                      || illustData?.illust?.images?.[p]?.previewUrl;
+                    const imgs = illustData?.illust?.images || [];
+                    if (p === 0) {
+                      // 第 0 页：网格缩略图（540px 等比 small 档）稳定优先，
+                      // 不随详情接口返回而切换 src，避免图片重挂载导致整页闪烁。
+                      heroUrl = masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '')
+                        || imgs[p]?.previewUrl
+                        || imgs[p]?.url
+                        || imgs[p]?.mediumUrl
+                        || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p);
+                    } else {
+                      // 后续页：只用详情接口的 small 档 previewUrl，与第 0 页画质一致；
+                      // 接口未就绪时保持空（占位），不先落到 master 大图再切回来造成跳变。
+                      heroUrl = imgs[p]?.previewUrl || '';
+                      if (!heroUrl && imgs.length) {
+                        heroUrl = imgs[p]?.url
+                          || imgs[p]?.mediumUrl
+                          || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p);
+                      }
+                    }
                   }
                   return (
                     <DetailPageBlock

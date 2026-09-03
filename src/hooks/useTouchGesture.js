@@ -46,6 +46,7 @@ export function useTouchGesture({
   const touchTimeRef = useRef(0);
   const lastTapRef = useRef(0);
   const lastTapTimeRef = useRef(0); // 触摸已处理时间戳，防止合成 click 重复触发
+  const doubleTapTimeRef = useRef(0); // 触摸双击已处理时间戳，防止合成 dblclick 重复触发
   const springRef = useRef(null);
   const trackAnimRef = useRef(null);
 
@@ -588,6 +589,7 @@ export function useTouchGesture({
     const prevLastTap = lastTapRef.current;
     if (pinchRef.current.fingers <= 1 && tapDur < 200 && e.changedTouches.length === 1 && moved < 15) {
       if (now - prevLastTap < 350) {
+        doubleTapTimeRef.current = now;
         handleDoubleTap(e);
         lastTapRef.current = 0;
         pinchRef.current.fingers = 0;
@@ -933,6 +935,8 @@ export function useTouchGesture({
   // ── 鼠标双击缩放 ─────────────────────────────────────────
   const handleDoubleClick = useCallback((e) => {
     if (zoomDisabled) return;
+    // 忽略触摸双击合成的 dblclick：触摸路径已在 handleTouchEnd 中处理过双击缩放
+    if (Date.now() - doubleTapTimeRef.current < 450) return;
     if (isInteractiveTarget(e.target)) return;
     e.stopPropagation();
     handleDoubleTap(e);

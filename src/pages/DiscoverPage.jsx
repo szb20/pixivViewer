@@ -35,9 +35,11 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       log.debug('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawList.length, 'err:', r?.error || '');
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
+      // 已喜欢/已保存的作品以后不再推荐，但保留在当前已展示的网格里
+      const likedOrSaved = buildLikedOrSavedSet(pixivCache);
       const filtered = rawList.filter(img => {
-        // 跳过已显示过的 + 用户"不想看"的
-        return !seen.has(img.illustId) && !hiddenWorks.has(img.illustId);
+        // 跳过已显示过的 + 用户"不想看"的 + 已喜欢/已保存的
+        return !seen.has(img.illustId) && !hiddenWorks.has(img.illustId) && !likedOrSaved.has(img.illustId);
       });
       startRef.current += rawList.length;
       return {
@@ -50,12 +52,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
     },
   });
 
-  // 已喜欢/已保存的作品不再出现在推荐网格里
-  const likedOrSaved = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
-  const visibleItems = useMemo(
-    () => feed.items.filter(img => !likedOrSaved.has(img.illustId)),
-    [feed.items, likedOrSaved],
-  );
+  // 注意：已喜欢/已保存的作品保留在当前网格，仅在 fetchPage 中对后续新页过滤
 
   const needCookie = !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
 
@@ -69,7 +66,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
             <button className="error-retry" onClick={() => feed.load(false)}>重试</button>
           </div>
         ))}
-      <ImageGrid items={visibleItems} likedSet={likedSet} onOpen={onOpen} layout="masonry" />
+      <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} layout="masonry" />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}

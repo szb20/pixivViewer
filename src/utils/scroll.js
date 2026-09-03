@@ -48,3 +48,25 @@ export function restoreMainScroll(scrollTop = 0) {
   };
   requestAnimationFrame(reassert);
 }
+
+/**
+ * 冷启动恢复主列表滚动位置（页面快照）。
+ *
+ * 与 restoreMainScroll 的区别：冷启动时列表数据走 IndexedDB 水合 + 渲染，
+ * 内容高度不是立即就绪的，直接设置 scrollTop 会被钳制到 0。
+ * 这里轮询等待可滚动高度就绪后再恢复；超时则放弃（当没有快照处理）。
+ */
+export function restoreMainScrollOnColdStart(scrollTop = 0, timeoutMs = 5000) {
+  if (!scrollTop) return;
+  const start = Date.now();
+  const tryRestore = () => {
+    const el = getMainScrollEl();
+    // 内容（含懒加载占位）已渲染出足够高度，或已超时 → 恢复（浏览器会自动钳制越界值）
+    if (!el || el.scrollHeight - el.clientHeight >= scrollTop - 2 || Date.now() - start > timeoutMs) {
+      restoreMainScroll(scrollTop);
+      return;
+    }
+    setTimeout(tryRestore, 120);
+  };
+  tryRestore();
+}

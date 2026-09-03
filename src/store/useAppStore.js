@@ -39,12 +39,32 @@ const authorItemToDetail = (item, fallback = {}) => ({
     _openTransition: item._openTransition,
 });
 
+// ===== 滚动位置持久化（页面快照）=====
+// 会话内靠页面保活（display:none）+ 内存 scrollPositions 恢复；
+// App 重启后内存丢失，这里把各 tab 的 scrollTop 存进 localStorage，
+// 冷启动后 setActiveTab / 挂载恢复逻辑直接从持久化值取。
+const SCROLL_STORE_KEY = 'pv:scrollPositions';
+
+function loadScrollPositions() {
+    try {
+        return JSON.parse(localStorage.getItem(SCROLL_STORE_KEY) || '{}') || {};
+    } catch {
+        return {};
+    }
+}
+
+function persistScrollPositions(sp) {
+    try {
+        localStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(sp || {}));
+    } catch { /* 存储不可用时静默跳过 */ }
+}
+
 export const useAppStore = create((set, get) => ({
     // ========== Tab 相关 ==========
     tabs: TABS,
     activeTab: 'discover',
     visitedTabs: new Set(['discover']),
-    scrollPositions: {},
+    scrollPositions: loadScrollPositions(),
     tabTokens: {},
     refreshFns: {},
 
@@ -54,6 +74,7 @@ export const useAppStore = create((set, get) => ({
         const nextScrollPositions = el
             ? { ...scrollPositions, [activeTab]: el.scrollTop }
             : scrollPositions;
+        persistScrollPositions(nextScrollPositions);
         if (key === activeTab) {
             set({
                 scrollPositions: nextScrollPositions,
@@ -69,7 +90,9 @@ export const useAppStore = create((set, get) => ({
 
     saveScrollPosition: (tab, scrollTop) => {
         const { scrollPositions } = get();
-        set({ scrollPositions: { ...scrollPositions, [tab]: scrollTop } });
+        const next = { ...scrollPositions, [tab]: scrollTop };
+        persistScrollPositions(next);
+        set({ scrollPositions: next });
     },
 
     registerRefresh: (key, fn) => {
@@ -106,7 +129,9 @@ export const useAppStore = create((set, get) => ({
         const { activeTab, scrollPositions } = get();
         const el = getMainScrollEl();
         if (el) {
-            set({ scrollPositions: { ...scrollPositions, [activeTab]: el.scrollTop } });
+            const next = { ...scrollPositions, [activeTab]: el.scrollTop };
+            persistScrollPositions(next);
+            set({ scrollPositions: next });
         }
         // 普通路径打开详情（列表/推荐/相关）→ 清除"从作者页返回"标记
         set({ detailImage: img, detailContext: normalizeDetailContext(img, context), returnToAuthor: null });
@@ -143,7 +168,8 @@ export const useAppStore = create((set, get) => ({
     openAuthorImage: (item, context = null) => {
         const { authorWorks } = get();
         const returnTarget = authorWorks;
-        set({ authorWorks: null });
+        // 不卸载作者页（保持 <img> 存活），由 App 层在详情打开时用 display:none 隐藏，
+        // 避免退出详情时作者页重挂载导致全部图片重新加载
         const fallback = {
             authorName: authorWorks?.authorName || '',
             authorId: authorWorks?.authorId || '',
@@ -160,7 +186,8 @@ export const useAppStore = create((set, get) => ({
 
     searchByTag: (tag) => {
         if (!tag) return;
-        set({ detailImage: null, detailContext: null, returnToAuthor: null });
+        // 同时关掉作者页（若从作者页详情跳转），否则作者页会残留在搜索页上层
+        set({ detailImage: null, detailContext: null, returnToAuthor: null, authorWorks: null });
         const { visitedTabs } = get();
         const newVisited = new Set(visitedTabs);
         newVisited.add('search');

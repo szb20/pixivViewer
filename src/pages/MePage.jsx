@@ -8,10 +8,10 @@ import { getMainScrollEl } from '../utils/scroll.js';
 import '../styles/me.css';
 
 const SUB_TABS = [
-  { key: 'following',     label: '关注' },
+  { key: 'following', label: '关注' },
   { key: 'subscriptions', label: '订阅' },
-  { key: 'liked',         label: '喜欢' },
-  { key: 'bookmarks',     label: '收藏' },
+  { key: 'liked', label: '喜欢' },
+  { key: 'bookmarks', label: '收藏' },
 ];
 
 /**
@@ -22,7 +22,7 @@ const SUB_TABS = [
  * - MePage 在 'me' 键上注册一个聚合刷新回调，转发给当前活跃子面板
  * - 不把 registerRefresh / refreshToken 透传给子面板，避免三面板互相覆盖或全量刷新
  */
-export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
+export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
   const [subTab, setSubTab] = useState('liked');
   const [visitedSubs, setVisitedSubs] = useState(() => new Set(['liked']));
   // 子页签切换动画：旧面板淡出后再隐藏
@@ -103,19 +103,6 @@ export default function MePage({ active, showSettingsBtn, onOpen, onOpenSettings
   return (
     <div className="page me-page">
       <SubTabBar tabs={SUB_TABS} active={subTab} onChange={switchSubTab} hidden={!showBar} />
-
-      {active && showSettingsBtn && (
-        <button
-          className="glass-icon-btn me-settings-btn"
-          onClick={onOpenSettings}
-          aria-label="设置"
-        >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
-      )}
 
       <div className="me-panels">
         {visitedSubs.has('following') && (

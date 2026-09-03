@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import TabBar from './components/TabBar.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
@@ -16,6 +17,7 @@ import { storageFacade } from './pixiv-assistant/index.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useStartupProxyCheck } from './hooks/useStartupProxyCheck.js';
+import { restoreMainScrollOnColdStart } from './utils/scroll.js';
 import './index.css';
 import './styles/detail.css';
 
@@ -62,6 +64,12 @@ export default function App() {
   // 启动时代理连通性检测（zustand action 引用稳定，可直接作为回调传入）
   useStartupProxyCheck(setShowProxyError);
 
+  // 冷启动恢复上次离开时的滚动位置（页面快照）
+  useEffect(() => {
+    const { scrollPositions, activeTab: tab } = useAppStore.getState();
+    restoreMainScrollOnColdStart(scrollPositions?.[tab] || 0);
+  }, []);
+
   return (
     <div className={`app${chromeHidden ? ' chrome-hidden' : ''}`}>
       <ErrorBoundary>
@@ -107,7 +115,6 @@ export default function App() {
               <ErrorBoundary key="me">
                 <MePage
                   active={activeTab === 'me'}
-                  showSettingsBtn={activeTab === 'me' && !settingsOpen && !detailImage && !authorWorks}
                   onOpen={openDetail}
                   onOpenSettings={openSettings}
                   onAuthorWorks={openAuthorWorks}
@@ -125,6 +132,19 @@ export default function App() {
       <PullToRefresh onRefresh={triggerPullRefresh} />
 
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} hidden={chromeHidden} />
+
+      {!settingsOpen && !detailImage && !authorWorks && (
+        <button
+          className={`glass-icon-btn me-settings-btn${chromeHidden ? ' me-settings-btn--hidden' : ''}`}
+          onClick={openSettings}
+          aria-label="设置"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      )}
 
       {settingsOpen && <SettingsPage onClose={closeSettings} />}
 
@@ -150,13 +170,16 @@ export default function App() {
       )}
 
       {authorWorks && (
-        <AuthorWorksPage
-          authorId={authorWorks.authorId}
-          authorName={authorWorks.authorName}
-          authorAvatar={authorWorks.authorAvatar}
-          onClose={closeAuthorWorks}
-          onOpenImage={openAuthorImage}
-        />
+        /* 详情打开时隐藏作者页而非卸载，保住 <img> 不重载 */
+        <div style={detailImage ? { display: 'none' } : undefined}>
+          <AuthorWorksPage
+            authorId={authorWorks.authorId}
+            authorName={authorWorks.authorName}
+            authorAvatar={authorWorks.authorAvatar}
+            onClose={closeAuthorWorks}
+            onOpenImage={openAuthorImage}
+          />
+        </div>
       )}
 
       <ToastHost />
