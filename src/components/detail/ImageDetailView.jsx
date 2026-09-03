@@ -23,6 +23,10 @@ import { buildLikedOrSavedSet } from '../../utils/worksState.js';
 
 const log = createLogger('ImageDetail');
 const RELATED_PAGE_SIZE = 30;
+// 相关推荐模块级缓存（跨详情实例共享）：返回上一作品时 ImageDetailView 因 key 变化整体重挂载，
+// 实例内缓存会丢失、推荐区需重新走网络，导致滚动恢复等待且闪烁。LRU 上限防长会话膨胀。
+const relatedCache = new Map();
+const RELATED_CACHE_MAX = 20;
 
 /**
  * 图片详情页 — 全屏展示大图 + 信息 + 操作 + 相关推荐网格。
@@ -42,7 +46,6 @@ export default function ImageDetailView({
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [loadingMoreRelated, setLoadingMoreRelated] = useState(false);
   const [relatedHasMore, setRelatedHasMore] = useState(false);
-  const relatedCacheRef = useRef({}); // illustId → { related, nextStart, hasMore }
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
   const [illustData, setIllustData] = useState(null);
   const authorId = String(image?.authorId || illustData?.illust?.authorId || '');
@@ -60,6 +63,7 @@ export default function ImageDetailView({
   const loadingRelatedRef = useRef(false);
   const relatedRequestSeqRef = useRef(0);
   const currentIllustIdRef = useRef('');
+  const backfillFingerprintRef = useRef({}); // illustId → meta 指纹，避免每次 like/save 重复回填
   const pageRefs = useRef({}); // page → DOM 节点（跳转 / 视口定位）
   const [showFloatingLike, setShowFloatingLike] = useState(true);
   // 已保存到本地的页 → 本地 blob URL（灯箱直接用本地文件，避免重复下载）
@@ -169,10 +173,13 @@ export default function ImageDetailView({
     };
   }, [image?.illustId, image?._pageIndex, restoreScroll, restoreAnchor, applyScrollRestore]);
 
-  // 详情数据加载完、页面真实高度就绪后，校正一次滚动位置（仅当用户尚未手动滚动时）
+  // 详情数据/相关推荐渲染后校正滚动位置（仅当用户尚未手动滚动时）。
+  // 返回上一作品时组件因 key 变化整体重挂载，related 需重新渲染——高度就绪前
+  // 恢复 scrollTop 会被钳制、锚点节点也不存在，必须等 related 渲染后再校正。
   useEffect(() => {
     const last = lastRestoreRef.current;
-    if (!last || !illustData || last.illustId !== image?.illustId) return;
+    if (!last || last.illustId !== image?.illustId) return;
+    if (!illustData && !related.length) return; // 至少一个数据源到位才有校正意义
     const el = contentRef.current;
     if (!el) return;
     if (userInteractedAfterRestoreRef.current) return; // 用户已手动滚动/触控，不打扰
@@ -181,7 +188,7 @@ export default function ImageDetailView({
       const appliedTop = applyScrollRestore();
       lastRestoreRef.current = { ...last, appliedTop };
     });
-  }, [illustData]); // oxlint-disable-line react-hooks/exhaustive-deps
+  }, [illustData, related.length]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 获取作品详情（所有页共享同一份 API 响应，仅依赖 illustId，不随翻页重复请求）
   useEffect(() => {
@@ -216,6 +223,10 @@ export default function ImageDetailView({
       tags,
     };
     if (!meta.thumbnailUrl && !meta.title && !meta.authorName && tags.length === 0) return;
+    // 幂等守卫：同一作品的 meta 指纹未变化则不重复回填（避免每次 like/save 对全部已保存页重跑存储 I/O）
+    const fingerprint = JSON.stringify(meta);
+    if (backfillFingerprintRef.current[image.illustId] === fingerprint) return;
+    backfillFingerprintRef.current[image.illustId] = fingerprint;
     (async () => {
       const totalPages = Math.max(pageCount, image?._totalPages || 1);
       for (let p = 0; p < totalPages; p++) {
@@ -316,7 +327,8 @@ export default function ImageDetailView({
         log.debug('单页下载补拉详情失败，保持兜底 URL:', e?.message || e);
       }
     }
-    showToast(alreadySaved ? '该页已在相册中' : `开始下载第 ${page + 1} 页…`, { type: 'info' });
+    // 已在相册的页由最终分支统一提示，避免「已保存」提示重复弹两次
+    if (!alreadySaved) showToast(`开始下载第 ${page + 1} 页…`, { type: 'info' });
     try {
       const r = await saveItem(buildSaveItem(page, imgs));
       if (r?.success || r?.cached) {
@@ -332,7 +344,9 @@ export default function ImageDetailView({
   }, [image, buildSaveItem, pixivCache, setPixivCache, illustData]);
 
   // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
-  const lightboxMedia = (() => {
+  // useMemo：仅依赖详情/本地URL/作品变化，避免相关推荐追加、缓存更新等无关渲染
+  // 反复重建数组引用，触发 MediaLightbox 相邻预加载 effect 重复 new Image() 预热。
+  const lightboxMedia = useMemo(() => {
     if (!image?.illustId) return [];
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const items = [];
@@ -372,7 +386,7 @@ export default function ImageDetailView({
       });
     }
     return items;
-  })();
+  }, [image, illustData, localSrcs, pageCount, isGif]);
 
   // 灯箱打开时注册返回处理（关闭灯箱，不回退到详情栈）
   useEffect(() => {
@@ -433,7 +447,10 @@ export default function ImageDetailView({
           seen.add(item.illustId);
           merged.push(item);
         }
-        relatedCacheRef.current[illustId] = { related: merged, nextStart, hasMore };
+        relatedCache.set(illustId, { related: merged, nextStart, hasMore });
+        if (relatedCache.size > RELATED_CACHE_MAX) {
+          relatedCache.delete(relatedCache.keys().next().value); // 淘汰最旧
+        }
         return merged;
       });
       relatedNextStartRef.current = nextStart;
@@ -458,7 +475,7 @@ export default function ImageDetailView({
     relatedRequestSeqRef.current += 1;
     const requestSeq = relatedRequestSeqRef.current;
     loadingRelatedRef.current = false;
-    const cached = relatedCacheRef.current[illustId];
+    const cached = relatedCache.get(illustId);
     if (cached) {
       setRelated(cached.related);
       relatedNextStartRef.current = cached.nextStart || cached.related?.length || 0;

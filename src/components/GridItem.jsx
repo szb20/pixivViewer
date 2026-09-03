@@ -94,8 +94,8 @@ export default memo(function GridItem({
   const handleClick = useCallback(() => {
     // 长按已触发下载 → 本次合成的 click 不再打开
     if (longPressTriggeredRef.current) { longPressTriggeredRef.current = false; return; }
-    onOpen?.(img);
-  }, [img, onOpen]);
+    onOpen?.(img, index);
+  }, [img, index, onOpen]);
 
   const handleContextMenu = useCallback((e) => {
     e.preventDefault();

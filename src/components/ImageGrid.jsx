@@ -1,4 +1,4 @@
-import { memo, useMemo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useMemo, useEffect, useRef, useState } from 'react';
 import GridItem from './GridItem.jsx';
 import { pixivPageUrl } from '../pixiv-assistant/core/utils.js';
 import { buildLikedIllustIdSet } from '../utils/worksState.js';
@@ -130,10 +130,15 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
 
   if (!visibleItems?.length) return null;
 
-  const handleHide = (id) => {
+  const handleHide = useCallback((id) => {
     hiddenWorks.add(id);
     showToast('已隐藏，不再推荐', { type: 'info' });
-  };
+  }, []);
+
+  // 宫格分支：稳定的 onOpen（带 index），避免每个 item 内联箭头函数破坏 GridItem memo
+  const handleGridOpen = useCallback((img, index) => {
+    onOpen?.(img, { items: visibleItems, index });
+  }, [onOpen, visibleItems]);
 
   if (resolvedLayout === 'masonry') {
     return (
@@ -155,7 +160,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
           img={img}
           index={index}
           isLiked={likedIllustIds.has(img.illustId)}
-          onOpen={(openImg) => onOpen?.(openImg, { items: visibleItems, index })}
+          onOpen={handleGridOpen}
           onLongPress={toggleLike}
           onHide={handleHide}
           variant="grid"
