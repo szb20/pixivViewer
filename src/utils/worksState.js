@@ -7,8 +7,8 @@ export function buildLikedOrSavedSet(pixivCache) {
   const set = new Set();
   for (const [key, val] of Object.entries(pixivCache || {})) {
     if (!val?.liked && !val?.saved) continue;
-    const idx = key.lastIndexOf('_');
-    if (idx > 0) set.add(key.slice(0, idx));
+    const idx = String(key).lastIndexOf('_');
+    if (idx > 0) set.add(String(key).slice(0, idx));
   }
   return set;
 }
@@ -17,8 +17,9 @@ export function buildLikedOrSavedSet(pixivCache) {
 export function buildLikedIllustIdSet(likedSet) {
   const set = new Set();
   likedSet?.forEach((key) => {
-    const idx = key.lastIndexOf('_');
-    if (idx > 0) set.add(key.slice(0, idx));
+    const k = String(key);
+    const idx = k.lastIndexOf('_');
+    if (idx > 0) set.add(k.slice(0, idx));
   });
   return set;
 }

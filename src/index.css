@@ -482,7 +482,7 @@ button,
   }
 }
 
-/* 瀑布流卡片：容器钳制在 >=1 的比例，图片 cover 裁剪填充（占位与成品不再变形） */
+/* 瀑布流卡片：容器钳制比例，图片按自身高度显示（长图完整保留，不再被裁成方图） */
 
 /* 角标（页数/GIF/红心/隐藏）保持在文字渐变层之上 */
 .grid--masonry .grid-item .grid-pages,
@@ -552,47 +552,6 @@ button,
     box-shadow 0.16s ease;
 }
 
-.grid-item::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0;
-  background:
-    radial-gradient(circle at center,
-      rgba(var(--color-like-rgb), 0.20) 0%,
-      rgba(var(--color-like-rgb), 0.10) 28%,
-      rgba(15, 17, 21, 0.18) 62%,
-      rgba(15, 17, 21, 0.36) 100%);
-  transition: opacity 0.16s ease;
-}
-
-.grid-item::after {
-  content: '♥';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 4;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid rgba(var(--color-like-rgb), 0.38);
-  background: rgba(15, 17, 21, 0.42);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
-  backdrop-filter: blur(12px) saturate(150%);
-  color: var(--color-like);
-  font-size: 24px;
-  line-height: 1;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%) scale(0.76);
-  filter: drop-shadow(0 0 12px rgba(var(--color-like-rgb), 0.55));
-}
-
 .grid-item:active:not(.is-pressing):not(.is-long-pressed) {
   z-index: 2;
 }
@@ -602,46 +561,8 @@ button,
   box-shadow: 0 0 0 1px rgba(var(--color-like-rgb), 0.22);
 }
 
-/* 按压不再压暗图片：::before 仅用于长按喜欢的确认闪光 */
-
 .grid-item.is-long-pressed {
   z-index: 4;
-}
-
-.grid-item.is-long-pressed::before {
-  opacity: 1;
-  animation: grid-confirm-flash 0.42s ease-out forwards;
-}
-
-.grid-item.is-long-pressed::after {
-  animation: grid-confirm-heart 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-@keyframes grid-confirm-flash {
-  0% {
-    opacity: 0.86;
-  }
-
-  100% {
-    opacity: 0;
-  }
-}
-
-@keyframes grid-confirm-heart {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.72);
-  }
-
-  34% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.08);
-  }
-
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.18);
-  }
 }
 
 .grid-thumb {
@@ -1581,8 +1502,6 @@ button,
 
   .tab-bar,
   .grid-item,
-  .grid-item::before,
-  .grid-item::after,
   .grid-thumb,
   .grid-like,
   .grid-like::after,

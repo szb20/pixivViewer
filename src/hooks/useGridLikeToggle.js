@@ -13,17 +13,19 @@ import { saveAllPages } from '../api/saveAllPages.js';
  * @returns {(img: object) => Promise<void>} toggleLike
  */
 export function useGridLikeToggle() {
-  const { pixivCache, setPixivCache } = usePixivCache();
+  const { setPixivCache } = usePixivCache();
 
   const toggleLike = useCallback(async (img) => {
     if (!img?.illustId) return;
-    const ck = getCompositeKey({ illustId: img.illustId, _pageIndex: img._pageIndex ?? 0 });
-    const prevLiked = pixivCache[ck]?.liked || false;
-    const nextLiked = !prevLiked;
-    setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: nextLiked, likedAt: Date.now() } }));
+    const ck = getCompositeKey({ illustId: String(img.illustId), _pageIndex: img._pageIndex ?? 0 });
+    let prevLiked = false;
+    setPixivCache(prev => {
+      prevLiked = !!prev[ck]?.liked;
+      return { ...prev, [ck]: { ...prev[ck], liked: !prevLiked, likedAt: Date.now() } };
+    });
     let likedOk = false;
     try {
-      const result = await storageFacade.toggleLike(img.illustId, img._pageIndex ?? 0, buildLikeMeta(img));
+      const result = await storageFacade.toggleLike(String(img.illustId), img._pageIndex ?? 0, buildLikeMeta(img));
       if (result.success) {
         likedOk = result.liked;
         setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
@@ -38,11 +40,11 @@ export function useGridLikeToggle() {
 
     // 只有喜欢真的成功（且是"喜欢"而非"取消"）才下载全部页
     if (!likedOk) return;
-    const { saved, exists } = await saveAllPages(img, { pixivCache, setPixivCache });
+    const { saved, exists } = await saveAllPages(img, { setPixivCache });
     if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`, { type: 'success' });
     else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });
     else if (exists > 0) showToast('已在相册中', { type: 'info' });
-  }, [pixivCache, setPixivCache]);
+  }, [setPixivCache]);
 
   return toggleLike;
 }

@@ -9,11 +9,10 @@ import { showToast } from '../utils/toast.js';
 
 /* ===== 推荐页瀑布流：按真实宽高比排双列，无尺寸时用稳定的伪随机比例兜底 ===== */
 const MASONRY_RATIOS = [1, 4 / 5, 3 / 4, 1, 4 / 5, 3 / 4, 2 / 3, 1];
-// 下限 1：横图压成扁条在网格里观感差，也和加载前的占位比例对不上，统一按方图处理
-const RATIO_MIN = 1;
-const RATIO_MAX = 1.9;
-const FEATURED_MIN = 1;
-const FEATURED_MAX = 1.5;
+// 高宽比 h/w >= 1：卡片只允许竖图/方图（w/h <= 1），横图一律钳成方图
+const RATIO_MIN = 0.5; // 最极端竖图：高 = 2×宽
+const RATIO_MAX = 1;   // 上限 1：不允许横图
+const MIN_RATIO_FOR_HEIGHT = 0.3; // 列高估算保底，防除零
 
 function clampRatio(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -26,11 +25,12 @@ function fallbackRatio(illustId) {
   return MASONRY_RATIOS[n % MASONRY_RATIOS.length];
 }
 
-function getCardRatio(img, featured = false) {
+function getCardRatio(img) {
   const w = Number(img?.width) || 0;
   const h = Number(img?.height) || 0;
   const r = w > 0 && h > 0 ? w / h : fallbackRatio(img?.illustId);
-  return featured ? clampRatio(r, FEATURED_MIN, FEATURED_MAX) : clampRatio(r, RATIO_MIN, RATIO_MAX);
+  // 高宽比 h/w >= 1：只允许竖图/方图（w/h <= 1），横图一律钳成方图
+  return clampRatio(r, RATIO_MIN, RATIO_MAX);
 }
 
 // 方形缩略图（c/250x250_80_a2/.../square1200.jpg）→ small 档（c/540x540_70/.../master1200.jpg）。
@@ -108,7 +108,7 @@ export function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide,
         img={img}
         index={i}
         ratio={ratios[i]}
-        isLiked={likedIllustIds?.has(img.illustId) ?? false}
+        isLiked={likedIllustIds?.has(String(img.illustId)) ?? false}
         onOpen={onOpen}
         onLongPress={toggleLike}
         onHide={onHide}

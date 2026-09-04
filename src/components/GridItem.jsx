@@ -68,6 +68,7 @@ export default memo(function GridItem({
   const startLongPress = useCallback((e) => {
     if (!onLongPress) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'touch') e.preventDefault();
     pressStartRef.current = { x: e.clientX, y: e.clientY };
     longPressTriggeredRef.current = false;
     setPressState('pressing');
@@ -79,7 +80,7 @@ export default memo(function GridItem({
   const moveLongPress = useCallback((e) => {
     const start = pressStartRef.current;
     if (!start) return;
-    if (Math.abs(e.clientX - start.x) > 10 || Math.abs(e.clientY - start.y) > 10) {
+    if (Math.abs(e.clientX - start.x) > 16 || Math.abs(e.clientY - start.y) > 16) {
       clearTimeout(longPressTimerRef.current);
       pressStartRef.current = null;
       setPressState('idle');
@@ -152,9 +153,7 @@ export default memo(function GridItem({
       style={
         variant === 'masonry'
           ? { aspectRatio: ratio || 1, '--item-index': index % 24 }
-          : ratio
-            ? { aspectRatio: ratio, '--item-index': index % 24 }
-            : { '--item-index': index % 24 }
+          : { '--item-index': index % 24 }
       }
       onClick={handleClick}
       onPointerDown={startLongPress}

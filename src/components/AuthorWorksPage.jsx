@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { registerBackHandler } from '../utils/backHandler.js';
-import { gridThumbUrl } from '../utils/quality.js';
 import { createLogger } from '../utils/logger.js';
-import GridItem from './GridItem.jsx';
+import ImageGrid from './ImageGrid.jsx';
 import FollowIcon from './icons/FollowIcon.jsx';
 import { useAuthorProfile } from '../hooks/useAuthorProfile.js';
 
@@ -150,18 +149,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
         {loading && <div className="hint">加载中...</div>}
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (
-          <div className="grid">
-            {items.map((it, index) => (
-              <GridItem
-                key={it.illustId}
-                img={it}
-                index={index}
-                onOpen={(openIt) => handleOpen(openIt, index)}
-                variant="grid"
-                thumbSrc={gridThumbUrl(it.thumbnailUrl)}
-              />
-            ))}
-          </div>
+          <ImageGrid items={items} onOpen={handleOpen} layout="masonry" />
         )}
         {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
         {loadingMore && <div className="hint">加载中...</div>}

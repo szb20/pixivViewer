@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useRef } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet, usePixivCache } from '../context/pixivCacheContext.js';
@@ -30,23 +30,41 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
     },
     fetchPage: async (append, currentItems) => {
       if (!append) startRef.current = 0;
-      const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
-      const rawList = r?.illusts || [];
-      log.debug('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawList.length, 'err:', r?.error || '');
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
       // 已喜欢/已保存的作品以后不再推荐，但保留在当前已展示的网格里
       const likedOrSaved = buildLikedOrSavedSet(pixivCache);
-      const filtered = rawList.filter(img => {
-        // 跳过已显示过的 + 用户"不想看"的 + 已喜欢/已保存的
-        return !seen.has(img.illustId) && !hiddenWorks.has(img.illustId) && !likedOrSaved.has(img.illustId);
-      });
-      startRef.current += rawList.length;
+
+      // 整页全被过滤（已喜欢/已保存/不想看）时继续向后拉，避免流提前中断；
+      // 连续 3 页都过滤不出新内容（或上游重复返回同一批）才判定断流
+      const collected = [];
+      let rawTotal = 0;
+      let emptyStreak = 0;
+      let lastError = '';
+      while (rawTotal < PAGE_SIZE * 3 && emptyStreak < 3) {
+        const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
+        const rawList = r?.illusts || [];
+        lastError = r?.message || r?.error || '';
+        if (!rawList.length) break;
+        rawTotal += rawList.length;
+        startRef.current += rawList.length;
+        let fresh = 0;
+        for (const img of rawList) {
+          // 跳过已显示过的 + 用户"不想看"的 + 已喜欢/已保存的
+          if (seen.has(img.illustId) || hiddenWorks.has(img.illustId) || likedOrSaved.has(img.illustId)) continue;
+          seen.add(img.illustId);
+          collected.push(img);
+          fresh++;
+        }
+        if (collected.length >= PAGE_SIZE) break;
+        emptyStreak = fresh === 0 ? emptyStreak + 1 : 0;
+      }
+      log.debug('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawTotal, 'fresh:', collected.length, 'err:', lastError || '');
       return {
-        list: filtered,
-        // 有返回且本页有新内容才继续加载（避免 discovery 数量不足时过早停止）
-        hasMore: rawList.length > 0 && filtered.length > 0,
-        emptyMessage: r?.message || r?.error || '推荐为空（需要 Cookie）',
+        list: collected,
+        // 上游仍有返回就继续；连续多页无新内容才断流（整页被过滤不算断流）
+        hasMore: rawTotal > 0 && emptyStreak < 3,
+        emptyMessage: lastError || '推荐为空（需要 Cookie）',
         cacheExtra: { start: startRef.current },
       };
     },

@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { storageFacade } from '../../pixiv-assistant/index.js';
 import { pixivApi } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import GridItem from '../../components/GridItem.jsx';
+import ImageGrid from '../../components/ImageGrid.jsx';
 
 const PAGE_SIZE = 24;
 const CACHE_KEY = 'me_liked';
@@ -96,7 +97,12 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
     return () => window.removeEventListener('pixiv:liked-changed', onLikedChanged);
   }, [reload]);
 
-  const detailItems = feed.items.map(likedItemToDetail);
+  const detailItems = useMemo(() => feed.items.map(likedItemToDetail), [feed.items]);
+  // 喜欢页所有作品天然"已喜欢"：构造 key 集（illustId_pageIndex），让红心全部点亮
+  const likedSet = useMemo(
+    () => new Set(feed.items.map(it => `${it.illustId}_${it.pageIndex ?? it._pageIndex ?? 0}`)),
+    [feed.items],
+  );
 
   return (
     <>
@@ -110,18 +116,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
       {!feed.loading && !feed.error && feed.items.length === 0 && (
         <div className="error-box">还没有喜欢的作品 — 在详情页点击爱心即可收藏</div>
       )}
-      <div className="grid">
-        {feed.items.map((item, index) => (
-          <GridItem
-            key={`${item.illustId}_${item.pageIndex ?? 0}`}
-            img={item}
-            index={index}
-            isLiked
-            onOpen={(it) => onOpen?.(likedItemToDetail(it), { items: detailItems, index })}
-            variant="gallery"
-          />
-        ))}
-      </div>
+      <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} layout="masonry" />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
     </>
   );
