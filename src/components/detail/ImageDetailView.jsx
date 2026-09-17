@@ -22,7 +22,9 @@ import { showToast } from '../../utils/toast.js';
 import { StatusBar } from '@capacitor/status-bar';
 
 const log = createLogger('ImageDetail');
-const RELATED_PAGE_SIZE = 30;
+// Pixiv 的 recommend/init 不是可翻页列表：start 基本无效（同一作品换 start 仍是同一批），
+// 推荐池本身有上限（实测约 85 条），limit 拉满即一次返回全部——所以不做无限滚动，一次取完。
+const RELATED_FETCH_LIMIT = 100;
 // 相关推荐模块级缓存（跨详情实例共享）：返回上一作品时 ImageDetailView 因 key 变化整体重挂载，
 // 实例内缓存会丢失、推荐区需重新走网络，导致滚动恢复等待且闪烁。LRU 上限防长会话膨胀。
 const relatedCache = new Map();
@@ -44,8 +46,6 @@ export default function ImageDetailView({
   const excludedAtStartup = recommendationExcludedSet || new Set();
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
-  const [loadingMoreRelated, setLoadingMoreRelated] = useState(false);
-  const [relatedHasMore, setRelatedHasMore] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
   const [illustData, setIllustData] = useState(null);
   const authorId = String(image?.authorId || illustData?.illust?.authorId || '');
@@ -57,9 +57,7 @@ export default function ImageDetailView({
   } = useAuthorProfile(authorId, image?.authorAvatar);
   const contentRef = useRef(null);
   const relatedRef = useRef(null); // 相关推荐哨兵
-  const relatedSentinelRef = useRef(null); // 相关推荐分页触底哨兵
   const relatedInViewRef = useRef(false); // 相关推荐是否在视口内
-  const relatedNextStartRef = useRef(0);
   const loadingRelatedRef = useRef(false);
   const relatedRequestSeqRef = useRef(0);
   const currentIllustIdRef = useRef('');
@@ -412,7 +410,7 @@ export default function ImageDetailView({
     return () => { io.disconnect(); root.removeEventListener('scroll', update); };
   }, [related.length, image?.illustId]);
 
-  const loadRelatedPage = useCallback(async ({ append = false, requestSeq } = {}) => {
+  const loadRelated = useCallback(async ({ requestSeq } = {}) => {
     const illustId = image?.illustId ? String(image.illustId) : '';
     if (!illustId || loadingRelatedRef.current) return;
     const activeSeq = requestSeq || relatedRequestSeqRef.current;
@@ -420,47 +418,32 @@ export default function ImageDetailView({
       relatedRequestSeqRef.current === activeSeq &&
       currentIllustIdRef.current === illustId
     );
-    const start = append ? relatedNextStartRef.current : 0;
     loadingRelatedRef.current = true;
-    if (append) setLoadingMoreRelated(true);
-    else setLoadingRelated(true);
+    setLoadingRelated(true);
     try {
-      const result = await pixivApi.fetchRelated(illustId, {
-        limit: RELATED_PAGE_SIZE,
-        start,
-      });
+      const result = await pixivApi.fetchRelated(illustId, { limit: RELATED_FETCH_LIMIT });
       if (!isCurrentRequest()) return;
       const rawList = result?.illusts || [];
       const parsed = rawList.length > 0 ? parsePixivResults(rawList) : [];
-      const nextStart = start + rawList.length;
-      const hasMore = rawList.length >= RELATED_PAGE_SIZE;
-      setRelated(prev => {
-        if (!isCurrentRequest()) return prev;
-        const base = append ? prev : [];
-        const seen = new Set(base.map(item => item.illustId));
-        const merged = [...base];
-        for (const item of parsed) {
-          if (seen.has(item.illustId)) continue;
-          seen.add(item.illustId);
-          merged.push(item);
-        }
-        relatedCache.set(illustId, { related: merged, nextStart, hasMore });
-        if (relatedCache.size > RELATED_CACHE_MAX) {
-          relatedCache.delete(relatedCache.keys().next().value); // 淘汰最旧
-        }
-        return merged;
-      });
-      relatedNextStartRef.current = nextStart;
-      setRelatedHasMore(hasMore);
+      const seen = new Set();
+      const merged = [];
+      for (const item of parsed) {
+        if (seen.has(item.illustId)) continue;
+        seen.add(item.illustId);
+        merged.push(item);
+      }
+      relatedCache.set(illustId, merged);
+      if (relatedCache.size > RELATED_CACHE_MAX) {
+        relatedCache.delete(relatedCache.keys().next().value); // 淘汰最旧
+      }
+      setRelated(merged);
     } catch (e) {
       if (!isCurrentRequest()) return;
       log.warn('fetchRelated failed:', e);
-      if (!append) setRelatedHasMore(false);
     } finally {
       if (isCurrentRequest()) {
         loadingRelatedRef.current = false;
         setLoadingRelated(false);
-        setLoadingMoreRelated(false);
       }
     }
   }, [image?.illustId]);
@@ -474,32 +457,13 @@ export default function ImageDetailView({
     loadingRelatedRef.current = false;
     const cached = relatedCache.get(illustId);
     if (cached) {
-      setRelated(cached.related);
-      relatedNextStartRef.current = cached.nextStart || cached.related?.length || 0;
-      setRelatedHasMore(!!cached.hasMore);
+      setRelated(cached);
       setLoadingRelated(false);
-      setLoadingMoreRelated(false);
       return;
     }
     setRelated([]);
-    relatedNextStartRef.current = 0;
-    setRelatedHasMore(false);
-    loadRelatedPage({ append: false, requestSeq });
-  }, [image?.illustId, loadRelatedPage]);
-
-  // 相关推荐滚到底部自动追加
-  useEffect(() => {
-    const root = contentRef.current;
-    const el = relatedSentinelRef.current;
-    if (!root || !el || !relatedHasMore) return;
-    const io = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && relatedHasMore && !loadingRelatedRef.current) {
-        loadRelatedPage({ append: true });
-      }
-    }, { root, rootMargin: '420px 0px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [relatedHasMore, loadRelatedPage, related.length]);
+    loadRelated({ requestSeq });
+  }, [image?.illustId, loadRelated]);
 
   // 详情页滚动方向 → 隐藏/显示系统状态栏
   useEffect(() => {
@@ -670,9 +634,7 @@ export default function ImageDetailView({
                 onSelectImage={onSelectImage}
                 onLongPress={toggleLike}
               />
-              {relatedHasMore && <div ref={relatedSentinelRef} style={{ height: 1 }} />}
-              {loadingMoreRelated && <div className="hint">加载更多推荐...</div>}
-              {!loadingMoreRelated && !relatedHasMore && <div className="hint">没有更多推荐了</div>}
+              <div className="hint">没有更多推荐了</div>
             </>
           )}
           {/* 底部间距 */}
