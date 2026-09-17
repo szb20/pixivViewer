@@ -127,7 +127,7 @@ export default function App() {
         </main>
       </ErrorBoundary>
 
-      <div className="status-bar-frosted" />
+      <div className={`status-bar-frosted${chromeHidden ? ' status-bar-frosted--hidden' : ''}`} />
 
       <PullToRefresh onRefresh={triggerPullRefresh} />
 

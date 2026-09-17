@@ -72,7 +72,6 @@ export default function DetailPageBlock({
   const bg = placeholderUrl || (page === 0
     ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), page))
     : '');
-  const bgClass = page === 0 ? 'image-detail-bg' : 'image-detail-bg image-detail-bg--deep';
   // 详情流只展示 540px 预览图；原图只由灯箱按需加载。
   const src = previewUrl;
   const loaded = !!src && loadedSrc === src;
@@ -97,9 +96,13 @@ export default function DetailPageBlock({
       onPointerLeave={cancelLongPress}
       onPointerCancel={cancelLongPress}
       onContextMenu={handleContextMenu}
-      style={{ aspectRatio: heroRatio, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'pan-y' }}
+      /* 预览图加载完成后不再锁容器比例：高度完全由图片自身(--flow)决定，
+         避免「容器比例(猜的/第 0 页的)」与真实图片比例不一致时，
+         图片底部露出一条毛玻璃底色（模糊底图 + 卡片 backdrop-filter）。 */
+      style={{ aspectRatio: loaded ? undefined : heroRatio, WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'pan-y' }}
     >
-      {bg && <img className={bgClass} src={bg} alt="" draggable={false} />}
+      {/* 这里不再铺一层模糊底图：它会和主图比例不一致时露出一条
+          「模糊 + 压暗」的色带，看起来就是图片被毛玻璃盖住了一部分。 */}
       {!src ? (
         <>
           {bg && (

@@ -307,6 +307,15 @@ button,
   pointer-events: none;
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(8px);
+  /* 隐藏时整块毛玻璃随系统状态栏一起上滑收走（不做透明度渐隐），
+     缓动/时长与底部 .tab-bar 保持一致，上下 chrome 出入同步 */
+  transform: translateY(0);
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 向下滚动隐藏 chrome：毛玻璃底整体上滑出屏（-1px 连底部那条 1px 分隔线一起收走） */
+.status-bar-frosted--hidden {
+  transform: translateY(calc(-100% - 1px));
 }
 
 .tab-bar {
@@ -574,9 +583,9 @@ button,
   filter: blur(10px) saturate(0.92);
   transform: scale(1.025);
   transition:
-    opacity 0.34s ease,
-    filter 0.42s ease,
-    transform 0.42s cubic-bezier(0.2, 0.8, 0.2, 1);
+    opacity 0.15s ease,
+    filter 0.16s ease,
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .grid-item.is-loaded .grid-thumb {

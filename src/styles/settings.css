@@ -12,7 +12,6 @@
   backdrop-filter: blur(14px) saturate(145%);
   display: flex;
   flex-direction: column;
-  animation: overlay-in 0.24s ease;
 }
 
 /* ── 毛玻璃 sticky 顶栏 ── */

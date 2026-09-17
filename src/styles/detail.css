@@ -18,7 +18,6 @@
   background: #000;
   display: flex;
   flex-direction: column;
-  animation: overlay-in 0.24s ease;
 }
 
 /* 顶部栏 + 系统栏整体毛玻璃：sticky 在滚动内容之上，内容从底部滚过时产生模糊 */
@@ -120,26 +119,50 @@
   animation: detail-slide-from-left 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* 整页退场：详情页整体右滑滑出，露出下面的列表 */
+/* 进入详情页不做动画：直接铺满屏幕（之前从右滑入与内部内容滑动叠加，观感很怪） */
+.detail-overlay--exit {
+  animation: detail-exit-to-right 0.26s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  /* 提前把整页提层并禁用毛玻璃：Android WebView 里 backdrop-filter 位于被移动的
+     层内时容易采样出错发黑，离场过程中会渲染成黑块。 */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+.detail-overlay--exit .frosted,
+.detail-overlay--exit .glass-icon-btn {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@keyframes detail-exit-to-right {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
 @keyframes detail-slide-from-right {
   from {
-    opacity: 0.34;
     transform: translateX(42px) scale(0.992);
   }
 
   to {
-    opacity: 1;
     transform: translateX(0) scale(1);
   }
 }
 
+/* 切换作品只做位移+缩放，不参与 opacity 渐变：
+   本面板自带不透明黑底、底下 overlay 也是黑的，一旦整体淡入就是整屏掉黑（"黑闪一下"）。 */
 @keyframes detail-slide-from-left {
   from {
-    opacity: 0.34;
     transform: translateX(-42px) scale(0.992);
   }
 
   to {
-    opacity: 1;
     transform: translateX(0) scale(1);
   }
 }
@@ -451,29 +474,15 @@
   position: relative;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.022);
-  -webkit-backdrop-filter: blur(8px) saturate(132%);
-  backdrop-filter: blur(8px) saturate(132%);
+  /* 这里是图片卡片：不要加 backdrop-filter。
+     卡片一旦带毛玻璃，图片比例与卡片比例不一致时（比例还没校正到真实值）
+     露出的那一条就会被渲染成「毛玻璃压在图片上」。 */
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.05),
     0 14px 36px rgba(0, 0, 0, 0.18);
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
-}
-
-.image-detail-bg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(20px) brightness(0.72);
-  z-index: 0;
-}
-
-/* 后续页背景更模糊更暗，视觉上区分首屏内容 */
-.image-detail-bg--deep {
-  filter: blur(48px) brightness(0.5);
 }
 
 .image-detail-main {
@@ -494,7 +503,8 @@
   transform: scale(1);
 }
 
-/* 预览图加载完成前保留清晰缩略图，避免“清晰→模糊”的中间态 */
+/* 预览图加载完成前保留清晰缩略图，避免“清晰→模糊”的中间态。
+   不加过渡：主图就是同一张图，直接换掉即可，任何淡入都会被看成「进入动画」。 */
 .image-detail-thumb-placeholder {
   position: absolute;
   inset: 0;
@@ -503,7 +513,6 @@
   object-fit: cover;
   z-index: 1;
   opacity: 1;
-  transition: opacity 0.3s ease;
   pointer-events: none;
 }
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { StatusBar } from '@capacitor/status-bar';
 import ImageDetailView from './ImageDetailView.jsx';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
-import { getDetailScrollEl } from '../../utils/scroll.js';
+import { getDetailScrollEl, getMainScrollEl } from '../../utils/scroll.js';
 import { showToast } from '../../utils/toast.js';
 import BackIcon from '../icons/BackIcon.jsx';
 
@@ -19,6 +20,8 @@ const navKeyOf = (img) => (
 const SWIPE_TRIGGER_PX = 72;
 const SWIPE_DIRECTION_RATIO = 1.35;
 const SLIDE_ANIMATION_MS = 260;
+// 退出动画时长：与 detail.css 的 detail-exit-to-right 保持一致，动画结束后才真正卸载详情页
+const EXIT_ANIMATION_MS = 260;
 
 const normalizeNavState = (img, navContext) => {
   const items = Array.isArray(navContext?.items) ? navContext.items.filter(Boolean) : [];
@@ -61,13 +64,63 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
   const [image, setImage] = useState(initialImage);
   const [restoreState, setRestoreState] = useState({ top: 0, anchor: null });
   const [slideDirection, setSlideDirection] = useState(0);
+  const [exiting, setExiting] = useState(false);
   const stackRef = useRef([initialImage]);
   const navStateRef = useRef(normalizeNavState(initialImage, navContext));
   const navStateMapRef = useRef({});
   const swipeRef = useRef(null);
   const slideTimerRef = useRef(null);
   const handleBackRef = useRef(null);
+  const exitTimerRef = useRef(null);
+  const exitCloseRef = useRef(null);
+  const finishExitRef = useRef(() => { });
+  const exitingRef = useRef(false);
   const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
+
+  // 切换作品时播放入场滑动：先清掉方向（让动画能重新触发），下一帧再挂上方向 class
+  const animateSlide = useCallback((direction) => {
+    if (!direction) return;
+    clearTimeout(slideTimerRef.current);
+    setSlideDirection(0);
+    requestAnimationFrame(() => {
+      setSlideDirection(direction);
+      slideTimerRef.current = window.setTimeout(() => setSlideDirection(0), SLIDE_ANIMATION_MS);
+    });
+  }, []);
+
+  // 退出前把系统状态栏对齐到主列表期望的状态（网格滚过 top 就该隐藏，否则显示）。
+  // 关键：必须在离场动画"开始前"同步，不能拖到详情页卸载时再 show()——
+  // Android 上切换状态栏会伴随一次 WebView 尺寸变化 → 整屏重排重绘，
+  // 而卸载正好发生在网格露出的那一帧，于是表现为"退出时网格黑屏闪一下"。
+  // 提前到动画开始同步，这次重排会发生在详情页仍然铺满屏幕的时候，肉眼看不到。
+  const syncStatusBarWithMainList = () => {
+    const el = getMainScrollEl();
+    const shouldHide = (el?.scrollTop || 0) >= 24;
+    try {
+      (shouldHide ? StatusBar.hide() : StatusBar.show()).catch(() => { });
+    } catch (_) { }
+  };
+
+  // 退出详情页：只播"整页右滑离场"，动画结束后才真正卸载。
+  // 卸载时机由 animationend 驱动（定时器仅兜底）：用定时器会和 CSS 时长有误差，
+  // 提前卸载会在网格露出那一帧多刷一次黑底，就是"退出时网格黑屏闪一下"的来源。
+  const beginExit = useCallback((closeFn) => {
+    if (exitingRef.current) return;
+    exitingRef.current = true;
+    syncStatusBarWithMainList();
+    exitCloseRef.current = closeFn || null;
+    setExiting(true);
+    exitTimerRef.current = window.setTimeout(finishExitRef.current, EXIT_ANIMATION_MS + 240);
+  }, []);
+
+  // 离场动画真正结束：此时整页已完全滑出屏幕，再卸载就不会露出黑底
+  const finishExit = useCallback(() => {
+    clearTimeout(exitTimerRef.current);
+    const closeFn = exitCloseRef.current;
+    exitCloseRef.current = null;
+    closeFn?.();
+  }, []);
+  finishExitRef.current = finishExit;
 
   // 外部 prop 变化（从列表/推荐直接打开新作品）→ 重置栈
   useEffect(() => {
@@ -75,10 +128,11 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       stackRef.current = [initialImage];
       navStateRef.current = normalizeNavState(initialImage, navContext);
       navStateMapRef.current = {};
+      animateSlide(1);
       setImage(initialImage);
       setRestoreState({ top: 0, anchor: null });
     }
-  }, [initialImage, navContext]);
+  }, [initialImage, navContext, animateSlide]);
 
   const getCurrentScrollState = useCallback(() => captureScrollAnchor(), []);
 
@@ -92,18 +146,11 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
 
   const switchToImage = useCallback((next, restore = { top: 0, anchor: null }, direction = 0) => {
     if (!next) return;
-    if (direction) {
-      clearTimeout(slideTimerRef.current);
-      setSlideDirection(0);
-      requestAnimationFrame(() => {
-        setSlideDirection(direction);
-        slideTimerRef.current = window.setTimeout(() => setSlideDirection(0), SLIDE_ANIMATION_MS);
-      });
-    }
+    animateSlide(direction);
     stackRef.current[stackRef.current.length - 1] = next;
     setRestoreState(restore);
     setImage(next);
-  }, []);
+  }, [animateSlide]);
 
   const handleSelect = (img, context = null) => {
     if (!img) return;
@@ -112,6 +159,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     log.info('push:', cur?.illustId, 'stack:', stackRef.current.length, '→', img.illustId);
     stackRef.current.push(img);
     navStateRef.current = normalizeNavState(img, context);
+    animateSlide(1);
     setRestoreState({ top: 0, anchor: null });
     setImage(img);
   };
@@ -146,10 +194,11 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       navStateRef.current = navStateMapRef.current[scrollKeyOf(prev)] || normalizeNavState(prev, navContext);
       setRestoreState(scrollMapRef.current[scrollKeyOf(prev)] || { top: 0, anchor: null });
       log.info('restore:', prev.illustId);
+      animateSlide(-1);
       setImage(prev);
     } else {
       log.info('close');
-      onClose();
+      beginExit(onClose);
     }
   };
   handleBackRef.current = handleBack;
@@ -162,7 +211,10 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     });
   }, []);
 
-  useEffect(() => () => clearTimeout(slideTimerRef.current), []);
+  useEffect(() => () => {
+    clearTimeout(slideTimerRef.current);
+    clearTimeout(exitTimerRef.current);
+  }, []);
 
   const handleTouchStart = useCallback((e) => {
     if (e.touches.length !== 1 || isInteractiveTarget(e.target)) {
@@ -263,7 +315,11 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
 
   return (
     <div
-      className="detail-overlay"
+      className={`detail-overlay${exiting ? ' detail-overlay--exit' : ''}`}
+      onAnimationEnd={(e) => {
+        // 只认整页离场动画自身的事件，忽略内部子元素的动画
+        if (e.target === e.currentTarget && exitingRef.current) finishExit();
+      }}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -271,7 +327,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <button className="glass-icon-btn detail-back-home" onClick={onExitToHome} aria-label="返回主页">
+      <button className="glass-icon-btn detail-back-home" onClick={() => beginExit(onExitToHome)} aria-label="返回主页">
         <BackIcon />
       </button>
       <ImageDetailView
