@@ -53,11 +53,15 @@ export function proxyThumb(url) {
 /**
  * 从 Pixiv API 返回的 page 0 URL 生成指定页码的 i.pixiv.re 图片 URL。
  *
- * Pixiv CDN URL 格式：
- *   https://i.pximg.net/img-master/img/YYYY/MM/DD/HH/MM/SS/{id}_p0_master1200.jpg
- *   https://i.pximg.net/c/250x250_80_a2/img-master/img/.../{id}_p0_square1200.jpg
- * 返回格式：
- *   https://i.pixiv.re/img-master/img/YYYY/MM/DD/HH/MM/SS/{id}_p{page}_master1200.jpg
+ * 支持三类 Pixiv CDN URL：
+ *   1. img-master 标准图：…/img-master/img/YYYY/MM/DD/HH/MM/SS/{id}_p{n}_square1200.jpg
+ *      → img-master/img/{date}/{id}_p{page}_master{size}.jpg
+ *   2. custom-thumb 自定义封面：…/custom-thumb/img/{date}/{id}_p{n}_custom1200.jpg
+ *      → custom-thumb/img/{date}/{id}_p{page}_custom{size}.jpg
+ *   3. ugoira 动图（无页码后缀）：…/img-master/img/{date}/{id}_square1200.jpg
+ *      → img-master/img/{date}/{id}_master{size}.jpg（不加 _p{page}）
+ *   4. 2026 起新格式（{id} 后带 32 位内容哈希）：
+ *      …/{date}/{id}-{hash32}_p{n}_square1200.jpg → 同 1/2/3 规则
  *
  * @param {string} baseUrl — Pixiv API 返回的 page 0 URL（任意尺寸）
  * @param {number} page — 目标页码
@@ -72,18 +76,30 @@ export function pixivPageUrl(baseUrl, page, size = 1200) {
 
   // 匹配日期路径 + illustId（从各种 URL 格式中提取）
   // 日期格式: YYYY/MM/DD/HH/MM/SS (6组)
-  const match = baseUrl.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)_/);
+  // 2026 起部分新作品 URL 带内容哈希：{id}-{32位hex}_p{n}_…，需容忍 "-hash" 段
+  const match = baseUrl.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)(?:-[0-9a-f]{32})?_/);
   if (match) {
     const datePath = match[1];
     const illustId = match[2];
-    let result = `https://i.pixiv.re/img-master/img/${datePath}/${illustId}_p${page}_master${size}.jpg`;
+
+    // 检测 URL 类型：custom-thumb 保留自定义封面路径；ugoira（无 _p/_u 页码后缀）不加页码
+    const basename = baseUrl.split('/').pop();
+    const isCustomThumb = baseUrl.includes('custom-thumb');
+    // ugoira 无 _p{n}/_u{n} 页码后缀（例: {id}_square1200.jpg），普通图有 _p0/_u0
+    const hasPageSuffix = /_(p|u)\d+/.test(basename);
+
+    const pageSuffix = hasPageSuffix ? `_p${page}` : '';
+    const pathType = isCustomThumb ? 'custom-thumb' : 'img-master';
+    const suffixType = isCustomThumb ? 'custom' : 'master';
+
+    let result = `https://i.pixiv.re/${pathType}/img/${datePath}/${illustId}${pageSuffix}_${suffixType}${size}.jpg`;
     if (USE_PROXY) result = result.replace(/https:\/\/i\.pixiv\.re/, '/pixiv-img');
     return result;
   }
 
-  // 兜底：从 URL 末尾提取最长连续数字作为 illustId
-  const parts = baseUrl.match(/\/(\d{7,})(?:_|\.|$)/);
-  const idMatch = parts ? parts[1] : baseUrl.match(/(\d+)/)?.[1];
+  // 兜底：从 URL 提取 illustId（优先 ≥7 位数字段，避免误抓 c/250x250 这类裁剪尺寸）
+  const parts = baseUrl.match(/\/(\d{7,})(?:-[0-9a-f]{32}|_|\.|$)/);
+  const idMatch = parts ? parts[1] : baseUrl.match(/\d{7,}/)?.[0] || baseUrl.match(/(\d+)/)?.[1];
   const fallback = pixivReUrl(idMatch || '', page);
   if (!idMatch) log.debug('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
   return fallback;
@@ -105,13 +121,13 @@ export function pixivOriginalUrl(baseUrl, page = 0) {
   // i.pximg.net 原图 URL（img-original）：解析 illustId 后走 pixiv.re 原图短链，
   // 避免使用 i.pixiv.re/img-original/ 路径（该路径支持不可靠，可能返回错误图）
   if (baseUrl.includes('img-original') || /_p\d+\.\w+$/.test(baseUrl)) {
-    const idMatch = baseUrl.match(/(\d+)_p\d+\.\w+$/);
+    const idMatch = baseUrl.match(/(\d+)(?:-[0-9a-f]{32})?_p\d+\.\w+$/);
     if (idMatch) return pixivReUrl(idMatch[1], page);
     return proxyThumb(baseUrl.replace(/_p\d+(?=\.\w+$)/, `_p${page}`));
   }
-  // pixiv.re / img-master 缩略图等：优先匹配 _p{n} 前的真实 illustId，
+  // pixiv.re / img-master 缩略图等：优先匹配 _p{n} 前的真实 illustId（容忍 -hash 段），
   // 避免误取 URL 里的裁剪尺寸（如 c/250x250_80_a2 中的 250）
-  const idMatch = baseUrl.match(/(\d+)_p\d+/) || baseUrl.match(/(\d+)/);
+  const idMatch = baseUrl.match(/(\d+)(?:-[0-9a-f]{32})?_p\d+/) || baseUrl.match(/(\d{7,})/);
   if (idMatch) return pixivReUrl(idMatch[1], page);
   return baseUrl;
 }
@@ -173,8 +189,10 @@ export function parseCacheFileName(name) {
   // 注意：author/title 可能为空（如修复前的遗留文件），用 * 不用 +
   const newGif = base.match(/^pixiv_(\d+)_g(\d+)_\[(.*?)\]_\[(.*)\]$/i);
   if (newGif) {
-    return { illustId: newGif[1], pageIndex: parseInt(newGif[2], 10), isGif: true,
-      authorName: newGif[3], author: newGif[3], title: newGif[4] };
+    return {
+      illustId: newGif[1], pageIndex: parseInt(newGif[2], 10), isGif: true,
+      authorName: newGif[3], author: newGif[3], title: newGif[4]
+    };
   }
 
   // 新格式 ugoira（旧过渡）：pixiv_ugoira_{illustId}[_[{authorName}]_[{title}]]
@@ -182,23 +200,29 @@ export function parseCacheFileName(name) {
   if (oldNewGif) {
     const rest = base.slice(('pixiv_ugoira_' + oldNewGif[1]).length);
     const metaMatch = rest.match(/^_\[(.*?)\]_\[(.*)\]$/);
-    return { illustId: oldNewGif[1], pageIndex: 0, isGif: true,
-      ...(metaMatch ? { authorName: metaMatch[1], author: metaMatch[1], title: metaMatch[2] } : {}) };
+    return {
+      illustId: oldNewGif[1], pageIndex: 0, isGif: true,
+      ...(metaMatch ? { authorName: metaMatch[1], author: metaMatch[1], title: metaMatch[2] } : {})
+    };
   }
 
   // 新格式（双括号）：pixiv_{illustId}_p{page}_[{authorName}]_[{title}]
   // 注意：author/title 可能为空，用 * 不用 +
   const doubleBracket = base.match(/^pixiv_(\d+)_p(\d+)_\[(.*?)\]_\[(.*)\]$/);
   if (doubleBracket) {
-    return { illustId: doubleBracket[1], pageIndex: parseInt(doubleBracket[2], 10), isGif: false,
-      authorName: doubleBracket[3], author: doubleBracket[3], title: doubleBracket[4] };
+    return {
+      illustId: doubleBracket[1], pageIndex: parseInt(doubleBracket[2], 10), isGif: false,
+      authorName: doubleBracket[3], author: doubleBracket[3], title: doubleBracket[4]
+    };
   }
 
   // 新格式（单括号，旧文件重命名）：pixiv_{illustId}_p{page}_[{combined}]
   const singleBracket = base.match(/^pixiv_(\d+)_p(\d+)_\[(.*)\]$/);
   if (singleBracket) {
-    return { illustId: singleBracket[1], pageIndex: parseInt(singleBracket[2], 10), isGif: false,
-      authorName: singleBracket[3], author: singleBracket[3] };
+    return {
+      illustId: singleBracket[1], pageIndex: parseInt(singleBracket[2], 10), isGif: false,
+      authorName: singleBracket[3], author: singleBracket[3]
+    };
   }
 
   // 旧格式 ugoira：ugoira_{illustId}[_...]

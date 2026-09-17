@@ -5,9 +5,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  /* 纯黑不透明：不透出上一层列表页 */
   background: #000;
-  animation: overlay-in 0.24s ease;
   overflow: hidden;
   isolation: isolate;
 }

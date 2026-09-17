@@ -211,7 +211,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
   // ── 桌面端：鼠标拖拽切换作品（镜像触摸滑动逻辑） ──
   const handleMouseDown = useCallback((e) => {
     if (e.button !== 0) return;
-    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+    if (e.nativeEvent?.sourceCapabilities?.firesTouchEvents) return;
     if (isInteractiveTarget(e.target)) {
       swipeRef.current = null;
       return;
@@ -276,7 +276,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       </button>
       <ImageDetailView
         key={image?.illustId ? `${image.illustId}:${image._pageIndex ?? 0}` : 'detail'}
-        className={slideDirection < 0 ? 'detail-slide-from-left' : (slideDirection > 0 ? 'detail-slide-from-right' : '')}
+        className={`${slideDirection < 0 ? 'detail-slide-from-left' : (slideDirection > 0 ? 'detail-slide-from-right' : '')}`}
         image={image}
         onBack={handleBack}
         onSelectImage={handleSelect}

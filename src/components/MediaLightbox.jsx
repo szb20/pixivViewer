@@ -379,17 +379,20 @@ export default function MediaLightbox({
       ref={overlayRef}
       className={`lightbox-overlay${isGif ? ' lightbox-overlay--gif' : ''}${isVideo ? ' video-lightbox-overlay' : ''}${closing ? ' closing' : ''}`}
       onClick={handleClose}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
-      onDoubleClick={handleDoubleClick}
       style={{ zIndex }}
     >
-      <div className="lightbox-stage-wrap" onClick={e => e.stopPropagation()}>
+      <div
+        className="lightbox-stage-wrap"
+        onClick={e => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onWheel={handleWheel}
+        onDoubleClick={handleDoubleClick}
+      >
         <div ref={trackRef} className="lightbox-track" style={trackStyle}>
           {items.map((item, idx) => (
             <div

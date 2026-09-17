@@ -19,7 +19,7 @@ import { storageFacade } from '../../pixiv-assistant/index.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
 import { createLogger } from '../../utils/logger.js';
 import { showToast } from '../../utils/toast.js';
-import { buildLikedOrSavedSet } from '../../utils/worksState.js';
+import { StatusBar } from '@capacitor/status-bar';
 
 const log = createLogger('ImageDetail');
 const RELATED_PAGE_SIZE = 30;
@@ -38,10 +38,10 @@ export default function ImageDetailView({
   restoreAnchor = null,
   className = '',
 }) {
-  const { pixivCache, setPixivCache } = usePixivCache();
+  const { pixivCache, setPixivCache, recommendationExcludedSet } = usePixivCache();
   const toggleLike = useGridLikeToggle();
-  // 已喜欢/已保存的作品不进入相关推荐；当前作品本身也排除
-  const likedOrSavedSet = useMemo(() => buildLikedOrSavedSet(pixivCache), [pixivCache]);
+  // 相关推荐只排除启动前已喜欢/已保存的作品，避免当前会话的收藏让卡片立即消失。
+  const excludedAtStartup = recommendationExcludedSet || new Set();
   const [related, setRelated] = useState([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [loadingMoreRelated, setLoadingMoreRelated] = useState(false);
@@ -69,7 +69,6 @@ export default function ImageDetailView({
   // 已保存到本地的页 → 本地 blob URL（灯箱直接用本地文件，避免重复下载）
   const [localSrcs, setLocalSrcs] = useState({});
   const prevLocalSrcsRef = useRef({});
-  const [localResolved, setLocalResolved] = useState(false); // 当前作品本地解析是否完成
   const lastRestoreRef = useRef(null); // 最近一次滚动恢复记录（用于数据就绪后校正）
   const ratioCacheRef = useRef({}); // illustId → { page: "w / h" }，返回时复用，避免高度二次校准闪动
   const userInteractedAfterRestoreRef = useRef(false); // 恢复后用户是否已主动操作滚动/触控
@@ -146,7 +145,6 @@ export default function ImageDetailView({
     // 清空本地 URL 缓存，避免跨作品误用上一张图的本地原图
     setLocalSrcs({});
     prevLocalSrcsRef.current = {};
-    setLocalResolved(false);
     return () => {
       // 卸载或切换作品时回收本实例持有的本地 blob URL，避免累积
       const prev = prevLocalSrcsRef.current;
@@ -239,10 +237,10 @@ export default function ImageDetailView({
     })().catch(() => { });
   }, [illustData, image, pixivCache, pageCount]); // oxlint-disable-line react-hooks/exhaustive-deps
 
-  // 已保存页 → 本地 blob URL：灯箱直接读相册本地文件，不再走网络重新下载。
+  // 已保存页 → 本地 blob URL：仅在灯箱打开后读取，详情流不加载本地原图。
   // pixivCache 变化（保存/取消保存）时增量更新：复用已有 URL、新增刚保存的页、回收已取消的页。
   useEffect(() => {
-    if (!image?.illustId) return;
+    if (!image?.illustId || lightboxIndex === null) return;
     let cancelled = false;
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const created = []; // 本次运行新建的 blob URL，取消时回收未提交部分
@@ -266,7 +264,6 @@ export default function ImageDetailView({
         && Object.keys(map).every(p => map[p] === prev[p]);
       prevLocalSrcsRef.current = map;
       if (!unchanged) setLocalSrcs(map);
-      setLocalResolved(true);
     })();
     return () => {
       cancelled = true;
@@ -278,7 +275,7 @@ export default function ImageDetailView({
         }
       }
     };
-  }, [image?.illustId, pixivCache, pageCount]); // oxlint-disable-line react-hooks/exhaustive-deps
+  }, [image?.illustId, pixivCache, pageCount, lightboxIndex]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // 构造保存条目（单页）— 优先用详情接口的完整日期路径 URL（避免走 pixiv.re 短链反查）
   const buildSaveItem = useCallback((page, images) => {
@@ -504,6 +501,51 @@ export default function ImageDetailView({
     return () => io.disconnect();
   }, [relatedHasMore, loadRelatedPage, related.length]);
 
+  // 详情页滚动方向 → 隐藏/显示系统状态栏
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    // 初始状态：根据当前滚动位置同步状态栏（继承自进入详情前的网格滚动状态）
+    const syncInitial = () => {
+      const top = el.scrollTop || 0;
+      if (top >= 24) {
+        try { StatusBar.hide().catch(() => { }); } catch (_) { }
+      } else {
+        try { StatusBar.show().catch(() => { }); } catch (_) { }
+      }
+    };
+    // 等下一帧，确保滚动容器已完成布局
+    requestAnimationFrame(syncInitial);
+
+    let lastTop = el.scrollTop || 0;
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const top = el.scrollTop || 0;
+        const delta = top - lastTop;
+        if (top < 24) {
+          try { StatusBar.show().catch(() => { }); } catch (_) { }
+        } else if (Math.abs(delta) > 6) {
+          if (delta > 0) {
+            try { StatusBar.hide().catch(() => { }); } catch (_) { }
+          } else {
+            try { StatusBar.show().catch(() => { }); } catch (_) { }
+          }
+        }
+        lastTop = top;
+        ticking = false;
+      });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      // 离开详情页时恢复状态栏（App 的 useChromeAutoHide 会在下次滚动时重新对齐）
+      try { StatusBar.show().catch(() => { }); } catch (_) { }
+    };
+  }, [image?.illustId]);
+
   return (
     <div className={`char-state-bar${className ? ` ${className}` : ''}`}>
       <div
@@ -528,43 +570,22 @@ export default function ImageDetailView({
             </div>
           ) : (
             <>
-              {/* 全部页面上下堆叠：滚动视图显示最小等比预览图（master360），原图在灯箱按需加载 */}
+              {/* 详情流只显示 540px 等比预览；原图和 regular 图仅在灯箱打开后按需加载。 */}
               <div className="detail-page-stack">
                 {Array.from({ length: pageCount }, (_, p) => {
-                  const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: p });
-                  const isSaved = !!pixivCache[ck]?.saved;
-                  const localUrl = localSrcs[p];
-                  // 已保存页：本地原图优先；本地尚未解析完成时先显示模糊托底，
-                  // 避免「网络预览 → 原图」的闪烁
-                  let heroUrl = localUrl;
-                  if (!heroUrl && !(isSaved && !localResolved)) {
-                    const imgs = illustData?.illust?.images || [];
-                    if (p === 0) {
-                      // 第 0 页：网格缩略图（540px 等比 small 档）稳定优先，
-                      // 不随详情接口返回而切换 src，避免图片重挂载导致整页闪烁。
-                      heroUrl = masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '')
-                        || imgs[p]?.previewUrl
-                        || imgs[p]?.url
-                        || imgs[p]?.mediumUrl
-                        || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p);
-                    } else {
-                      // 后续页：只用详情接口的 small 档 previewUrl，与第 0 页画质一致；
-                      // 接口未就绪时保持空（占位），不先落到 master 大图再切回来造成跳变。
-                      heroUrl = imgs[p]?.previewUrl || '';
-                      if (!heroUrl && imgs.length) {
-                        heroUrl = imgs[p]?.url
-                          || imgs[p]?.mediumUrl
-                          || pixivPageUrl(image?.thumbnailUrl || image?.mediumUrl || '', p);
-                      }
-                    }
-                  }
+                  const imgs = illustData?.illust?.images || [];
+                  // 详情接口的 small 档是 540px 等比预览，也是详情流唯一的网络图片档位。
+                  const placeholderUrl = p === 0
+                    ? (masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '') || imgs[p]?.previewUrl || '')
+                    : (imgs[p]?.previewUrl || '');
                   return (
                     <DetailPageBlock
                       key={`${image.illustId}-${p}`}
                       page={p}
                       totalPages={pageCount}
                       image={image}
-                      previewUrl={heroUrl}
+                      previewUrl={placeholderUrl}
+                      placeholderUrl={placeholderUrl}
                       defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
                       cachedRatio={pageRatios[p]}
                       registerRef={registerPageRef}
@@ -644,7 +665,7 @@ export default function ImageDetailView({
               <RelatedGrid
                 related={related}
                 currentIllustId={image?.illustId}
-                likedOrSavedSet={likedOrSavedSet}
+                excludedSet={excludedAtStartup}
                 relatedRef={relatedRef}
                 onSelectImage={onSelectImage}
                 onLongPress={toggleLike}

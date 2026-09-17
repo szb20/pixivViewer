@@ -22,7 +22,7 @@ import './index.css';
 import './styles/detail.css';
 
 if (import.meta.env.DEV) {
-  window.__pixivViewer = window.__pixivViewer || { storageFacade };
+  window.__pixivViewer = window.__pixivViewer || { storageFacade, openDetail: useAppStore.getState().openDetail };
 }
 
 const TABS = [

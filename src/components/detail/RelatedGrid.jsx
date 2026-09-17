@@ -3,12 +3,12 @@ import { allMediaFromRelated } from './helpers.js';
 
 /**
  * 详情页相关推荐瀑布流 — 布局复用首页 MasonryFeed（全站唯一瀑布流实现）。
- * 做同作品去重，并过滤当前作品、已喜欢/已保存作品。
+ * 做同作品去重，并过滤当前作品、启动前已喜欢/已保存作品。
  */
 export default function RelatedGrid({
   related,
   currentIllustId,
-  likedOrSavedSet,
+  excludedSet,
   relatedRef,
   onSelectImage,
   onLongPress,
@@ -19,7 +19,7 @@ export default function RelatedGrid({
   for (const img of related) {
     if (img._pageIndex !== 0) continue;
     if (img.illustId === currentIllustId) continue;
-    if (likedOrSavedSet.has(img.illustId)) continue;
+    if (excludedSet?.has(String(img.illustId))) continue;
     if (seen.has(img.illustId)) continue;
     seen.add(img.illustId);
     visibleRelated.push(img);

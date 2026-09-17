@@ -24,6 +24,7 @@
  * @param {function} [opts.shouldSkipFirstFetch] (applied) => boolean
  *                                          - 水合命中后是否跳过首拉，默认 () => true
  * @param {boolean}  [opts.autoLoad=true]   挂载后是否自动首拉（Search 传 false）
+ * @param {boolean}  [opts.enabled=true]    是否允许水合和请求（例如等待启动缓存扫描）
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadTabCache, saveTabCache } from '../pixiv-assistant/index.js';
@@ -40,6 +41,7 @@ export function useTabFeed({
   hydrate,
   shouldSkipFirstFetch = () => true,
   autoLoad = true,
+  enabled = true,
 }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(autoLoad);
@@ -59,6 +61,7 @@ export function useTabFeed({
   const skipFirstFetchStable = useStableCallback(shouldSkipFirstFetch);
 
   const load = useCallback(async (append) => {
+    if (!enabled) return;
     // 追加加载（触底翻页）仍做并发去重，避免 sentinel 重复触发；
     // 全新加载（切换关键词/刷新）允许取代在途请求，避免新请求被静默丢弃。
     if (loadingRef.current && append) {
@@ -98,7 +101,7 @@ export function useTabFeed({
         loadingRef.current = false;
       }
     }
-  }, [cacheKey, fetchPageStable]);
+  }, [cacheKey, enabled, fetchPageStable]);
 
   const loadRef = useRef(load);
   loadRef.current = load;
@@ -109,6 +112,7 @@ export function useTabFeed({
   }, [registerRefresh, cacheKey]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     (async () => {
       try {
@@ -129,10 +133,10 @@ export function useTabFeed({
       }
     })();
     return () => { cancelled = true; };
-  }, [cacheKey, hydrateStable, skipFirstFetchStable]);
+  }, [cacheKey, enabled, hydrateStable, skipFirstFetchStable]);
 
   useEffect(() => {
-    if (!hydrated || !autoLoad) return;
+    if (!enabled || !hydrated || !autoLoad) return;
     if (!firstFetchDoneRef.current) {
       firstFetchDoneRef.current = true;
       if (cacheUsedRef.current) {
@@ -141,7 +145,7 @@ export function useTabFeed({
       }
     }
     load(false);
-  }, [load, hydrated, autoLoad]);
+  }, [load, enabled, hydrated, autoLoad]);
 
   useEffect(() => {
     if (refreshToken > 0) {

@@ -3,7 +3,6 @@ import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet, usePixivCache } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
-import { buildLikedOrSavedSet } from '../utils/worksState.js';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
@@ -14,26 +13,31 @@ const log = createLogger('Discover');
 
 export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
-  const { pixivCache } = usePixivCache();
+  const { recommendationExcludedSet, cacheReady } = usePixivCache();
   const startRef = useRef(0);
 
   const feed = useTabFeed({
     cacheKey: CACHE_KEY,
     registerRefresh,
     refreshToken,
+    // 推荐排除以启动时的收藏/保存快照为准，避免本次收藏改变当前会话的推荐流。
+    enabled: cacheReady,
     // 缓存 hasMore=false（可能是不足一页的旧缓存）时不跳过网络请求，确保能继续加载
     shouldSkipFirstFetch: (applied) => !!applied.hasMore,
     hydrate: (cache) => {
       if (!cache?.items?.length) return null;
       if (cache.start > 0) startRef.current = cache.start;
-      return { items: cache.items, hasMore: !!cache.hasMore };
+      return {
+        items: cache.items.filter(item => !recommendationExcludedSet?.has(String(item.illustId))),
+        hasMore: !!cache.hasMore,
+      };
     },
     fetchPage: async (append, currentItems) => {
       if (!append) startRef.current = 0;
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
-      // 已喜欢/已保存的作品以后不再推荐，但保留在当前已展示的网格里
-      const likedOrSaved = buildLikedOrSavedSet(pixivCache);
+      // 只过滤启动前已喜欢/已保存的作品。本会话新增收藏保留在后续推荐中，直到下次启动。
+      const excludedAtStartup = recommendationExcludedSet || new Set();
 
       // 整页全被过滤（已喜欢/已保存/不想看）时继续向后拉，避免流提前中断；
       // 连续 3 页都过滤不出新内容（或上游重复返回同一批）才判定断流
@@ -50,8 +54,8 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         startRef.current += rawList.length;
         let fresh = 0;
         for (const img of rawList) {
-          // 跳过已显示过的 + 用户"不想看"的 + 已喜欢/已保存的
-          if (seen.has(img.illustId) || hiddenWorks.has(img.illustId) || likedOrSaved.has(img.illustId)) continue;
+          // 跳过已显示过的 + 用户"不想看"的 + 启动前已喜欢/已保存的
+          if (seen.has(img.illustId) || hiddenWorks.has(img.illustId) || excludedAtStartup.has(String(img.illustId))) continue;
           seen.add(img.illustId);
           collected.push(img);
           fresh++;

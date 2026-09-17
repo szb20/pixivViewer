@@ -17,6 +17,7 @@ import {
 import { ensureGalleryReadPermission } from '../pixiv-assistant/capacitor/gallery.js';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
+import { buildLikedOrSavedSet } from '../utils/worksState.js';
 import {
   PixivCacheContext,
   PixivLikedSetContext,
@@ -44,6 +45,9 @@ function useStableFilteredSet(pixivCache, predicate) {
 
 export function PixivCacheProvider({ children }) {
   const [pixivCache, setPixivCache] = useState({});
+  // 推荐排除集合只在启动扫描完成时生成一次。会话中新增的喜欢/保存不应让当前推荐流变化。
+  const [recommendationExcludedSet, setRecommendationExcludedSet] = useState(null);
+  const [cacheReady, setCacheReady] = useState(false);
 
   // 启动时扫描相册/缓存元数据，用于喜欢状态
   useEffect(() => {
@@ -72,8 +76,12 @@ export function PixivCacheProvider({ children }) {
           };
         }
         setPixivCache(patch);
+        setRecommendationExcludedSet(buildLikedOrSavedSet(patch));
       } catch (e) {
         log.warn('启动扫描缓存元数据失败:', e?.message || e);
+        setRecommendationExcludedSet(new Set());
+      } finally {
+        if (!cancelled) setCacheReady(true);
       }
     })();
     return () => { cancelled = true; };
@@ -82,7 +90,12 @@ export function PixivCacheProvider({ children }) {
   const likedSet = useStableFilteredSet(pixivCache, isLiked);
 
   // setPixivCache 引用稳定；cacheValue 只在 pixivCache 变化时更新
-  const cacheValue = useMemo(() => ({ pixivCache, setPixivCache }), [pixivCache, setPixivCache]);
+  const cacheValue = useMemo(() => ({
+    pixivCache,
+    setPixivCache,
+    recommendationExcludedSet,
+    cacheReady,
+  }), [pixivCache, setPixivCache, recommendationExcludedSet, cacheReady]);
 
   return (
     <PixivCacheContext.Provider value={cacheValue}>

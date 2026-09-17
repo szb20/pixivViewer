@@ -47,6 +47,7 @@ export function useTouchGesture({
   const lastTapRef = useRef(0);
   const lastTapTimeRef = useRef(0); // 触摸已处理时间戳，防止合成 click 重复触发
   const doubleTapTimeRef = useRef(0); // 触摸双击已处理时间戳，防止合成 dblclick 重复触发
+  const ignoreNativeDoubleClickUntilRef = useRef(0);
   const springRef = useRef(null);
   const trackAnimRef = useRef(null);
 
@@ -93,6 +94,37 @@ export function useTouchGesture({
   // ── 工具函数 ─────────────────────────────────────────────
   const getCurSlideEl = useCallback(() => slideRefs.current[index], [index]);
 
+  // DOMMatrixReadOnly is absent in some Android WebViews. Keep interruption of an
+  // in-flight transition best-effort so a missing browser API cannot disable gestures.
+  const readTransform = useCallback((el) => {
+    const fallback = { a: 1, m41: 0, m42: 0 };
+    if (!el) return fallback;
+
+    const transform = getComputedStyle(el).transform;
+    if (!transform || transform === 'none') return fallback;
+
+    if (typeof DOMMatrixReadOnly === 'function') {
+      try {
+        const matrix = new DOMMatrixReadOnly(transform);
+        return {
+          a: Number.isFinite(matrix.a) ? matrix.a : 1,
+          m41: Number.isFinite(matrix.m41) ? matrix.m41 : 0,
+          m42: Number.isFinite(matrix.m42) ? matrix.m42 : 0,
+        };
+      } catch {
+        // Fall through to parsing CSS matrix() below.
+      }
+    }
+
+    const values = transform.match(/^matrix\(([^)]+)\)$/)?.[1]
+      ?.split(',')
+      .map(value => Number.parseFloat(value.trim()));
+    if (!values || values.length !== 6 || values.some(value => !Number.isFinite(value))) {
+      return fallback;
+    }
+    return { a: values[0], m41: values[4], m42: values[5] };
+  }, []);
+
   const cancelSpring = useCallback(() => {
     if (springRef.current) {
       cancelAnimationFrame(springRef.current);
@@ -101,9 +133,13 @@ export function useTouchGesture({
     // 中断图片的 CSS transition（缩放/拖拽惯性）
     const el = getCurSlideEl();
     if (el) {
-      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      const m = readTransform(el);
+      // 若缩放回弹还在动画中，ref 里是目标倍率而矩阵才是屏幕上正在显示的倍率。
+      // 以矩阵继续计算，快速连续双击不会先跳到动画终点再缩回。
+      const scale = Number.isFinite(m.a) && m.a > 0 ? m.a : pinchRef.current.scale;
       el.style.transition = 'none';
-      el.style.transform = `scale(${pinchRef.current.scale}) translate(${m.m41 / pinchRef.current.scale}px, ${m.m42 / pinchRef.current.scale}px)`;
+      el.style.transform = `scale(${scale}) translate(${m.m41 / scale}px, ${m.m42 / scale}px)`;
+      pinchRef.current.scale = scale;
       pinchRef.current.x = m.m41;
       pinchRef.current.y = m.m42;
     }
@@ -114,7 +150,7 @@ export function useTouchGesture({
     }
     const track = trackRef.current;
     if (track) {
-      const tm = new DOMMatrixReadOnly(getComputedStyle(track).transform);
+      const tm = readTransform(track);
       const curPx = tm.m41;
       const vw = window.innerWidth;
       // 根据当前像素位置计算最近的页，距离过半就跳转
@@ -128,7 +164,7 @@ export function useTouchGesture({
       track.style.transition = 'none';
       track.style.transform = `translateX(calc(-${clampedIdx * 100}%))`;
     }
-  }, [getCurSlideEl, images.length, onIndexChange]);
+  }, [getCurSlideEl, images.length, onIndexChange, readTransform]);
   // index 通过 ref 访问避免级联重建；setIndex/setSwipeOff 是稳定 setter
 
   // 直接操作 track DOM 实现 60fps 滑动（绕过 React 渲染管线）
@@ -590,6 +626,9 @@ export function useTouchGesture({
     if (pinchRef.current.fingers <= 1 && tapDur < 200 && e.changedTouches.length === 1 && moved < 15) {
       if (now - prevLastTap < 350) {
         doubleTapTimeRef.current = now;
+        // Android WebView 还会在 touchend 后派发合成 dblclick；该事件必须忽略，
+        // 否则同一次双击会先放大再立即缩回。
+        ignoreNativeDoubleClickUntilRef.current = now + 900;
         handleDoubleTap(e);
         lastTapRef.current = 0;
         pinchRef.current.fingers = 0;
@@ -714,7 +753,9 @@ export function useTouchGesture({
 
   const handleMouseDown = useCallback((e) => {
     if (e.button !== 0) return; // 仅左键
-    if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+    // React 合成事件上没有 sourceCapabilities，必须从 nativeEvent 上取，
+    // 否则触摸双击后浏览器派发的合成 mousedown 会溜进来 cancelSpring 冻结缩放动画
+    if (e.nativeEvent?.sourceCapabilities?.firesTouchEvents) return;
     if (isInteractiveTarget(e.target)) return;
     e.stopPropagation();
     if (zoomDisabled && disableSwipe) return;
@@ -936,7 +977,9 @@ export function useTouchGesture({
   const handleDoubleClick = useCallback((e) => {
     if (zoomDisabled) return;
     // 忽略触摸双击合成的 dblclick：触摸路径已在 handleTouchEnd 中处理过双击缩放
-    if (Date.now() - doubleTapTimeRef.current < 450) return;
+    if (e.nativeEvent?.sourceCapabilities?.firesTouchEvents) return;
+    if (Date.now() < ignoreNativeDoubleClickUntilRef.current) return;
+    if (Date.now() - doubleTapTimeRef.current < 900) return;
     if (isInteractiveTarget(e.target)) return;
     e.stopPropagation();
     handleDoubleTap(e);

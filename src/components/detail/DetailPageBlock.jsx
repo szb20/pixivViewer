@@ -14,6 +14,7 @@ export default function DetailPageBlock({
   totalPages,
   image,
   previewUrl,
+  placeholderUrl,
   defaultRatio,
   cachedRatio,
   registerRef,
@@ -21,9 +22,9 @@ export default function DetailPageBlock({
   onLongPress,
   onRatioReady,
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState('');
   const [ratio, setRatio] = useState(null); // 预览图加载后按真实比例覆盖占位
-  const [loaded, setLoaded] = useState(false); // 预览图是否加载完成（加载占位用）
+  const [loadedSrc, setLoadedSrc] = useState(''); // 详情预览图是否已加载，按 URL 区分避免换源沿用旧状态
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const pressStartRef = useRef(null); // { x, y } long-press origin; tolerate tiny finger jitter
@@ -66,14 +67,16 @@ export default function DetailPageBlock({
     onLongPress?.(page);
   }, [page, onLongPress]);
 
-  // 缩略图铺底：第 0 页用网格带进来的真实缩略图；
-  // 后续页用本页自己的 540px 预览图并加深模糊，绝不拿第 0 页缩略图冒充，避免视觉串图。
-  const bg = page === 0
+  // 详情流始终显示 540px 等比预览，避免打开作品时出现空白或加载高分图。
+  // 后续页必须使用本页预览，不得复用第 0 页缩略图。
+  const bg = placeholderUrl || (page === 0
     ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), page))
-    : (previewUrl || '');
+    : '');
   const bgClass = page === 0 ? 'image-detail-bg' : 'image-detail-bg image-detail-bg--deep';
-  // 展示图：已下载页 → 本地原图（blob）；未下载页 → 540px 等比预览（加载前只保留比例占位块）
+  // 详情流只展示 540px 预览图；原图只由灯箱按需加载。
   const src = previewUrl;
+  const loaded = !!src && loadedSrc === src;
+  const failed = !!src && failedSrc === src;
   const heroRatio = ratio || cachedRatio || defaultRatio || '3 / 4';
 
   return (
@@ -99,7 +102,7 @@ export default function DetailPageBlock({
       {bg && <img className={bgClass} src={bg} alt="" draggable={false} />}
       {!src ? (
         <>
-          {bg && page === 0 && (
+          {bg && (
             <img
               className="image-detail-thumb-placeholder"
               src={bg}
@@ -115,10 +118,10 @@ export default function DetailPageBlock({
         </>
       ) : !failed ? (
         <>
-          {bg && page === 0 && (
+          {bg && (
             <img
               className={`image-detail-thumb-placeholder${loaded ? ' is-hidden' : ''}`}
-              src={src || bg}
+              src={bg}
               alt=""
               draggable={false}
             />
@@ -136,7 +139,7 @@ export default function DetailPageBlock({
             loading="lazy"
             draggable={false}
             onLoad={(e) => {
-              setLoaded(true);
+              setLoadedSrc(src);
               const nw = e.currentTarget.naturalWidth;
               const nh = e.currentTarget.naturalHeight;
               const isSquareCrop = nw === nh && (nw === 540 || nw === 250);
@@ -149,7 +152,7 @@ export default function DetailPageBlock({
             }}
             onError={() => {
               log.warn('详情页预览图加载失败:', page, src?.slice(0, 120));
-              setFailed(true);
+              setFailedSrc(src);
             }}
           />
         </>

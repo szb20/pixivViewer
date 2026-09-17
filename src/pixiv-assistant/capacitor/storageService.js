@@ -420,8 +420,8 @@ export function buildDownloadUrls(item) {
   // 优先：从 API 返回的 originalUrl 推导（含日期路径，命中率高，避免短链 404）
   for (const u of [item.originalUrl, item.mediumUrl]) {
     if (!u || !item.illustId) continue;
-    // 仅从含日期路径的 Pixiv URL 推导（正则匹配日期路径+illustId_pN），避免误取缩略图尺寸
-    const m = u.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)_p\d+/);
+    // 仅从含日期路径的 Pixiv URL 推导（正则匹配日期路径+illustId_pN，容忍 2026 起的 -hash 段），避免误取缩略图尺寸
+    const m = u.match(/\/(\d{4}\/\d{2}\/\d{2}\/\d{2}\/\d{2}\/\d{2})\/(\d+)(?:-[0-9a-f]{32})?_p\d+/);
     if (m) {
       const datePath = m[1];
       const id = m[2];
