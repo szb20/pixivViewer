@@ -17,13 +17,15 @@ const DB_VERSION = 1;
 const STORE = 'metadata';
 
 let _db = null;
+let _dbPromise = null;
 
 function openDB() {
   // 缓存命中且版本匹配，直接复用。
   if (_db && _db.version >= DB_VERSION) return Promise.resolve(_db);
   // 版本不匹配时先关闭旧连接，否则 indexedDB.open 会被阻塞。
   if (_db) { _db.close(); _db = null; }
-  return new Promise((resolve, reject) => {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       _db = null;
       return reject(new Error('IndexedDB not available'));
@@ -48,7 +50,8 @@ function openDB() {
       _db = null;
       reject(req.error);
     };
-  });
+  }).finally(() => { _dbPromise = null; });
+  return _dbPromise;
 }
 
 /**

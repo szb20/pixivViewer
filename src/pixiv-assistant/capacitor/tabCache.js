@@ -22,10 +22,12 @@ const TTL_MAP = {
 const DEFAULT_TTL = 24 * 60 * 60 * 1000;
 
 let _db = null;
+let _dbPromise = null;
 
 function openDB() {
   if (_db) return Promise.resolve(_db);
-  return new Promise((resolve, reject) => {
+  if (_dbPromise) return _dbPromise;
+  _dbPromise = new Promise((resolve, reject) => {
     if (typeof indexedDB === 'undefined') {
       return reject(new Error('IndexedDB not available'));
     }
@@ -44,7 +46,8 @@ function openDB() {
       resolve(_db);
     };
     req.onerror = () => reject(req.error);
-  });
+  }).finally(() => { _dbPromise = null; });
+  return _dbPromise;
 }
 
 /** 解析 key 获取 TTL */
@@ -92,7 +95,7 @@ export async function loadTabCache(key) {
         if (!record) return resolve(null);
         if (Date.now() - record.updatedAt > ttl) {
           // 过期 — 后台删除
-          deleteTabCache(key).catch(() => {});
+          deleteTabCache(key).catch(() => { });
           return resolve(null);
         }
         resolve(record.data);
@@ -131,7 +134,7 @@ export async function loadAllTabCaches() {
         }
         // 后台清理过期条目
         if (expiredKeys.length > 0) {
-          cleanupExpired(expiredKeys).catch(() => {});
+          cleanupExpired(expiredKeys).catch(() => { });
         }
         resolve(result);
       };
