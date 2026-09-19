@@ -117,7 +117,8 @@ export const downloadMonitor = {
         if (ok) j.progress = 100;
         emit();
         if (!ok) {
-          // 失败：不带重试信息（未登记 recordFailure）也要持久化，避免丢记录
+          // 失败：任务常驻内存不自动移除；跨会话保留需先由 recordFailure 登记重试信息，
+          // persistFailed 只持久化带 retry 的任务（无重试信息本就无法重建）
           persistFailed();
           return; // 失败任务常驻，不自动移除
         }
