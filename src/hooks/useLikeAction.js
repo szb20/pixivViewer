@@ -37,9 +37,10 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     if (!cur?.illustId) return;
     const ck = getCompositeKey(cur);
     const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
-    setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: !prevLiked, likedAt: Date.now() } }));
+    const targetLiked = !prevLiked;
+    setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: targetLiked, likedAt: Date.now() } }));
 
-    if (typeof storageFacade.toggleLike !== 'function') {
+    if (typeof storageFacade.like !== 'function' || typeof storageFacade.unlike !== 'function') {
       showToast('当前平台暂不支持喜欢功能', { type: 'warning' });
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       return;
@@ -47,14 +48,17 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
 
     let result;
     try {
-      result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, buildLikeMeta(cur));
+      result = targetLiked
+        ? await storageFacade.like(cur.illustId, cur._pageIndex ?? 0, buildLikeMeta(cur))
+        : await storageFacade.unlike(cur.illustId, cur._pageIndex ?? 0);
     } catch {
       showToast('操作失败', { type: 'error' });
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       return;
     }
     if (result.success) {
-      setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
+      const likedAt = targetLiked ? (result.likedAt || Date.now()) : 0;
+      setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: targetLiked, likedAt } }));
       notifyLikedChanged();
     } else {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
@@ -63,7 +67,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     }
 
     // 单图 / GIF：喜欢 = 下载；多图：喜欢只是喜欢，下载走长按
-    if (result.liked && !multiPage && typeof onLikeSaveAll === 'function') {
+    if (targetLiked && !multiPage && typeof onLikeSaveAll === 'function') {
       onLikeSaveAll(cur).then((res) => {
         const saved = Number(res?.saved ?? res) || 0;
         const exists = Number(res?.exists) || 0;
@@ -71,7 +75,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
         else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });
         else if (exists > 0) showToast('已在相册中', { type: 'info' });
         else showToast('下载失败', { type: 'error' });
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged]);
 
@@ -82,11 +86,11 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
     if (!prevLiked) {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: Date.now() } }));
-      if (typeof storageFacade.toggleLike === 'function') {
+      if (typeof storageFacade.like === 'function') {
         try {
-          const result = await storageFacade.toggleLike(cur.illustId, cur._pageIndex ?? 0, buildLikeMeta(cur));
+          const result = await storageFacade.like(cur.illustId, cur._pageIndex ?? 0, buildLikeMeta(cur));
           if (result.success) {
-            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: result.liked, likedAt: result.likedAt } }));
+            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: result.likedAt || Date.now() } }));
             notifyLikedChanged();
           } else {
             setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
