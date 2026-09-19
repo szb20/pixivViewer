@@ -157,7 +157,9 @@ button,
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  /* 避开底部 .tab-bar（bottom 14px + height 52px，上沿在 66px），留 2px 兜底；
+     各页面的额外留白交给 .page 处理 */
+  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 
 .app-content::-webkit-scrollbar {
@@ -374,7 +376,7 @@ button,
 }
 
 .page {
-  padding: 0 0 24px;
+  padding: 0 0 18px;
 }
 
 /* ===== 作品网格统一规格（唯一来源）=====

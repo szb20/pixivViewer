@@ -223,13 +223,10 @@
 }
 
 /* ══════════════════════════════════════════════
-   搜索栏 · 固定顶部（毛玻璃，桌面优先）
-   手机端保持底部弹出（search-bar--bottom）
+   搜索栏 · 固定顶部（毛玻璃）
+   注：.search-page 不再需要额外底部留白。原先的 176px 是为底部悬浮栏
+   （.search-bar--bottom）预留的，搜索栏改为固定顶部后该值已失效。
    ══════════════════════════════════════════════ */
-
-.search-page {
-  padding-bottom: calc(176px + env(safe-area-inset-bottom, 0px));
-}
 
 /* 桌面/宽屏：固定顶部居中，视口宽度内不溢出（宽屏图标 42px，底部留 14px） */
 .search-bar--top {
@@ -263,10 +260,6 @@
 }
 
 @media (orientation: landscape) and (max-height: 560px) {
-  .search-page {
-    padding-bottom: 92px;
-  }
-
   .search-bar--bottom {
     bottom: calc(44px + env(safe-area-inset-bottom, 0px));
     left: max(12px, env(safe-area-inset-left, 0px));
