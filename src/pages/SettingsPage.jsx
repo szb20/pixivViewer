@@ -14,14 +14,13 @@ const LAYOUT_OPTIONS = [
 ];
 
 // 桌面壳（Electron）才支持选择保存目录；Web / Android 隐藏该设置项
-const isDesktopShell = typeof window !== 'undefined' && !!window.desktopProxy?.chooseDirectory;
+const isDesktopShell = () => typeof window !== 'undefined' && !!window.desktopProxy?.chooseDirectory;
 
 /**
  * 全屏设置页。
  * 覆盖在 tab 页之上，毛玻璃 sticky header + 卡片式分组 + 即时保存。
  */
 export default function SettingsPage({ onClose }) {
-  const loadedRef = useRef(false);
   const [cookie, setCookie] = useState('');
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridQuality, setGridQuality] = useState('thumb');
@@ -35,6 +34,23 @@ export default function SettingsPage({ onClose }) {
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
+  const showToast = useCallback(() => {
+    setToast('已保存');
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 1500);
+  }, []);
+
+  // 卸载时清理 toast 定时器
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  // 串行化保存队列，规避读-改-写竞态丢失更新；并等待首次加载完成，避免首次保存被丢弃
+  const saveChain = useRef(Promise.resolve());
+  const loadedResolveRef = useRef(null);
+  const loadedPromiseRef = useRef(null);
+  if (loadedPromiseRef.current === null) {
+    loadedPromiseRef.current = new Promise((resolve) => { loadedResolveRef.current = resolve; });
+  }
+
   // 加载设置
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +61,7 @@ export default function SettingsPage({ onClose }) {
       setGridQuality(s.gridQuality || 'thumb');
       setGridLayout(s.gridLayout || 'waterfall');
       setSaveDirectory(s.saveDirectory || '');
-      loadedRef.current = true;
+      loadedResolveRef.current?.();
     });
     return () => { cancelled = true; };
   }, []);
@@ -58,21 +74,15 @@ export default function SettingsPage({ onClose }) {
     });
   }, [onClose]);
 
-  // 即时保存核心
-  const doSave = useCallback(async (patch) => {
-    if (!loadedRef.current) return;
-    try {
-      const s = await getSettings();
-      await saveSettings({ ...s, ...patch });
-      showToast();
-    } catch { /* 静默忽略 */ }
-  }, []);
-
-  const showToast = () => {
-    setToast('已保存');
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 1500);
-  };
+  // 即时保存核心（串行队列，避免并发读改写引起的丢更新）
+  const doSave = useCallback((patch) => {
+    saveChain.current = saveChain.current
+      .then(() => loadedPromiseRef.current)
+      .then(() => getSettings())
+      .then((s) => saveSettings({ ...s, ...patch }))
+      .then(showToast)
+      .catch(() => { /* 静默忽略 */ });
+  }, [showToast]);
 
   // 选择图片保存目录（仅桌面壳，经 Electron 文件夹选择对话框）
   const chooseDir = async () => {
@@ -105,7 +115,7 @@ export default function SettingsPage({ onClose }) {
 
           {/* Cookie — 点击展开 */}
           <div
-            className={`settings-row settings-row-expand${cookieOpen ? '' : ''}`}
+            className="settings-row settings-row-expand"
             onClick={() => setCookieOpen(!cookieOpen)}
             role="button"
             tabIndex={0}
@@ -208,7 +218,7 @@ export default function SettingsPage({ onClose }) {
         </div>
 
         {/* ── 保存 ── 仅桌面壳 */}
-        {isDesktopShell && (
+        {isDesktopShell() && (
           <div className="settings-group">
             <div className="settings-group-label">保存</div>
             <div className="settings-row">
