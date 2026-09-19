@@ -35,7 +35,6 @@ function getCardRatio(img) {
 
 // 方形缩略图（c/250x250_80_a2/.../square1200.jpg）→ small 档（c/540x540_70/.../master1200.jpg）。
 // 与详情页 small 预览图同档同路径：540px 长边等比、不裁剪，内容和比例一致。
-// 同时兼容 custom-thumb（自定义封面）与 img-master 两种路径。
 // page：目标页码，默认 0（瀑布流只展示每个作品第 0 页）；详情页多图需传真实页码，
 // 否则非首页会拿到第 0 页的方形裁剪图，比例错误。
 export function masonryThumbUrl(url, page = 0) {
@@ -43,11 +42,10 @@ export function masonryThumbUrl(url, page = 0) {
   // 先转成等比底座（已处理 dev 代理），再补上 small 档的 c/540x540_70 前缀
   const base = pixivPageUrl(url, page, 1200);
   if (!base) return '';
+  // pixivPageUrl 一律产出 img-master，故这里只需处理 img-master 一种路径
   return base
     .replace('https://i.pixiv.re/img-master', 'https://i.pixiv.re/c/540x540_70/img-master')
-    .replace('https://i.pixiv.re/custom-thumb', 'https://i.pixiv.re/c/540x540_70/custom-thumb')
-    .replace('/pixiv-img/img-master', '/pixiv-img/c/540x540_70/img-master')
-    .replace('/pixiv-img/custom-thumb', '/pixiv-img/c/540x540_70/custom-thumb');
+    .replace('/pixiv-img/img-master', '/pixiv-img/c/540x540_70/img-master');
 }
 
 const MIN_COL_WIDTH = 250;

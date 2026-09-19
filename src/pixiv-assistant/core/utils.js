@@ -53,12 +53,12 @@ export function proxyThumb(url) {
 /**
  * 从 Pixiv API 返回的 page 0 URL 生成指定页码的 i.pixiv.re 图片 URL。
  *
- * 支持三类 Pixiv CDN URL：
+ * 支持两类输入：
  *   1. img-master 标准图：…/img-master/img/YYYY/MM/DD/HH/MM/SS/{id}_p{n}_square1200.jpg
  *      → img-master/img/{date}/{id}_p{page}_master{size}.jpg
  *   2. custom-thumb 自定义封面（只存在于第 0 页）：
- *      page 0 → custom-thumb/img/{date}/{id}_p0_custom{size}.jpg
- *      page >0 → img-master/img/{date}/{id}_p{page}_master{size}.jpg（custom-thumb 无 _p1 变体，实测 404）
+ *      …/custom-thumb/img/{date}/{id}_p0_custom1200.jpg → 同 1
+ *      （custom-thumb 源图是 1200×1200 方形，且无 _p1 变体，页数无关一律改走 img-master）
  *   3. ugoira 动图（无页码后缀）：…/img-master/img/{date}/{id}_square1200.jpg
  *      → img-master/img/{date}/{id}_master{size}.jpg（不加 _p{page}）
  *   4. 2026 起新格式（{id} 后带 32 位内容哈希）：
@@ -83,17 +83,15 @@ export function pixivPageUrl(baseUrl, page, size = 1200) {
     const datePath = match[1];
     const illustId = match[2];
 
-    // 检测 URL 类型：custom-thumb 只作为第 0 页的自定义封面；ugoira（无 _p/_u 页码后缀）不加页码
     const basename = baseUrl.split('/').pop();
-    const isCustomThumb = page === 0 && baseUrl.includes('custom-thumb');
     // ugoira 无 _p{n}/_u{n} 页码后缀（例: {id}_square1200.jpg），普通图有 _p0/_u0
     const hasPageSuffix = /_(p|u)\d+/.test(basename);
 
     const pageSuffix = hasPageSuffix ? `_p${page}` : '';
-    const pathType = isCustomThumb ? 'custom-thumb' : 'img-master';
-    const suffixType = isCustomThumb ? 'custom' : 'master';
-
-    let result = `https://i.pixiv.re/${pathType}/img/${datePath}/${illustId}${pageSuffix}_${suffixType}${size}.jpg`;
+    // 一律走 img-master/_master{size}，不用 custom-thumb：
+    // custom-thumb（自定义封面）的源图实测是 1200×1200 方形，任何 c/ 前缀都还原不出等比，
+    // 会让网格与详情页首图变方。img-master/{id}_p{page}_master{size} 是同作品的等比图，实测 200。
+    let result = `https://i.pixiv.re/img-master/img/${datePath}/${illustId}${pageSuffix}_master${size}.jpg`;
     if (USE_PROXY) result = result.replace(/https:\/\/i\.pixiv\.re/, '/pixiv-img');
     return result;
   }
