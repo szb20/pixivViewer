@@ -1,8 +1,17 @@
 /**
  * 桌面端流式下载 —— 经 Electron 主进程 Node HTTP 下载（带 Clash 代理），
  * 绕开渲染进程 CORS，并回传真实字节进度。与安卓 nativeDownload 对等。
+ *
+ * 历史注：依赖的 window.desktop.download 桥从未在 preload 中实现（实际桥是
+ * window.desktopProxy，下载走 /pixiv-zip 等代理通道），本模块当前无消费方；
+ * 保留作为未来桌面下载通道的参考实现。
  */
-import { desktop } from './platform.js';
+
+/** 旧版 window.desktop 桥（从未实现；保留检测以兼容未来可能的同形桥） */
+const desktop =
+    typeof window !== 'undefined' && window.desktop && window.desktop.platform === 'electron'
+        ? window.desktop
+        : null;
 
 export function isDesktopDownloadAvailable() {
     return !!desktop?.download;

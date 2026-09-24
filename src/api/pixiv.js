@@ -4,7 +4,7 @@
 import { CapacitorHttp } from '@capacitor/core';
 import { createPixivApi, getSettings } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
-// desktop 检测见 isDesktopShell()，使用 window.desktopProxy
+import { isDesktopShell, getDesktopProxyPort } from '../utils/platform.js';
 
 const log = createLogger('pixivFetch');
 
@@ -13,27 +13,13 @@ const PIXIV_BASE = 'https://www.pixiv.net';
 const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 const FORBIDDEN = new Set(['cookie', 'referer', 'user-agent']);
 
-/** 桌面壳：window.desktopProxy 由 Electron preload 注入 */
-export function isDesktopShell() {
-  return typeof window !== 'undefined' && !!window.desktopProxy;
-}
-
-let _proxyPortPromise = null;
-/** 懒加载壳内代理端口（一次性获取并缓存） */
-function getProxyPort() {
-  if (!_proxyPortPromise) {
-    _proxyPortPromise = window.desktopProxy.getPort().catch((e) => {
-      log.warn('获取桌面代理端口失败:', e?.message || e);
-      _proxyPortPromise = null; // 允许下次重试
-      return 0;
-    });
-  }
-  return _proxyPortPromise;
-}
-
-/** 供代理探测等外部复用壳内代理端口（拿不到返回 0） */
-export function getDesktopProxyPort() {
-  return getProxyPort();
+/**
+ * 构造带 status 的 HTTP 错误（显式错误契约：上层按 err.status 分类，不再解析消息字符串）。
+ */
+function httpError(status, pathname = '') {
+  const e = new Error(`HTTP ${status}${pathname ? ` (${pathname})` : ''}`);
+  e.status = status;
+  return e;
 }
 
 function buildHeaders(headers = {}) {
@@ -63,7 +49,7 @@ async function devFetch(pathname, { headers = {}, timeout, method = 'GET', body,
   const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
   try {
     const res = await fetch(`/pixiv-api${pathname}`, { method, body, headers: h, signal: ctrl.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw httpError(res.status, pathname);
     return raw ? await res.text() : await res.json();
   } finally { if (timer) clearTimeout(timer); }
 }
@@ -73,7 +59,7 @@ async function devFetch(pathname, { headers = {}, timeout, method = 'GET', body,
  * 绕开浏览器 CORS + Cookie 限制：Cookie 继续走 x-pixiv-cookie 头，由代理还原透传。
  */
 async function desktopFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
-  const port = await getProxyPort();
+  const port = await getDesktopProxyPort();
   if (!port) throw new Error('桌面代理端口不可用');
   const h = buildHeaders(headers);
   const ctrl = new AbortController();
@@ -82,7 +68,7 @@ async function desktopFetch(pathname, { headers = {}, timeout, method = 'GET', b
     const res = await fetch(`http://127.0.0.1:${port}/pixiv-api${pathname}`, {
       method, body, headers: h, signal: ctrl.signal,
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw httpError(res.status, pathname);
     return raw ? await res.text() : await res.json();
   } finally { if (timer) clearTimeout(timer); }
 }
@@ -98,7 +84,7 @@ async function prodFetch(pathname, { headers = {}, timeout, method = 'GET', body
       connectTimeout: timeout || 15000,
       readTimeout: timeout || 15000,
     });
-    if (resp.status < 200 || resp.status >= 300) throw new Error(`HTTP ${resp.status}`);
+    if (resp.status < 200 || resp.status >= 300) throw httpError(resp.status, pathname);
     if (raw) return typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
     return typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
   } catch (e) {
@@ -109,7 +95,7 @@ async function prodFetch(pathname, { headers = {}, timeout, method = 'GET', body
     const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
     try {
       const res = await fetch(url, { method, body, headers: h, signal: ctrl.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw httpError(res.status, pathname);
       return raw ? await res.text() : await res.json();
     } finally { if (timer) clearTimeout(timer); }
   }
@@ -125,4 +111,6 @@ export { devFetch as browserFetch, prodFetch, desktopFetch };
 export const pixivApi = createPixivApi({
   fetch: isDesktopShell() ? desktopFetch : (IS_DEV ? devFetch : prodFetch),
   getCookie,
+  // logger 由外层注入（core 不反向依赖 utils/logger）
+  log: createLogger('pixivApi'),
 });

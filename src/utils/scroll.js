@@ -13,14 +13,6 @@ export function getDetailScrollEl() {
   return document.querySelector('.char-state-content');
 }
 
-export function getScrollTop(el) {
-  return el?.scrollTop || 0;
-}
-
-export function setScrollTop(el, scrollTop = 0) {
-  if (el) el.scrollTop = scrollTop || 0;
-}
-
 /**
  * 恢复主列表滚动位置。
  *
@@ -32,7 +24,7 @@ export function setScrollTop(el, scrollTop = 0) {
 export function restoreMainScroll(scrollTop = 0) {
   const el = getMainScrollEl();
   if (!el) return;
-  setScrollTop(el, scrollTop);
+  el.scrollTop = scrollTop || 0;
 
   const ac = new AbortController();
   const stop = () => ac.abort();
@@ -42,7 +34,7 @@ export function restoreMainScroll(scrollTop = 0) {
   let frames = 0;
   const reassert = () => {
     if (ac.signal.aborted) return;
-    if (Math.abs(getScrollTop(el) - scrollTop) > 2) setScrollTop(el, scrollTop);
+    if (Math.abs((el.scrollTop || 0) - scrollTop) > 2) el.scrollTop = scrollTop || 0;
     if (++frames < 20) requestAnimationFrame(reassert); // ~330ms @60fps
     else stop();
   };

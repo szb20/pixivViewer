@@ -149,7 +149,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
         {loading && <div className="hint">加载中...</div>}
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (
-          <ImageGrid items={items} onOpen={handleOpen} layout="masonry" />
+          <ImageGrid items={items} onOpen={handleOpen} />
         )}
         {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
         {loadingMore && <div className="hint">加载中...</div>}

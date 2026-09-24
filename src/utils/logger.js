@@ -31,6 +31,3 @@ export function createLogger(tag) {
     error: (...args) => write('error', tag, args),
   };
 }
-
-/** 全局 logger（无命名空间） */
-export const logger = createLogger('');

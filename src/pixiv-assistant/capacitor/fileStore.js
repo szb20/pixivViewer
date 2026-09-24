@@ -110,38 +110,6 @@ export class FileStore {
   }
 
   /**
-   * 复制文件（从源状态目录到目标状态目录）。
-   * @param {PixivEntity} entity
-   * @param {'cached'|'saved'} fromState
-   * @param {'cached'|'saved'} toState
-   * @returns {Promise<boolean>}
-   */
-  async copy(entity, fromState, toState) {
-    try {
-      const FS = await getFS();
-      if (!FS || !entity.fileName) return false;
-      const { dir: srcDir, dirType: srcType } = this._resolveDir(fromState);
-      const { dir: dstDir, dirType: dstType } = this._resolveDir(toState);
-
-      const raw = await FS.plugin.readFile({
-        path: `${srcDir}/${entity.fileName}`, directory: srcType,
-      }).catch(() => null);
-      if (!raw) return false;
-
-      const data = typeof raw === 'string' ? raw : raw.data || '';
-      await ensureDirectory(FS, dstDir, dstType);
-      await FS.plugin.writeFile({ path: `${dstDir}/${entity.fileName}`, data, directory: dstType });
-      if (toState === 'saved') {
-        await exportToGallery(data, entity.fileName);
-      }
-      return true;
-    } catch (e) {
-      log.debug('[copy] 复制失败:', e?.message || e);
-      return false;
-    }
-  }
-
-  /**
    * 删除文件。
    * @param {PixivEntity} entity
    * @param {'cached'|'saved'} [state] — 不传则用 entity.state
@@ -153,7 +121,7 @@ export class FileStore {
       if (!FS || !entity.fileName) return false;
       const targetState = state || entity.state;
       const { dir, dirType } = this._resolveDir(targetState);
-      await FS.plugin.deleteFile({ path: `${dir}/${entity.fileName}`, directory: dirType }).catch(() => {});
+      await FS.plugin.deleteFile({ path: `${dir}/${entity.fileName}`, directory: dirType }).catch(() => { });
       if (targetState === 'saved') {
         await deleteFromGallery(entity.fileName);
       }
@@ -162,20 +130,6 @@ export class FileStore {
       log.debug('[delete] 删除失败:', e?.message || e);
       return false;
     }
-  }
-
-  /**
-   * 移动文件（copy + delete source）。
-   * @param {PixivEntity} entity
-   * @param {'cached'|'saved'} fromState
-   * @param {'cached'|'saved'} toState
-   * @returns {Promise<boolean>}
-   */
-  async move(entity, fromState, toState) {
-    const copied = await this.copy(entity, fromState, toState);
-    if (!copied) return false;
-    await this.delete(entity, fromState);
-    return true;
   }
 
   /**

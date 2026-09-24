@@ -9,8 +9,16 @@
  * - 'DATA' / 'DOCUMENTS' / 'LIBRARY' → app 数据目录 userData/PixivViewer（缓存/帧）
  * - 'CACHE'                          → 临时缓存目录
  * - 'EXTERNAL' / 'EXTERNAL_STORAGE'  → 用户「图片」目录（导出物，卸载保留）
+ *
+ * 历史注：依赖的 window.desktop 桥从未在 preload 中实现（实际桥是 window.desktopProxy，
+ * 无 fs 能力），本模块当前无消费方；保留作为未来桌面 FS 适配的参考实现。
  */
-import { desktop } from './platform.js';
+
+/** 旧版 window.desktop 桥（从未实现；保留检测以兼容未来可能的同形桥） */
+const desktop =
+    typeof window !== 'undefined' && window.desktop && window.desktop.platform === 'electron'
+        ? window.desktop
+        : null;
 
 /** Capacitor 目录名 → 桌面桥逻辑目录 */
 const DIR_MAP = {

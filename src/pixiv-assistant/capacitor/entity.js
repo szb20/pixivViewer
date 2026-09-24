@@ -75,11 +75,6 @@ export class PixivEntity {
     return new PixivEntity({ ...this, state: newState });
   }
 
-  /** 合并 flags */
-  withFlags(flags) {
-    return new PixivEntity({ ...this, flags: { ...this.flags, ...flags } });
-  }
-
   /** 统一 entity key 生成 */
   static makeId(illustId, pageIndex = 0) {
     return `pixiv:${illustId}:${pageIndex}`;

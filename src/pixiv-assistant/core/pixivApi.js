@@ -20,7 +20,6 @@
  *   social   — 关注 / 取关 / 关注的作者列表
  */
 
-import { createLogger } from '../../utils/logger.js';
 import { createApiClient } from './pixiv/client.js';
 import { createIllustApi } from './pixiv/illust.js';
 import { createSearchApi } from './pixiv/search.js';
@@ -29,12 +28,11 @@ import { createFeedApi } from './pixiv/feed.js';
 import { createUserApi } from './pixiv/user.js';
 import { createSocialApi } from './pixiv/social.js';
 
-const log = createLogger('pixivApi');
-
 // ── 工厂 ──
 export function createPixivApi(transport) {
   const client = createApiClient(transport);
-  const ctx = { ...client, transport, log };
+  // log 由外层 transport 注入（core 不反向依赖 utils/logger）
+  const ctx = { ...client, transport, log: transport.log };
 
   const illust = createIllustApi(ctx);
   // 搜索按 ID 直查时复用作品详情（含缓存），避免重复请求

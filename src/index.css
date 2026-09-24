@@ -5,7 +5,8 @@
   --border: rgba(255, 255, 255, 0.08);
   --text-primary: #f2f3f5;
   --text-secondary: #a0a4ad;
-  --text-tertiary: #6b7080;
+  /* 提亮灰字：#6b7080 在深底上仅 3.8:1，低于 WCAG AA；#8b91a0 约 5.6:1 */
+  --text-tertiary: #8b91a0;
   /* 强调色（静态） */
   --color-accent: #4f8cff;
   --color-accent-rgb: 79, 140, 255;

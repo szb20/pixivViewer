@@ -4,9 +4,6 @@
  * 纯函数，无 Node/Browser 依赖，Electron 主进程 + React 前端共用。
  */
 import { PIXIV_RE } from './constants.js';
-import { createLogger } from '../../utils/logger.js';
-
-const log = createLogger('pixivUtils');
 
 /** 运行在浏览器环境（包括 Capacitor WebView）时走 Vite 代理避免 CORS */
 const USE_PROXY = typeof window !== 'undefined' && typeof import.meta !== 'undefined' && import.meta.env?.DEV;
@@ -70,10 +67,7 @@ export function proxyThumb(url) {
  * @returns {string}
  */
 export function pixivPageUrl(baseUrl, page, size = 1200) {
-  if (!baseUrl) {
-    log.debug('[pixivPageUrl] baseUrl is empty, returning empty');
-    return '';
-  }
+  if (!baseUrl) return '';
 
   // 匹配日期路径 + illustId（从各种 URL 格式中提取）
   // 日期格式: YYYY/MM/DD/HH/MM/SS (6组)
@@ -100,7 +94,6 @@ export function pixivPageUrl(baseUrl, page, size = 1200) {
   const parts = baseUrl.match(/\/(\d{7,})(?:-[0-9a-f]{32}|_|\.|$)/);
   const idMatch = parts ? parts[1] : baseUrl.match(/\d{7,}/)?.[0] || baseUrl.match(/(\d+)/)?.[1];
   const fallback = pixivReUrl(idMatch || '', page);
-  if (!idMatch) log.debug('[pixivPageUrl] no match, using fallback:', { baseUrl, page, fallback });
   return fallback;
 }
 
@@ -239,17 +232,4 @@ export function parseCacheFileName(name) {
   }
 
   return null;
-}
-
-/**
- * 获取数据库缓存 key。
- * 注意：pageIndex 默认为 0，确保同一张图永远产生相同的 key，
- * 避免因 pageIndex 传入 undefined 导致不同的 cacheKey 造成重复。
- * @param {string} illustId
- * @param {number} [pageIndex=0]
- * @param {string} [source='pixiv']
- * @returns {string}
- */
-export function getCacheKey(illustId, pageIndex = 0, _source = 'pixiv') {
-  return `pixiv:${illustId}:${pageIndex}`;
 }

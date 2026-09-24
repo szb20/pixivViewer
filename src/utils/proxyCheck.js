@@ -11,7 +11,7 @@
  */
 import { CapacitorHttp } from '@capacitor/core';
 import { getSettings } from '../pixiv-assistant/index.js';
-import { isDesktopShell, getDesktopProxyPort } from '../api/pixiv.js';
+import { isDesktopShell, getDesktopProxyPort } from './platform.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('proxyCheck');

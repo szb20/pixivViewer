@@ -3,15 +3,12 @@
  *
  * 只负责编排，不执行具体操作。
  * 每行代码都应能看出「业务规则」而非「实现细节」。
- *
- * 依赖注入所有下层，便于测试。
  */
 import { PixivEntity } from './entity.js';
 import { PixivRepository } from './repository.js';
 import { FileStore } from './fileStore.js';
-import { TransitionEngine } from './transitionEngine.js';
 import { NetworkStore } from './networkStore.js';
-import { galleryHasFile } from './gallery.js';
+import { galleryHasFile, exportToGallery } from './gallery.js';
 import { pixivReUrl } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { downloadMonitor } from '../../utils/downloadMonitor.js';
@@ -23,77 +20,40 @@ export class PixivStorageService {
   constructor() {
     this.repository = new PixivRepository();
     this.fileStore = new FileStore();
-    this.transitionEngine = new TransitionEngine(this.repository, this.fileStore);
     this.networkStore = new NetworkStore();
   }
 
   /**
-   * 保存到相册 (cached → saved)。
-   * 幂等：已是 saved 状态则直接返回。
+   * 精确查找 entity；未命中且目标不是页 0 时，仅动图允许回退到页 0（动图统一存页 0），
+   * 普通图片必须逐页精确匹配，否则本地复用时会把其它页的图片当成当前页显示。
    * @param {string} illustId
-   * @param {number} [pageIndex=0]
-   * @returns {Promise<{success: boolean, entity?: PixivEntity, error?: string, idempotent?: boolean}>}
+   * @param {number} pageIndex
+   * @returns {Promise<PixivEntity|null>}
    */
-  async save(illustId, pageIndex = 0) {
-    const id = PixivEntity.makeId(illustId, pageIndex);
-
-    // 1. 查找 entity
-    let entity = await this.repository.find(id);
-    if (!entity) {
-      // 仅动图允许回退到页 0；普通图片必须逐页精确匹配
-      const gifEntity = await this.repository.find(PixivEntity.makeId(illustId, 0));
-      if (gifEntity?.isGif) entity = gifEntity;
-    }
-    if (!entity) return { success: false, error: 'not_found' };
-
-    // 2. 委托 TransitionEngine
-    const result = await this.transitionEngine.transition('cached→saved', entity);
-    if (result.success) scheduleMetaBackup();
-    return result;
+  async _findEntity(illustId, pageIndex = 0) {
+    const entity = await this.repository.find(PixivEntity.makeId(illustId, pageIndex));
+    if (entity || pageIndex === 0) return entity;
+    const gifEntity = await this.repository.find(PixivEntity.makeId(illustId, 0));
+    return gifEntity?.isGif ? gifEntity : null;
   }
 
   /**
-   * 移回缓存 (saved → cached)。
-   * 幂等：已是 cached 状态则直接返回。
-   * @param {string} illustId
-   * @param {number} [pageIndex=0]
+   * cached → saved：私有存储文件导出系统相册 + 元数据置 saved。
+   * 幂等：已是 saved 直接返回；状态不对返回 invalid_state。
+   * @param {PixivEntity} entity — 必须已有 fileName
    * @returns {Promise<{success: boolean, entity?: PixivEntity, error?: string, idempotent?: boolean}>}
    */
-  async unsave(illustId, pageIndex = 0) {
-    const id = PixivEntity.makeId(illustId, pageIndex);
-
-    let entity = await this.repository.find(id);
-    if (!entity) {
-      // 仅动图允许跨页回退到页 0；普通图片必须页页精确匹配，
-      // 否则本地复用时会把其它页的图片当成当前页显示
-      const gifEntity = await this.repository.find(PixivEntity.makeId(illustId, 0));
-      if (gifEntity?.isGif) entity = gifEntity;
+  async _promoteToSaved(entity) {
+    if (entity.state === 'saved') return { success: true, entity, idempotent: true };
+    if (entity.state !== 'cached') {
+      return { success: false, error: `invalid_state: expected cached, got ${entity.state}` };
     }
-    if (!entity) return { success: false, error: 'not_found' };
-
-    const result = await this.transitionEngine.transition('saved→cached', entity);
-    if (result.success) scheduleMetaBackup();
-    return result;
-  }
-
-  /**
-   * 删除图片。
-   * delete 就是删除 file + meta，不存在 deleted 状态。
-   * @param {string} illustId
-   * @param {number} [pageIndex=0]
-   * @returns {Promise<{success: boolean}>}
-   */
-  async delete(illustId, pageIndex = 0) {
-    const id = PixivEntity.makeId(illustId, pageIndex);
-    const entity = await this.repository.find(id);
-    if (!entity) return { success: true }; // 已不存在
-
-    // 删除文件
-    await this.fileStore.delete(entity);
-    // 删除元数据
-    await this.repository.delete(entity.id);
-    scheduleMetaBackup();
-    return { success: true };
+    const data = await this.fileStore.readData(entity);
+    if (!data) return { success: false, error: 'file_copy_failed' };
+    const exported = await exportToGallery(data, entity.fileName);
+    if (!exported) return { success: false, error: 'file_copy_failed' };
+    await this.repository.changeState(entity.id, 'saved');
+    return { success: true, entity: entity.withState('saved') };
   }
 
   /**
@@ -103,59 +63,9 @@ export class PixivStorageService {
    * @returns {Promise<{localUrl: string, data: string}|null>}
    */
   async load(illustId, pageIndex = 0) {
-    const id = PixivEntity.makeId(illustId, pageIndex);
-    let entity = await this.repository.find(id);
-    if (!entity) {
-      // 仅动图允许跨页回退到页 0；普通图片必须页页精确匹配，
-      // 否则本地复用时会把其它页的图片当成当前页显示
-      const gifEntity = await this.repository.find(PixivEntity.makeId(illustId, 0));
-      if (gifEntity?.isGif) entity = gifEntity;
-    }
+    const entity = await this._findEntity(illustId, pageIndex);
     if (!entity) return null;
     return await this.fileStore.load(entity);
-  }
-
-  /**
-   * 查询图片状态。
-   * @param {string} illustId
-   * @param {number} [pageIndex=0]
-   * @returns {Promise<{state: 'none'|'cached'|'saved', flags: object, liked: boolean}>}
-   */
-  async getState(illustId, pageIndex = 0) {
-    const id = PixivEntity.makeId(illustId, pageIndex);
-    let entity = await this.repository.find(id);
-    if (!entity) {
-      const gifId = PixivEntity.makeId(illustId, 0);
-      entity = await this.repository.find(gifId);
-    }
-    if (!entity) return { state: 'none', flags: {}, liked: false };
-    return { state: entity.state, flags: entity.flags, liked: entity.isLiked };
-  }
-
-  /**
-   * 查询缓存状态（兼容旧接口格式）。
-   * @param {string} illustId
-   * @param {number} [pageIndex=0]
-   * @returns {Promise<{cached: boolean, saved: boolean, favorite: boolean}>}
-   */
-  async getCacheStatus(illustId, pageIndex = 0) {
-    const { state, flags } = await this.getState(illustId, pageIndex);
-    return {
-      cached: state !== 'none',
-      saved: state === 'saved',
-      favorite: flags.favorite || false,
-    };
-  }
-
-  /**
-   * 按状态分页查询。
-   * @param {'cached'|'saved'} state
-   * @param {number} offset
-   * @param {number} limit
-   * @returns {Promise<{items: PixivEntity[], total: number}>}
-   */
-  async listByState(state, offset = 0, limit = 50) {
-    return await this.repository.listByState(state, offset, limit);
   }
 
   /**
@@ -166,14 +76,6 @@ export class PixivStorageService {
    */
   async listLiked(offset = 0, limit = 50) {
     return await this.repository.listLiked(offset, limit);
-  }
-
-  /**
-   * 统计信息。
-   * @returns {Promise<{total: number, saved: number, cached: number, totalSize: number}>}
-   */
-  async stats() {
-    return await this.repository.stats();
   }
 
   /**
@@ -256,13 +158,7 @@ export class PixivStorageService {
     // 动图统一由 api/index.js 的 saveItem 分发到 saveGifToAlbum，本层只处理静态图
 
     const id = PixivEntity.makeId(item.illustId, item._pageIndex ?? 0);
-    let entity = await this.repository.find(id);
-    if (!entity) {
-      // 仅动图允许回退到页 0（动图统一存页 0）；普通图片必须逐页独立保存，
-      // 否则多图作品只存了页 0 时，保存其它页会被误判为"已存在"而跳过下载
-      const gifEntity = await this.repository.find(PixivEntity.makeId(item.illustId, 0));
-      if (gifEntity?.isGif) entity = gifEntity;
-    }
+    const entity = await this._findEntity(item.illustId, item._pageIndex ?? 0);
     // 若已有轻记录（toggleLike 创建、无文件），重建时保留其 likedAt，避免喜欢标记被抹掉
     let preserveLikedAt = 0;
     if (entity) {
@@ -272,7 +168,7 @@ export class PixivStorageService {
         preserveLikedAt = entity.likedAt || 0;
         await this.repository.delete(entity.id);
       } else {
-        const result = await this.transitionEngine.transition('cached→saved', entity);
+        const result = await this._promoteToSaved(entity);
         if (result.success) scheduleMetaBackup();
         return result;
       }

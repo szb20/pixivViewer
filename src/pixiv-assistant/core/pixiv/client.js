@@ -14,8 +14,9 @@ const DEFAULT_HEADERS = {
 let csrfTokenCache = { token: '', ts: 0 };
 const CSRF_TTL = 10 * 60 * 1000;
 
-/** 需要重取 CSRF token 的 HTTP 状态码（token 可能失效） */
+/** 需要重取 CSRF token 的 HTTP 状态码（token 可能失效）；transport 抛出的错误带 err.status */
 export function isCsrfRetryable(err) {
+    if ([400, 401, 403, 405, 422].includes(err?.status)) return true;
     return /HTTP\s+(400|401|403|405|422)/.test(err?.message || '');
 }
 
@@ -85,10 +86,9 @@ export function createApiClient(transport) {
         if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('ERR_NETWORK') || msg.includes('ENOTFOUND') || msg.includes('ECONNREFUSED') || msg.includes('网络错误') || msg.includes('timeout') || msg.includes('Timeout') || msg.includes('TIMEOUT') || msg.includes('abort') || msg.includes('Abort')) {
             return `网络连接失败${context ? `（${context}）` : ''}，请检查网络或代理设置`;
         }
-        // HTTP 状态码错误
-        const httpMatch = msg.match(/HTTP\s+(\d+)/);
-        if (httpMatch) {
-            const code = parseInt(httpMatch[1]);
+        // HTTP 状态码错误（优先取 err.status，兼容历史消息格式）
+        const code = typeof err.status === 'number' ? err.status : Number(msg.match(/HTTP\s+(\d+)/)?.[1]);
+        if (code) {
             if (code === 403) return 'Pixiv 拒绝访问，Cookie 可能已过期或需要更新';
             if (code === 404) return `作品未找到${context ? `（${context}）` : ''}，可能已被删除或下架`;
             if (code === 429) return '请求过于频繁，请稍后再试';

@@ -1,13 +1,6 @@
 import { create } from 'zustand';
 import { getMainScrollEl, restoreMainScroll } from '../utils/scroll.js';
 
-const TABS = [
-    { key: 'discover', label: '推荐' },
-    { key: 'ranking', label: '排行' },
-    { key: 'search', label: '搜索' },
-    { key: 'me', label: '我' },
-];
-
 const detailKeyOf = (item) => (
     item?.illustId ? `${item.illustId}:${item._pageIndex ?? item.pageIndex ?? 0}` : ''
 );
@@ -61,7 +54,6 @@ function persistScrollPositions(sp) {
 
 export const useAppStore = create((set, get) => ({
     // ========== Tab 相关 ==========
-    tabs: TABS,
     activeTab: 'discover',
     visitedTabs: new Set(['discover']),
     scrollPositions: loadScrollPositions(),

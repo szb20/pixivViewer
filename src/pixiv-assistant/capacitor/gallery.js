@@ -7,7 +7,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
-import { getGallerySaver } from '../../utils/platform.js';
+import { getGallerySaver, isDesktopShell } from '../../utils/platform.js';
 import { getSettingsSync } from './config.js';
 
 const log = createLogger('gallery');
@@ -23,11 +23,6 @@ const MIME_MAP = {
 export function mimeFor(fileName) {
   const ext = (fileName || '').split('.').pop()?.toLowerCase();
   return MIME_MAP[ext] || 'image/jpeg';
-}
-
-/** 桌面壳：electron/preload.cjs 注入的 window.desktopProxy */
-function isDesktop() {
-  return typeof window !== 'undefined' && !!window.desktopProxy;
 }
 
 /** 确保系统存储权限（Android ≤10 会弹系统申请框；10+ 直接放行） */
@@ -88,7 +83,7 @@ export async function galleryHasFile(fileName) {
 export async function exportToGallery(data, fileName, mimeType = mimeFor(fileName)) {
   try {
     // 桌面壳：弹系统保存对话框写文件
-    if (isDesktop()) {
+    if (isDesktopShell()) {
       try {
         const directory = getSettingsSync().saveDirectory || '';
         const ok = await window.desktopProxy.saveFile({ data, fileName, mimeType, directory });

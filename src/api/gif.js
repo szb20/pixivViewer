@@ -16,7 +16,7 @@ import { createLogger } from '../utils/logger.js';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
 import { exportToGallery, galleryHasFile } from '../pixiv-assistant/capacitor/gallery.js';
 import { scheduleMetaBackup } from '../pixiv-assistant/capacitor/metaBackup.js';
-import { isDesktop, desktop, getGallerySaver } from '../utils/platform.js';
+import { getGallerySaver, isDesktopShell, getDesktopProxyPort } from '../utils/platform.js';
 
 const log = createLogger('gif');
 const IS_DEV = import.meta.env.DEV;
@@ -77,8 +77,8 @@ async function getPixivCookie() {
   return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
 }
 
-/** 桌面走 Electron 主进程；dev 走 Vite 代理；prod 安卓走 CapacitorHttp（原生直连，绕过 WebView CORS） */
-const apiFetch = isDesktop ? desktopFetch : IS_DEV ? browserFetch : prodFetch;
+/** 桌面壳走内嵌代理服务；dev 走 Vite 代理；prod 安卓走 CapacitorHttp（原生直连，绕过 WebView CORS） */
+const apiFetch = isDesktopShell() ? desktopFetch : IS_DEV ? browserFetch : prodFetch;
 
 /** 查询 ugoira 元数据（只发小请求，不下载 ZIP） */
 async function fetchUgoiraMeta(id) {
@@ -370,6 +370,8 @@ async function loadFramesFromDisk(id) {
  */
 async function streamUgoira(id, meta, onProgress) {
   const url = proxyZipUrl(meta.originalSrc);
+  // 桌面壳走壳内代理（Node 侧带 Referer + Clash，行为确定）；web/prod 安卓直连 i.pixiv.re（ACAO:*）
+  const fetchUrl = (await zipProxyFetchUrl(url)) || url;
 
   const ctrl = new AbortController();
   // 停滞检测：只在「没有任何数据到达」超过 90 秒时才中止；
@@ -383,7 +385,7 @@ async function streamUgoira(id, meta, onProgress) {
   armStall(); // 连接阶段也算停滞计时
   let resp;
   try {
-    resp = await fetch(url, { signal: ctrl.signal });
+    resp = await fetch(fetchUrl, { signal: ctrl.signal });
   } catch (e) {
     throw new Error(`ZIP 请求失败: ${e.name === 'AbortError' ? '下载停滞超时' : e.message}`);
   } finally {
@@ -475,25 +477,28 @@ async function extractZipFrames(zipBuf, body, onProgress) {
 }
 
 /**
+ * ZIP 代理拉取地址（仅桌面壳 / dev 有代理通道）：返回 /pixiv-zip 完整 URL（Node 侧带 Referer + Clash，无 CORS），
+ * 返回 null 表示无代理通道（prod 安卓直连）。
+ */
+async function zipProxyFetchUrl(url) {
+  const enc = encodeURIComponent(url);
+  if (IS_DEV) return `/pixiv-zip/${enc}`;
+  if (isDesktopShell()) {
+    const port = await getDesktopProxyPort();
+    if (!port) throw new Error('桌面代理端口不可用');
+    return `http://127.0.0.1:${port}/pixiv-zip/${enc}`;
+  }
+  return null;
+}
+
+/**
  * 下载 Ugoira ZIP（兜底缓冲版）。
- * dev：走 /pixiv-zip 代理；prod：CapacitorHttp 原生下载（可带 pixiv Referer），分块 base64 解码。
+ * 桌面壳 / dev：走代理服务的 /pixiv-zip；prod 安卓：CapacitorHttp 原生下载（可带 pixiv Referer），分块 base64 解码。
  */
 async function downloadZip(url) {
-  // 桌面端：主进程 Node HTTP（带 Clash 代理、无 CORS），返回 base64
-  if (isDesktop) {
-    const resp = await desktop.http.request({
-      url, method: 'GET',
-      headers: { Referer: 'https://www.pixiv.net/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      responseType: 'base64', timeout: 120000,
-    });
-    if (resp.status < 200 || resp.status >= 300) throw new Error(`ZIP 下载失败: HTTP ${resp.status}`);
-    let base64 = typeof resp.data === 'string' ? resp.data : '';
-    base64 = base64.includes(',') ? base64.split(',')[1] : base64;
-    if (!base64) throw new Error('ZIP 下载失败: 数据为空');
-    return base64ToBytes(base64).buffer;
-  }
-  if (IS_DEV) {
-    const zipResp = await fetch(`/pixiv-zip/${encodeURIComponent(url)}`);
+  const proxyUrl = await zipProxyFetchUrl(url);
+  if (proxyUrl) {
+    const zipResp = await fetch(proxyUrl);
     if (!zipResp.ok) throw new Error(`ZIP 下载失败: HTTP ${zipResp.status}`);
     return await zipResp.arrayBuffer();
   }
