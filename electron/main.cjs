@@ -89,7 +89,23 @@ async function startProxyServer() {
       // 剥掉前缀交给中间件（与 Vite 剥前缀的语义一致）
       req.url = req.url.slice(route.prefix.length) || '/';
       withCors(res);
-      route.fn(req, res);
+      // 中间件抛错（如畸形 URL / 非法百分号编码）绝不能冒泡到主进程：
+      // 未捕获异常会让 Electron 弹错误框甚至中断进程，这里统一兜底 500。
+      const onRouteError = (e) => {
+        console.warn('[desktop] 代理路由异常:', e?.message || e);
+        if (res.headersSent) {
+          res.destroy();
+          return;
+        }
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'proxy_route_failed' }));
+      };
+      try {
+        const ret = route.fn(req, res);
+        if (ret && typeof ret.catch === 'function') ret.catch(onRouteError);
+      } catch (e) {
+        onRouteError(e);
+      }
     });
   });
 

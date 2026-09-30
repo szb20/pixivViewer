@@ -8,7 +8,7 @@
  */
 import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
-import { safeFileName } from '../core/utils.js';
+import { safeFileName, truncateUtf8Bytes, utf8ByteLen } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { exportToGallery, deleteFromGallery, loadFromGallery } from './gallery.js';
 
@@ -177,6 +177,7 @@ export class FileStore {
    * 生成文件名。
    * 格式：pixiv_{illustId}_p{pageIndex}_[{author}]_[{title}].{ext}
    * 动图扩展名用 .gif。
+   * 整体按 UTF-8 字节截断（MediaStore/ext4 单文件名上限 255 字节，中文日文很容易超）。
    * @param {PixivEntity} entity
    * @returns {string}
    */
@@ -186,8 +187,11 @@ export class FileStore {
     const safeTitle = safeFileName(entity.title || entity.illustId || '');
     const authorPart = safeAuthor ? `[${safeAuthor}]` : '[]';
     const titlePart = safeTitle ? `[${safeTitle}]` : '[]';
-    return `pixiv_${entity.illustId}_p${entity.pageIndex}_${authorPart}_${titlePart}.${ext}`
-      .replace(/_+/g, '_').slice(0, 200);
+    const head = `pixiv_${entity.illustId}_p${entity.pageIndex}_${authorPart}_`;
+    // 预留扩展名与结尾括号的字节，标题按剩余额度截断
+    const suffix = `_${titlePart}.${ext}`;
+    const budget = Math.max(16, 240 - utf8ByteLen(head) - utf8ByteLen(suffix));
+    return `${head}_${truncateUtf8Bytes(titlePart, budget)}.${ext}`.replace(/_+/g, '_');
   }
 
   // ── 私有方法 ──

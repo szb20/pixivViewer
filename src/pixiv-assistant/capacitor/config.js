@@ -3,7 +3,7 @@
  *
  * 允许主应用注入 settings 和 storage 适配器（configurePixiv），
  * 未注入时使用内置默认实现：
- * - getSettings: localStorage（pixiv_viewer_settings），支持 VITE_PIXIV_COOKIE 环境变量
+ * - getSettings: localStorage（pixiv_viewer_settings）
  * - getFS: Capacitor Filesystem（原生环境），非原生环境返回 null
  */
 import { appStorage, migrateFromLegacyKey } from '../../utils/appStorage.js';
@@ -31,9 +31,10 @@ export function getSettingsSync() {
   return {
     ...stored,
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
-    pixivCookie: stored.pixivCookie || import.meta.env.VITE_PIXIV_COOKIE || '',
-    gridQuality: stored.gridQuality || 'thumb',       // 'mini' | 'thumb'
-    gridLayout: stored.gridLayout || 'waterfall',      // 桌面（≥900px）内容页布局：'waterfall' | 'grid'
+    // 注意：不要在这里读 import.meta.env 注入 Cookie —— Vite 会在构建期把值静态内联进
+    // 前端产物，APK / Electron 包反编译即可拿到 PHPSESSID。Cookie 只走设置页手填。
+    pixivCookie: stored.pixivCookie || '',
+    gridLayout: stored.gridLayout || 'waterfall',      // 内容页布局：'waterfall'（瀑布流）| 'grid'（方形宫格）
     saveDirectory: stored.saveDirectory || '',         // 桌面端图片保存目录（空 = 系统图片文件夹）
   };
 }

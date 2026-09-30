@@ -32,7 +32,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         hasMore: !!cache.hasMore,
       };
     },
-    fetchPage: async (append, currentItems) => {
+    fetchPage: async (append, currentItems, isStale) => {
       if (!append) startRef.current = 0;
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
@@ -47,6 +47,9 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       let lastError = '';
       while (rawTotal < PAGE_SIZE * 3 && emptyStreak < 3) {
         const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
+        // 响应已被刷新/新请求取代 → 立刻停手：这次 await 之后不能再推进 startRef，
+        // 否则会把新一轮刷新刚归零的游标又推走一页，导致下一次触底跳过一整页
+        if (isStale?.()) return null;
         const rawList = r?.illusts || [];
         lastError = r?.message || r?.error || '';
         if (!rawList.length) break;
@@ -64,10 +67,13 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         emptyStreak = fresh === 0 ? emptyStreak + 1 : 0;
       }
       log.debug('[discover-load] append:', append, 'start:', startRef.current, 'raw:', rawTotal, 'fresh:', collected.length, 'err:', lastError || '');
+      // 整页无任何返回且有错误 → 判定为请求失败（区别于"整页被过滤"），交给 useTabFeed 提示重试
+      const failed = rawTotal === 0 && !!lastError;
       return {
         list: collected,
         // 上游仍有返回就继续；连续多页无新内容才断流（整页被过滤不算断流）
         hasMore: rawTotal > 0 && emptyStreak < 3,
+        error: failed ? (lastError || '推荐为空（需要 Cookie）') : '',
         emptyMessage: lastError || '推荐为空（需要 Cookie）',
         cacheExtra: { start: startRef.current },
       };
@@ -91,7 +97,12 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
-      {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
+      {!feed.loading && feed.appendError && (
+        <div className="hint hint--error" onClick={feed.retryAppend} role="button">
+          加载失败，点击重试
+        </div>
+      )}
+      {!feed.loading && !feed.appendError && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
     </div>
   );
 }

@@ -63,6 +63,19 @@ function emit() {
   for (const fn of [...listeners]) fn();
 }
 
+/**
+ * 登记失败任务的重试信息（内部实现）。
+ * 单例方法 recordFailure(key, meta) 与 start() 返回的句柄共用同一份逻辑，
+ * 避免调用方误把 mon.recordFailure(...) 用在句柄上（句柄历史上没有这个方法）。
+ */
+function recordFailureFor(key, retryMeta = {}) {
+  const j = jobs.get(key);
+  if (!j) return;
+  j.retry = { ...(j.retry || {}), ...retryMeta, key, illustId: retryMeta.illustId || j.illustId, page: retryMeta.page ?? j.page, title: retryMeta.title || j.title, kind: retryMeta.kind || j.kind };
+  persistFailed();
+  emit();
+}
+
 export const downloadMonitor = {
   /** 上报本次下载队列的文件总数（徽标显示用） */
   setQueueTotal(n) {
@@ -92,6 +105,11 @@ export const downloadMonitor = {
     });
     emit();
     return {
+      // 句柄自带 recordFailure（已绑定 key）：调用方拿到 mon = start(...) 后
+      // 直接 mon.recordFailure(meta) 即可，不要再去外面取单例
+      recordFailure(retryMeta = {}) {
+        recordFailureFor(key, retryMeta);
+      },
       setProgress(pct) {
         const j = jobs.get(key);
         if (!j || j.status === 'done' || j.status === 'error') return;
@@ -137,15 +155,12 @@ export const downloadMonitor = {
   /**
    * 保存失败时登记完整重试信息（供下载管理弹窗一键重试）。
    * 建议在 finish(false) 前调用；重试时会用这份信息重新走 saveItem。
+   * 注意：拿到 start() 句柄的调用方应直接用句柄上的 recordFailure（已绑定 key）。
    * @param {string} key — 与 start() 一致的 key
    * @param {object} retryMeta — { illustId, page, title, kind, originalUrl, mediumUrl, thumbnailUrl, ... }
    */
   recordFailure(key, retryMeta = {}) {
-    const j = jobs.get(key);
-    if (!j) return;
-    j.retry = { ...(j.retry || {}), ...retryMeta, key, illustId: retryMeta.illustId || j.illustId, page: retryMeta.page ?? j.page, title: retryMeta.title || j.title, kind: retryMeta.kind || j.kind };
-    persistFailed();
-    emit();
+    recordFailureFor(key, retryMeta);
   },
 
   /** 立即清除所有已完成/失败任务（含持久化的失败列表） */

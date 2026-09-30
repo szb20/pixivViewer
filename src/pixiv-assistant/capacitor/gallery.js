@@ -66,6 +66,16 @@ export async function loadFromGallery(fileName) {
   }
 }
 
+/** 相册能力是否可用（原生 + GallerySaver 插件）。桌面/浏览器返回 false，
+ *  调用方据此跳过"相册里文件还在不在"的校验，避免误判为缺失。 */
+export function isGalleryAvailable() {
+  try {
+    return !!Capacitor?.Plugins?.GallerySaver && !!Capacitor?.isNativePlatform?.();
+  } catch {
+    return false;
+  }
+}
+
 /** 查询系统相册是否已存在同名文件（只查索引，不读内容，轻量） */
 export async function galleryHasFile(fileName) {
   try {

@@ -88,7 +88,10 @@ async function prodFetch(pathname, { headers = {}, timeout, method = 'GET', body
     if (raw) return typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
     return typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
   } catch (e) {
-    if (e.message?.includes('HTTP')) throw e;
+    // 用结构化错误契约判断（httpError 带 status），不要解析消息字符串：
+    // 'net::ERR_HTTP_RESPONSE_CODE_FAILURE' 之类的网络错误也含 "HTTP"，
+    // 曾被误判成 HTTP 错误直接上抛，丢掉了下面的 fetch 降级兜底。
+    if (e?.status) throw e;
     // CapacitorHttp 失败时回退 fetch（可能直接走 WIFI 绕过代理）
     log.info('CapacitorHttp 请求失败，降级 fetch:', pathname, e.message);
     const ctrl = new AbortController();

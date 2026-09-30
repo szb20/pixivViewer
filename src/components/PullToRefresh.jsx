@@ -81,13 +81,24 @@ export default function PullToRefresh({ onRefresh }) {
       }
     };
 
+    // 手势被打断：直接复位，不触发刷新
+    const onTouchCancel = () => {
+      startYRef.current = null;
+      if (refreshingRef.current) return;
+      animateTo(0, () => setState('idle'));
+    };
+
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: true });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
+    // touchcancel（来电/通知栏下拉/手势导航打断）不会触发 touchend：
+    // 不复位会让指示器永久挂在屏幕上，直到下一次下拉
+    el.addEventListener('touchcancel', onTouchCancel, { passive: true });
     return () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchCancel);
       cancelAnimationFrame(rafRef.current);
     };
   }, [onRefresh]);

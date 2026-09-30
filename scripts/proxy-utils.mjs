@@ -98,8 +98,15 @@ export function createApiProxy(targetHost, opts = {}) {
 
   return (req, res) => {
     // Vite 已剥离挂载前缀，req.url 是剩余路径
-    const targetUrl = `${targetHost}${req.url}`;
-    const parsed = new URL(targetUrl);
+    let parsed;
+    try {
+      parsed = new URL(`${targetHost}${req.url}`);
+    } catch {
+      // 畸形 URL 不能抛进调用方（dev 中间件 / Electron 主进程）
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_target' }));
+      return;
+    }
 
     const send = (agent) => new Promise((resolve, reject) => {
       const proxyOpts = {
@@ -113,6 +120,10 @@ export function createApiProxy(targetHost, opts = {}) {
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
           'Referer': targetHost,
           ...extraHeaders,
+          // 透传业务头：关注/取消关注是 POST 表单，缺 Content-Type 与 x-csrf-token
+          // 会被 Pixiv 直接拒绝（dev / 桌面端点赞关注失败的原因）
+          ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {}),
+          ...(req.headers['x-csrf-token'] ? { 'x-csrf-token': req.headers['x-csrf-token'] } : {}),
           // 透传自定义头
           ...(req.headers['x-pixiv-cookie'] ? { Cookie: req.headers['x-pixiv-cookie'] } : {}),
         },
@@ -152,12 +163,25 @@ export function createApiProxy(targetHost, opts = {}) {
       }
     });
 
+    // 只有幂等请求才自动重试：POST/PUT 的 body 已被 req.pipe 消费掉，
+    // 重发会变成空 body（且可能重复副作用），直接报错让客户端决定
+    const retryable = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+
     (async () => {
       try {
         await send(holder.get());
       } catch (err) {
+        const msg0 = err.message || String(err);
+        if (!retryable) {
+          console.warn(`[proxy] ${targetHost} ${req.method} 上游连接失败: ${msg0}`);
+          if (!res.headersSent) {
+            res.writeHead(502, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: msg0 }));
+          }
+          return;
+        }
         // 连接级失败：记录真实错误、换新连接、重试一次
-        console.warn(`[proxy] ${targetHost} 上游连接失败: ${err.message || err}，正在重试...`);
+        console.warn(`[proxy] ${targetHost} 上游连接失败: ${msg0}，正在重试...`);
         holder.reset();
         try {
           await send(holder.get());
@@ -191,8 +215,14 @@ export function createImageProxy(targetHost, opts = {}) {
   const cacheControl = opts.cacheControl || null;
 
   return (req, res) => {
-    const targetUrl = `${targetHost}${req.url}`;
-    const parsed = new URL(targetUrl);
+    let parsed;
+    try {
+      parsed = new URL(`${targetHost}${req.url}`);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_target' }));
+      return;
+    }
 
     const send = (agent) => new Promise((resolve, reject) => {
       const proxyOpts = {

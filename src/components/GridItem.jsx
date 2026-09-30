@@ -17,7 +17,7 @@ const LONG_PRESS_MS = 500;
  * @param {function} onLongPress (img) => void，提供则启用长按（长按后不再触发 onOpen）
  * @param {function} onHide      (id) => void，提供则在右上角显示 ✕（不想看/不再推荐）
  * @param {string}   variant    'grid' | 'media' | 'gallery'
- * @param {string}   thumbSrc   覆盖缩略图 src（如 gridThumbUrl 处理后的 URL）
+ * @param {string}   thumbSrc   覆盖缩略图 src（如瀑布流的等比 540 缩略图）
  */
 export default memo(function GridItem({
   img,
@@ -109,9 +109,18 @@ export default memo(function GridItem({
     setError(false);
   }, []);
 
+  // src 变化（换图 / 重试后拿到新地址）时复位，避免一次失败就永久停在错误态
+  useEffect(() => {
+    setError(false);
+    setLoaded(false);
+  }, [src]);
+
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
   const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}${pressState === 'pressing' ? ' is-pressing' : ''}${pressState === 'confirmed' ? ' is-long-pressed' : ''}`;
+  const itemStyle = variant === 'masonry'
+    ? { aspectRatio: ratio || 1, '--item-index': index % 24 }
+    : { '--item-index': index % 24 };
 
   // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
   if (variant === 'gallery') {
@@ -120,14 +129,21 @@ export default memo(function GridItem({
     }
     if (error) {
       return (
-        <div className={v.item} onClick={retryThumb}>
+        <div className={`${v.item}${stateCls}`} style={itemStyle} onClick={retryThumb}>
           <div className="grid-thumb-fallback">加载失败<br />点此重试</div>
         </div>
       );
     }
   }
-  // 其它变体加载失败 → 隐藏
-  if (error && variant !== 'gallery') return null;
+  // 非 gallery 变体加载失败 → 显示占位（可点击重试），不再直接消失
+  // （弱网下几张缩略图瞬时失败会让卡片凭空消失，且 key 复用后也不会回来）
+  if (error && variant !== 'gallery') {
+    return (
+      <div className={`${v.item}${stateCls}`} style={itemStyle} onClick={retryThumb}>
+        <div className="grid-thumb-fallback">加载失败<br />点此重试</div>
+      </div>
+    );
+  }
 
   const thumb = (
     <>
@@ -150,11 +166,7 @@ export default memo(function GridItem({
   return (
     <div
       className={`${v.item}${shimmerCls}${stateCls}`}
-      style={
-        variant === 'masonry'
-          ? { aspectRatio: ratio || 1, '--item-index': index % 24 }
-          : { '--item-index': index % 24 }
-      }
+      style={itemStyle}
       onClick={handleClick}
       onPointerDown={startLongPress}
       onPointerMove={moveLongPress}

@@ -10,7 +10,7 @@ import { Unzip } from 'fflate';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { browserFetch, prodFetch, desktopFetch } from './pixiv.js';
 import {
-  PixivEntity, PixivRepository, getSettings, safeFileName, getFS, CACHE_DIR,
+  PixivEntity, PixivRepository, getSettings, safeFileName, truncateUtf8Bytes, utf8ByteLen, getFS, CACHE_DIR,
 } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
@@ -95,9 +95,10 @@ async function fetchUgoiraMeta(id) {
 
 /** 动图保存到相册时的稳定文件名（由 illustId/作者/标题决定，同名即同图） */
 function buildGifFileName(sid, author, title) {
-  return `pixiv_${sid}_g0_[${safeFileName(author)}]_[${safeFileName(title)}].gif`
-    .replace(/_+/g, '_')
-    .slice(0, 200);
+  // 按字节截断：MediaStore/ext4 单文件名上限 255 字节，日文标题很容易超（旧实现按字符 slice，扩展名会被切掉）
+  const head = `pixiv_${sid}_g0_[${safeFileName(author)}]_`;
+  const budget = Math.max(16, 240 - utf8ByteLen(head) - utf8ByteLen('.gif'));
+  return `${head}[${truncateUtf8Bytes(safeFileName(title), budget)}].gif`.replace(/_+/g, '_');
 }
 
 /**
@@ -189,6 +190,14 @@ function createUnzipper(meta, onFrameProgress) {
         return { path: frameUrl, delay: f.delay || 100 };
       });
       return frames;
+    },
+    /** 失败回收：已解出的帧 blob 全部释放（feed 中途出错/停滞超时时调用） */
+    abandon() {
+      for (const url of entryUrls.values()) {
+        try { URL.revokeObjectURL(url); } catch { /* 忽略 */ }
+      }
+      entryUrls.clear();
+      entryOrder.length = 0;
     },
   };
 }
@@ -412,6 +421,8 @@ async function streamUgoira(id, meta, onProgress) {
   return await new Promise((resolve, reject) => {
     const fail = (err) => {
       try { ctrl.abort(); } catch { /* ignore */ }
+      // 释放已解出的帧 blob：否则下载停滞/解压出错时，几十帧 1200px 的 blob 会一直驻留
+      try { unzipper.abandon(); } catch { /* ignore */ }
       reject(err instanceof Error ? err : new Error(String(err)));
     };
 
@@ -536,7 +547,8 @@ export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
 
   // 同一作品的下载已在路上 → 挂上自己的进度监听，等同一个 promise（避免重复下载）
   const existing = inflight.get(id);
-  if (existing && !opts.force) {
+  // force 刷新同样复用在途下载：否则会与正在进行的下载并发写同一个磁盘缓存包
+  if (existing) {
     if (onProgress) {
       existing.listeners.add(onProgress);
       onProgress?.(existing.lastPct);
@@ -585,7 +597,7 @@ export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
 
     let frames;
     if (IS_DEV) {
-      const zipBuf = await downloadZip(body.originalSrc);
+      const zipBuf = await downloadZip(proxyZipUrl(body.originalSrc));
       frames = await extractZipFrames(zipBuf, body, broadcast);
     } else {
       try {
@@ -593,7 +605,7 @@ export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
         log.info(`[fetchUgoiraFrames] 流式解帧成功: ${id} ${frames.length} 帧`);
       } catch (e) {
         log.info('[fetchUgoiraFrames] 流式下载失败，回退缓冲下载:', e.message);
-        const zipBuf = await downloadZip(body.originalSrc);
+        const zipBuf = await downloadZip(proxyZipUrl(body.originalSrc));
         frames = await extractZipFrames(zipBuf, body, broadcast);
         saveZipToDisk(id, body, [new Uint8Array(zipBuf)]).catch(() => { });
       }
@@ -711,13 +723,13 @@ export async function saveGifToAlbum(item, onProgress) {
         mon.finish(true);
         saveLosslessZipToGallery(sid).catch(() => { });
       } else {
-        mon.recordFailure(`${sid}_0`, failMeta);
+        mon.recordFailure(failMeta);
         mon.finish(false, r?.error || '动图保存失败');
       }
       return r;
     },
     (e) => {
-      mon.recordFailure(`${sid}_0`, failMeta);
+      mon.recordFailure(failMeta);
       mon.finish(false, e?.message || '动图保存失败');
       throw e;
     },

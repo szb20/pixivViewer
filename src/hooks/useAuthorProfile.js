@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { showToast } from '../utils/toast.js';
 
@@ -28,9 +28,14 @@ export function useAuthorProfile(userId, initialAvatar = '') {
   const [avatar, setAvatar] = useState(initialAvatar || '');
   const [isFollowed, setIsFollowed] = useState(false);
   const [updating, setUpdating] = useState(false);
+  // 用户本次会话手动改过关注状态 → 迟到的 profile 响应不得再覆盖它
+  // （否则慢网下"点了关注"会在资料返回后自己弹回未关注）
+  const followTouchedRef = useRef(false);
+  const followedRef = useRef(false);
 
   useEffect(() => {
     if (!id) return;
+    followTouchedRef.current = false;
     // 列表自带头像立即可用；随后若 profile 接口返回更清晰头像则覆盖
     setAvatar(initialAvatar || loadAvatarCache()[id] || '');
     const cached = profileCache.get(id);
@@ -38,6 +43,7 @@ export function useAuthorProfile(userId, initialAvatar = '') {
     if (cached?.avatar) {
       setAvatar(cached.avatar);
       setIsFollowed(cached.isFollowed);
+      followedRef.current = cached.isFollowed;
       return;
     }
     let cancelled = false;
@@ -52,14 +58,19 @@ export function useAuthorProfile(userId, initialAvatar = '') {
         setTimeout(() => { if (!cancelled) loadProfile(1); }, 1500);
         return;
       }
-      if (profile?.avatar) profileCache.set(id, { avatar: profile.avatar, isFollowed: !!profile.isFollowed });
+      // 缓存里保留用户手动改过的关注状态，别用迟到的响应污染其它页面
+      const followed = followTouchedRef.current ? followedRef.current : !!profile?.isFollowed;
+      if (profile?.avatar) profileCache.set(id, { avatar: profile.avatar, isFollowed: followed });
       if (!cancelled) {
         // 只有 profile 接口返回了头像才覆盖；为空时保留列表自带头像，避免被反爬空响应顶掉
         if (profile?.avatar) {
           setAvatar(profile.avatar);
           saveAvatarCache(id, profile.avatar);
         }
-        setIsFollowed(!!profile?.isFollowed);
+        if (!followTouchedRef.current) {
+          followedRef.current = followed;
+          setIsFollowed(followed);
+        }
       }
     };
     loadProfile();
@@ -69,6 +80,8 @@ export function useAuthorProfile(userId, initialAvatar = '') {
   const toggleFollow = useCallback(async () => {
     if (!id || updating) return;
     const next = !isFollowed;
+    followTouchedRef.current = true; // 用户的意图优先，之后到达的 profile 不再覆盖
+    followedRef.current = next;
     setIsFollowed(next); // 乐观更新
     setUpdating(true);
     try {
@@ -77,10 +90,12 @@ export function useAuthorProfile(userId, initialAvatar = '') {
         if (avatar) profileCache.set(id, { avatar, isFollowed: next });
         showToast(next ? '已关注' : '已取消关注', { type: 'success' });
       } else {
+        followedRef.current = !next;
         setIsFollowed(!next);
         showToast(r?.error || '操作失败', { type: 'error' });
       }
     } catch {
+      followedRef.current = !next;
       setIsFollowed(!next);
       showToast('操作失败', { type: 'error' });
     } finally {

@@ -3,7 +3,8 @@
    ══════════════════════════════════════════════ */
 
 .search-page .search-head {
-  padding: 0 12px;
+  /* 顶部为固定悬浮搜索栏留位：safe-area + 12px 上边距 + 44px 栏高 + 8px 间隙 */
+  padding: calc(env(safe-area-inset-top, 0px) + 64px) 12px 0;
 }
 
 /* ── 搜索栏：毛玻璃（通过 Portal 渲染到 .app）── */
@@ -234,9 +235,20 @@
   top: calc(env(safe-area-inset-top, 0px) + 12px);
   left: 50%;
   transform: translateX(-50%);
-  width: min(560px, calc(100vw - 28px));
+  /* 右侧固定齿轮按钮（.me-settings-btn，48px + 16px 边距）覆盖在栏的最右端，
+     这里把栏缩短并右移，避免提交按钮被齿轮压住点不到 */
+  width: min(560px, calc(100vw - 96px));
   max-width: 560px;
+  margin-left: 32px;
   z-index: 5;
+}
+
+/* 手机端：齿轮贴边（right: max(12px, safe-right)），留 12+48+8 = 68px */
+@media (max-width: 559px) {
+  .search-bar--top {
+    width: calc(100vw - 96px);
+    margin-left: 34px;
+  }
 }
 
 /* 底部弹出（手机端原形态保留，双栏时代柱同理窄栏） */

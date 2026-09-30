@@ -149,13 +149,45 @@ export function getCompositeKey(img) {
   return `${id}_${page}`;
 }
 
+/** 单个字符的 UTF-8 字节数 */
+export function utf8ByteLen(ch) {
+  const cp = ch.codePointAt(0);
+  if (cp < 0x80) return 1;
+  if (cp < 0x800) return 2;
+  if (cp < 0x10000) return 3;
+  return 4;
+}
+
 /**
- * 安全文件名（移除非法字符）
+ * 按 UTF-8 字节数截断（不会切碎多字节字符）。
+ * Android 的 MediaStore / ext4 单个文件名上限是 255 **字节**，不是字符：
+ * 日文标题 80 字符 ≈ 240 字节，加上前缀与作者段就会 ENOMETOOLONG 写入失败。
+ * @param {string} s
+ * @param {number} maxBytes
+ * @returns {string}
+ */
+export function truncateUtf8Bytes(s, maxBytes) {
+  const str = String(s ?? '');
+  if (!(maxBytes > 0)) return '';
+  let used = 0;
+  let out = '';
+  for (const ch of str) {
+    const b = utf8ByteLen(ch);
+    if (used + b > maxBytes) break;
+    used += b;
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * 安全文件名（移除非法字符，并按字节截断）
  * @param {string} s
  * @returns {string}
  */
 export function safeFileName(s) {
-  return (s || '').replace(/[\\:*?"<>|\r\n\t]/g, '').replace(/\//g, '-').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const cleaned = (s || '').replace(/[\\:*?"<>|\r\n\t]/g, '').replace(/\//g, '-').replace(/\s+/g, ' ').trim();
+  return truncateUtf8Bytes(cleaned, 80);
 }
 
 /**

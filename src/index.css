@@ -243,13 +243,11 @@ button,
 /* ── 毛玻璃通用样式 ── */
 .frosted {
   background: rgba(15, 17, 21, 0.34);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
 }
 
 .frosted-light {
   background: rgba(255, 255, 255, 0.075);
-  -webkit-backdrop-filter: blur(8px) saturate(135%);
   backdrop-filter: blur(8px) saturate(135%);
 }
 
@@ -335,7 +333,6 @@ button,
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 26px;
   background: rgba(22, 25, 32, 0.52);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
   backdrop-filter: blur(20px) saturate(160%);
   box-shadow:
     0 14px 36px rgba(0, 0, 0, 0.42),
@@ -765,7 +762,6 @@ button,
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -803,7 +799,6 @@ button,
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -851,7 +846,6 @@ button,
   padding: 14px 16px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
   backdrop-filter: blur(18px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text-secondary);
@@ -870,7 +864,6 @@ button,
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 12px;
@@ -887,7 +880,6 @@ button,
   padding: 12px 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
   backdrop-filter: blur(18px) saturate(150%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text-secondary);
@@ -900,7 +892,6 @@ button,
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.1);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 12px;
@@ -915,6 +906,12 @@ button,
   padding: 8px 0 4px;
 }
 
+/* 触底翻页失败：可点击重试，与"没有更多了"区分开 */
+.hint--error {
+  color: var(--danger);
+  cursor: pointer;
+}
+
 .grid-thumb-fallback {
   width: 100%;
   height: 100%;
@@ -924,7 +921,6 @@ button,
   justify-content: center;
   gap: 2px;
   background: rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
   backdrop-filter: blur(14px) saturate(145%);
   color: var(--text-tertiary);
   font-size: 11px;
@@ -942,7 +938,6 @@ button,
   inset: 0;
   z-index: 100;
   background: rgba(8, 10, 14, 0.26);
-  -webkit-backdrop-filter: blur(10px) saturate(135%);
   backdrop-filter: blur(10px) saturate(135%);
   display: flex;
   align-items: center;
@@ -978,7 +973,6 @@ button,
   animation: dialog-panel-in 0.3s ease;
   /* 面板材质由 CSS 变量驱动，缺省毛玻璃质感 */
   background: rgba(var(--dialog-bg, 15, 17, 21), var(--dialog-alpha, 0.48));
-  -webkit-backdrop-filter: blur(var(--dialog-blur, 18px)) saturate(150%);
   backdrop-filter: blur(var(--dialog-blur, 18px)) saturate(150%);
   box-shadow:
     0 18px 50px rgba(0, 0, 0, 0.5),
@@ -1031,7 +1025,6 @@ button,
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 13px;
@@ -1113,7 +1106,6 @@ button,
   color: var(--text-primary);
   font-size: 13px;
   animation: toast-in 0.2s ease;
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
   backdrop-filter: blur(18px) saturate(160%);
   /* 语义色只作为细微光效，不再把提醒整体染成红色等实色块 */
   background: rgba(15, 17, 21, 0.58);

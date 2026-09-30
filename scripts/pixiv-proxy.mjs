@@ -22,6 +22,27 @@ function proxyError(req, res, err, context = '') {
   if (!res.headersSent) res.writeHead(502).end();
 }
 
+/** /pixiv-zip 只允许转发到 Pixiv 图床域：否则本机任意网页都能借它当任意 https 的开放代理 */
+const ZIP_ALLOWED_HOSTS = new Set(['i.pixiv.re', 'pixiv.re', 'i.pximg.net']);
+
+/**
+ * 解析 /pixiv-zip 的目标地址并做白名单校验。
+ * 非法百分号编码（decodeURIComponent 抛 URIError）与不在白名单的域名都返回 null，
+ * 由调用方回 400 —— 不能让异常冒泡到 Electron 主进程。
+ * @returns {string|null} 可安全请求的 https URL
+ */
+function parseZipTarget(rawPath) {
+  let url;
+  try {
+    url = new URL(decodeURIComponent(rawPath));
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (!ZIP_ALLOWED_HOSTS.has(url.hostname)) return null;
+  return url.href;
+}
+
 /** /pixiv-img/*, /pixiv-thumb/*, /pixiv-zip/* → i.pixiv.re / pixiv.re */
 export function pixivImageProxy() {
   const proxyUrl = getProxyUrl();
@@ -65,8 +86,14 @@ export function pixivImageProxy() {
             });
             let r = await withRetry((agent) => doGet(baseUrl, agent), 'pixiv-img');
             if ([301, 302, 307, 308].includes(r.statusCode) && r.headers.location) {
-              const redirect = new URL(r.headers.location, baseUrl).href;
-              r = await withRetry((agent) => doGet(redirect, agent), 'pixiv-img-redirect');
+              const redirect = new URL(r.headers.location, baseUrl);
+              // 只跟随白名单域的重定向，避免被上游 302 带到任意地址
+              if (!ZIP_ALLOWED_HOSTS.has(redirect.hostname)) {
+                r.resume();
+                res.writeHead(502).end();
+                return;
+              }
+              r = await withRetry((agent) => doGet(redirect.href, agent), 'pixiv-img-redirect');
             }
             res.writeHead(r.statusCode, { ...r.headers, 'Cache-Control': 'public, max-age=604800' });
             r.pipe(res);
@@ -83,9 +110,14 @@ export function pixivImageProxy() {
       cacheControl: 'public, max-age=604800',
     }),
 
-    /** /pixiv-zip/... → 原始 ZIP（Ugoira 动图） */
+    /** /pixiv-zip/... → 原始 ZIP（Ugoira 动图）；目标地址必须在白名单内 */
     zip: (req, res) => {
-      const targetUrl = decodeURIComponent(req.url.slice(1));
+      const targetUrl = parseZipTarget(req.url.slice(1));
+      if (!targetUrl) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'invalid_target' }));
+        return;
+      }
       (async () => {
         try {
           const p = await withRetry(

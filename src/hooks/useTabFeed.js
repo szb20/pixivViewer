@@ -47,6 +47,7 @@ export function useTabFeed({
   const [loading, setLoading] = useState(autoLoad);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [appendError, setAppendError] = useState(null); // 触底翻页失败（区别于 error：不清空已有列表）
   const [hasMore, setHasMore] = useState(true);
   const [hydrated, setHydrated] = useState(false);
   const sentinelRef = useRef(null);
@@ -75,8 +76,10 @@ export function useTabFeed({
     else { setLoading(true); setError(null); }
 
     try {
-      const r = await fetchPageStable(append, itemsRef.current);
-      if (seq !== loadSeqRef.current) return; // 已被更新的请求取代，丢弃过期响应
+      // 第三个参数 isStale：让调用方在 await 之后判断本次请求是否已被取代。
+      // 页面把翻页游标推进放在 await 之后，若不判断，被丢弃的响应仍会推进游标 → 跳页。
+      const r = await fetchPageStable(append, itemsRef.current, () => seq !== loadSeqRef.current);
+      if (seq !== loadSeqRef.current) return; // 已被更新的请求取代，丢弃过期响应（副作用由调用方自行回滚）
       if (r == null) {
         log.debug('[load] fetchPage 返回 null，跳过');
         return;
@@ -84,16 +87,21 @@ export function useTabFeed({
       const nextItems = append ? [...itemsRef.current, ...(r.list || [])] : (r.list || []);
       itemsRef.current = nextItems;
       setItems(nextItems);
-      setHasMore(!!r.hasMore);
+      // 失败（服务端返回 error 且无数据）不能当成"没有更多了"：收起哨兵避免自动重试风暴，
+      // 改由页面依据 appendError 渲染"点击重试"
+      const failed = !(r.list || []).length && !!r.error;
+      setHasMore(failed && append ? false : !!r.hasMore);
+      setAppendError(failed && append ? r.error : null);
       if (r.cacheExtra) {
         saveTabCache(cacheKey, { ...r.cacheExtra, items: nextItems, hasMore: !!r.hasMore })
           .catch(() => { });
       }
-      if (!append && !nextItems.length) setError(r.emptyMessage || '');
+      if (!append && !nextItems.length) setError(failed ? r.error : (r.emptyMessage || ''));
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       log.warn('[load] 失败:', e?.message || e);
-      setError(e.message || '加载失败');
+      if (append) setAppendError(e.message || '加载失败');
+      else setError(e.message || '加载失败');
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -167,5 +175,8 @@ export function useTabFeed({
     return () => io.disconnect();
   }, [hasMore, loading, loadingMore, load]);
 
-  return { items, setItems, loading, loadingMore, error, hasMore, sentinelRef, hydrated, load };
+  // 触底翻页失败后的重试：仍走 append（失败时游标未推进，重试即重拉同一页）
+  const retryAppend = useCallback(() => load(true), [load]);
+
+  return { items, setItems, loading, loadingMore, error, appendError, retryAppend, hasMore, sentinelRef, hydrated, load };
 }

@@ -52,7 +52,6 @@ export class ErrorBoundary extends Component {
           borderRadius: '18px',
           background: 'rgba(255, 255, 255, 0.08)',
           backdropFilter: 'blur(18px) saturate(150%)',
-          WebkitBackdropFilter: 'blur(18px) saturate(150%)',
           border: '1px solid rgba(255, 255, 255, 0.12)',
         }}>
           <h2 style={{ margin: '0 0 12px', fontSize: '18px' }}>出了点问题</h2>
@@ -68,7 +67,6 @@ export class ErrorBoundary extends Component {
               border: '1px solid rgba(255, 255, 255, 0.16)',
               background: 'rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(12px) saturate(150%)',
-              WebkitBackdropFilter: 'blur(12px) saturate(150%)',
               color: 'var(--text-primary)',
               fontSize: '14px',
               cursor: 'pointer',

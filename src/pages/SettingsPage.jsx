@@ -3,11 +3,6 @@ import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import '../styles/settings.css';
 
-const QUALITY_OPTIONS = [
-  { value: 'thumb', label: 'thumb 250px' },
-  { value: 'mini', label: 'mini 48px' },
-];
-
 const LAYOUT_OPTIONS = [
   { value: 'waterfall', label: '瀑布流' },
   { value: 'grid', label: '方形宫格' },
@@ -23,7 +18,6 @@ const isDesktopShell = () => typeof window !== 'undefined' && !!window.desktopPr
 export default function SettingsPage({ onClose }) {
   const [cookie, setCookie] = useState('');
   const [proxyUrl, setProxyUrl] = useState('');
-  const [gridQuality, setGridQuality] = useState('thumb');
   const [gridLayout, setGridLayout] = useState('waterfall');
   const [saveDirectory, setSaveDirectory] = useState('');
 
@@ -58,7 +52,6 @@ export default function SettingsPage({ onClose }) {
       if (cancelled) return;
       setCookie(s.pixivCookie || '');
       setProxyUrl(s.proxyUrl || '');
-      setGridQuality(s.gridQuality || 'thumb');
       setGridLayout(s.gridLayout || 'waterfall');
       setSaveDirectory(s.saveDirectory || '');
       loadedResolveRef.current?.();
@@ -166,30 +159,6 @@ export default function SettingsPage({ onClose }) {
                 doSave({ proxyUrl: e.target.value.trim() });
               }}
             />
-          </div>
-        </div>
-
-        {/* ── 画质 ── */}
-        <div className="settings-group">
-          <div className="settings-group-label">画质</div>
-
-          <div className="settings-row">
-            <div>
-              <div className="settings-row-label">网格图片</div>
-              <div className="settings-row-hint">列表和网格中使用的缩略图画质</div>
-            </div>
-            <div className="settings-pill-group">
-              {QUALITY_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  className={`settings-pill${gridQuality === opt.value ? ' settings-pill--active' : ''}`}
-                  onClick={() => {
-                    setGridQuality(opt.value);
-                    doSave({ gridQuality: opt.value });
-                  }}
-                >{opt.label}</button>
-              ))}
-            </div>
           </div>
         </div>
 

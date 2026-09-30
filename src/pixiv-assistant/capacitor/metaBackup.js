@@ -8,7 +8,6 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { getAllMeta, getMeta, putMeta, putMetaBatch } from './cacheDB.js';
-import { getSettingsSync, saveSettings } from './config.js';
 import { PixivEntity } from './entity.js';
 import { parseCacheFileName } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
@@ -44,8 +43,12 @@ export function isMetaBackupAvailable() {
   return isNative();
 }
 
-/** 写入备份文件：只保留 喜欢/已保存 的实体 + cookie 设置。 */
-export async function writeMetaBackup(records, settings) {
+/** 写入备份文件：只保留 喜欢/已保存 的实体 + "不想看"列表。
+ *
+ * 安全：备份会落到 Downloads 与系统相册（.png 尾部藏 JSON），任何有媒体读权限的
+ * App/相册云同步都能读到，因此**绝不写入 Cookie 等凭据**。重装后 Cookie 由用户在
+ * 设置页重新填写。 */
+export async function writeMetaBackup(records) {
   if (!isNative()) return;
   const items = (records || [])
     .filter(r => (r.likedAt || 0) > 0 || r.state === 'saved')
@@ -68,9 +71,6 @@ export async function writeMetaBackup(records, settings) {
     savedAt: Date.now(),
     items,
     hidden: hiddenWorks.getList(),
-    settings: {
-      pixivCookie: (settings?.pixivCookie || '').trim(),
-    },
   });
   try {
     const S = plugin();
@@ -102,7 +102,7 @@ export function scheduleMetaBackup() {
   _timer = setTimeout(async () => {
     try {
       const records = await getAllMeta();
-      await writeMetaBackup(records, getSettingsSync());
+      await writeMetaBackup(records);
     } catch (e) {
       log.warn('[metaBackup] 备份调度失败:', e?.message || e);
     }
@@ -133,7 +133,7 @@ export async function ensureMetaBackup() {
     const records = await getAllMeta().catch(() => []);
     const hasData = (records || []).some(x => (x.likedAt || 0) > 0 || x.state === 'saved');
     if (hasData) {
-      await writeMetaBackup(records, getSettingsSync());
+      await writeMetaBackup(records);
       log.info('[metaBackup] 启动时已补写备份');
     }
   } catch (e) {
@@ -169,7 +169,7 @@ function mergeBackupItems(entries) {
   return [...byKey.values()];
 }
 
-/** 合并多份备份的 items / hidden / settings */
+/** 合并多份备份的 items / hidden（settings 不参与合并：备份已不含凭据，旧包里的 cookie 一并忽略） */
 function mergeBackupMeta(list) {
   const out = { items: [], hidden: [], settings: {} };
   for (const item of list) {
@@ -178,8 +178,6 @@ function mergeBackupMeta(list) {
     for (const h of hidden) {
       if (!out.hidden.includes(h)) out.hidden.push(h);
     }
-    const cookie = item?.settings?.pixivCookie;
-    if (cookie && !out.settings.pixivCookie) out.settings.pixivCookie = cookie;
   }
   return out;
 }
@@ -262,15 +260,15 @@ export async function readMetaBackup() {
 }
 
 /**
- * 重装后恢复：仅当 IndexedDB 完全为空时才从备份导入 喜欢/已保存 记录，
- * 并把备份里的 cookie 写回（当前为空时才覆盖）。幂等，可在启动时安全调用。
+ * 重装后恢复：仅当 IndexedDB 完全为空时才从备份导入 喜欢/已保存 记录。
+ * 幂等，可在启动时安全调用。备份不含 Cookie（见 writeMetaBackup），重装后需在设置页重填。
  */
 export async function restoreMetaBackupIfNeeded() {
   if (!isNative()) return;
   try {
     const existing = await getAllMeta().catch(() => []);
     const existingWorks = (existing || []).filter(isWorkRecord);
-    const { items, hidden, settings } = await readMetaBackup();
+    const { items, hidden } = await readMetaBackup();
     const likedFromBackup = (items || []).filter(it => (it.likedAt || 0) > 0);
     const existingLikedCount = existingWorks.filter(r => (r.likedAt || 0) > 0).length;
 
@@ -279,7 +277,7 @@ export async function restoreMetaBackupIfNeeded() {
     const freshInstall = existingWorks.length === 0;
     const needLikeMerge = !freshInstall && existingLikedCount === 0 && likedFromBackup.length > 0;
     if (!freshInstall && !needLikeMerge) return; // 非全新安装且喜欢数据已存在，不覆盖
-    if (freshInstall && items.length === 0 && !settings.pixivCookie) return;
+    if (freshInstall && items.length === 0) return;
 
     if (Array.isArray(hidden) && hidden.length > 0) {
       hiddenWorks.replace(hidden);
@@ -345,14 +343,6 @@ export async function restoreMetaBackupIfNeeded() {
       });
       await putMetaBatch(records);
       log.info('[metaBackup] 已从备份恢复', records.length, '条喜欢/已保存');
-    }
-
-    if (settings.pixivCookie) {
-      const cur = getSettingsSync();
-      if (!cur.pixivCookie) {
-        await saveSettings({ ...cur, pixivCookie: settings.pixivCookie });
-        log.info('[metaBackup] 已恢复 Cookie');
-      }
     }
   } catch (e) {
     log.warn('[metaBackup] 恢复失败:', e?.message || e);

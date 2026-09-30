@@ -530,6 +530,7 @@ export default function ImageDetailView({
                 thumbnailUrl={image?.thumbnailUrl}
                 hideInfo
                 _lazy
+                autoLoad={false}
                 clickable={false}
               />
             </div>

@@ -56,19 +56,26 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     hydrate: (cache) => {
       const items = cache?.items || cache?.results || [];
       if (!items.length) return null;
+      // 用户已在本会话发起过搜索（例如从详情页点 Tag 进来）→ 不让迟到的缓存水合
+      // 覆盖当前查询词，否则输入框会跳回上一次的词，而列表是新词的结果
+      if (queryRef.current) return null;
       queryRef.current = cache.query || '';
       setQuery(cache.query || '');
       if (cache.page > 0) pageRef.current = cache.page;
       if (cache.searched) setSearched(true);
       return { items, hasMore: !!cache.hasMore };
     },
-    fetchPage: async (append) => {
+    fetchPage: async (append, currentItems, isStale) => {
       const q = queryRef.current.trim();
       if (!q) return null;
       const page = append ? pageRef.current + 1 : 1;
       const r = await pixivApi.searchPixiv(q, { page, count: PAGE_SIZE });
+      // 已被新搜索取代 → 不占用游标、不返回数据（否则换词后旧响应会把 pageRef 推走）
+      if (isStale?.()) return null;
       const list = r?.images || [];
-      pageRef.current = page;
+      // 失败（有 error 且无数据）不推进游标，重试才会重拉同一页
+      const failed = !list.length && !!r?.error;
+      if (!failed) pageRef.current = page;
       // 有服务端 total 时用它收敛边界，避免最后一页恰好满页时多请求一次空数据
       const serverTotal = r?.total;
       const hasServerTotal = Number.isFinite(serverTotal) && serverTotal > list.length;
@@ -77,8 +84,9 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       return {
         list,
         hasMore,
+        error: r?.error || '',
         emptyMessage: r?.error || '没有找到结果',
-        cacheExtra: { query: q, page, searched: true },
+        cacheExtra: { query: q, page: pageRef.current, searched: true },
       };
     },
   });
@@ -103,6 +111,13 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     setHistory([]);
   }, []);
 
+  // 下拉刷新按 tab key（'search'）注册：store 的 triggerPullRefresh 取 refreshFns[activeTab]，
+  // 而 useTabFeed 内部用的是 cacheKey（'search:last'），只靠它注册会导致搜索页下拉无反应
+  useEffect(() => {
+    if (!registerRefresh) return;
+    return registerRefresh('search', () => reload(false));
+  }, [registerRefresh, reload]);
+
   const removeHistory = useCallback((item) => {
     setHistory(prev => {
       const key = String(item || '').trim().toLowerCase();
@@ -123,7 +138,10 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   }, [searchSeed, runSearch]);
 
   // 滚动收起：上下滑动都隐藏搜索栏（弹出靠双击当前 Tab）
+  // active 守卫：四个 tab 共用一个滚动容器，隐藏页若继续监听，
+  // 在推荐页滚动会把搜索栏收起，切回来时输入框看不见也点不到
   useEffect(() => {
+    if (!active) return;
     const el = getMainScrollEl();
     if (!el) return;
     let last = el.scrollTop;
@@ -134,12 +152,17 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [active]);
 
   // 点击弹出：双击当前 Tab（refreshToken 触发）→ 弹出搜索栏
   useEffect(() => {
     if (refreshToken > 0) setHideBar(false);
   }, [refreshToken]);
+
+  // 回到本 tab 时恢复搜索栏（隐藏期间可能被其他 tab 的滚动收起）
+  useEffect(() => {
+    if (active) setHideBar(false);
+  }, [active]);
 
   return (
     <div className="page search-page">

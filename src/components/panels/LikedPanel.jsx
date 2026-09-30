@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { storageFacade } from '../../pixiv-assistant/index.js';
 import { pixivApi } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
-import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { createLogger } from '../../utils/logger.js';
-import GridItem from '../../components/GridItem.jsx';
 import ImageGrid from '../../components/ImageGrid.jsx';
 
 const PAGE_SIZE = 24;
@@ -13,22 +11,6 @@ const log = createLogger('LikedPanel');
 // 模块级去重：缺缩略图的老记录只迁移一次，失败的本次会话不再重试
 const migrateInFlight = new Set();
 const migrateFailed = new Set();
-
-const likedItemToDetail = (it) => ({
-  illustId: it.illustId,
-  _pageIndex: it.pageIndex ?? it._pageIndex ?? 0,
-  _totalPages: it.pageCount || it.frameCount || it._totalPages || 1,
-  type: it.isGif ? 'gif' : (it.type || 'image'),
-  title: it.title,
-  author: it.author,
-  authorId: it.authorId,
-  authorName: it.authorName,
-  authorAvatar: it.authorAvatar || '',
-  thumbnailUrl: it.thumbnailUrl || pixivReUrl(String(it.illustId), 0),
-  mediumUrl: it.mediumUrl,
-  originalUrl: it.originalUrl,
-  _openTransition: it._openTransition,
-});
 
 /** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 MePage 聚合，不在此注册。 */
 export default function LikedPanel({ onOpen, onReportLoad }) {
@@ -97,7 +79,6 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
     return () => window.removeEventListener('pixiv:liked-changed', onLikedChanged);
   }, [reload]);
 
-  const detailItems = useMemo(() => feed.items.map(likedItemToDetail), [feed.items]);
   // 喜欢页所有作品天然"已喜欢"：构造 key 集（illustId_pageIndex），让红心全部点亮
   const likedSet = useMemo(
     () => new Set(feed.items.map(it => `${it.illustId}_${it.pageIndex ?? it._pageIndex ?? 0}`)),

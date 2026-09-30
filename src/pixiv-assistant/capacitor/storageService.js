@@ -8,7 +8,7 @@ import { PixivEntity } from './entity.js';
 import { PixivRepository } from './repository.js';
 import { FileStore } from './fileStore.js';
 import { NetworkStore } from './networkStore.js';
-import { galleryHasFile, exportToGallery } from './gallery.js';
+import { galleryHasFile, exportToGallery, isGalleryAvailable } from './gallery.js';
 import { pixivReUrl } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { downloadMonitor } from '../../utils/downloadMonitor.js';
@@ -39,12 +39,27 @@ export class PixivStorageService {
 
   /**
    * cached → saved：私有存储文件导出系统相册 + 元数据置 saved。
-   * 幂等：已是 saved 直接返回；状态不对返回 invalid_state。
+   *
+   * 幂等性校验会实际确认相册里文件还在：只信 state 位会让「用户在系统相册删掉图后再点保存」
+   * 永远返回 idempotent（UI 提示"已在相册中"且永不重新下载）。
    * @param {PixivEntity} entity — 必须已有 fileName
    * @returns {Promise<{success: boolean, entity?: PixivEntity, error?: string, idempotent?: boolean}>}
    */
   async _promoteToSaved(entity) {
-    if (entity.state === 'saved') return { success: true, entity, idempotent: true };
+    if (entity.state === 'saved') {
+      // 桌面/浏览器没有相册通道：无法校验也不该判缺失，维持原幂等语义
+      if (!isGalleryAvailable()) return { success: true, entity, idempotent: true };
+      const stillThere = await galleryHasFile(entity.fileName);
+      if (stillThere) return { success: true, entity, idempotent: true };
+      // 相册副本已被删除 → 用应用内私有副本重新导出
+      log.info('相册副本缺失，重新导出:', entity.fileName);
+      const data = await this.fileStore.readData(entity);
+      if (data && await exportToGallery(data, entity.fileName)) {
+        return { success: true, entity };
+      }
+      // 私有副本也没了 → 交给上层重新下载
+      return { success: false, error: 'file_missing' };
+    }
     if (entity.state !== 'cached') {
       return { success: false, error: `invalid_state: expected cached, got ${entity.state}` };
     }
@@ -247,7 +262,7 @@ export class PixivStorageService {
         if (data) { usedUrl = url; break; }
       }
       if (!data) {
-        mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
+        mon.recordFailure(failMeta);
         mon.finish(false, '下载失败');
         return { success: false, error: 'download_failed' };
       }
@@ -276,7 +291,7 @@ export class PixivStorageService {
 
       const written = await this.fileStore.save(newEntity, data, 'saved');
       if (!written) {
-        mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
+        mon.recordFailure(failMeta);
         mon.finish(false, '写入相册失败');
         return { success: false, error: 'file_write_failed' };
       }
@@ -285,7 +300,7 @@ export class PixivStorageService {
       scheduleMetaBackup();
       return { success: true, entity: newEntity };
     } catch (e) {
-      mon.recordFailure(`${item.illustId}_${item._pageIndex ?? 0}`, failMeta);
+      mon.recordFailure(failMeta);
       mon.finish(false, e?.message || '保存失败');
       throw e;
     }

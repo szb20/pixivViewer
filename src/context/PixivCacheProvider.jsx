@@ -75,7 +75,9 @@ export function PixivCacheProvider({ children }) {
             illustId: e.illustId,
           };
         }
-        setPixivCache(patch);
+        // 合并而不是整体替换：启动扫描期间用户可能已经点过❤️/保存（乐观更新），
+        // 直接 setPixivCache(patch) 会把这些更新的标记抹掉（DB 里其实有）
+        setPixivCache(prev => ({ ...patch, ...prev }));
         setRecommendationExcludedSet(buildLikedOrSavedSet(patch));
       } catch (e) {
         log.warn('启动扫描缓存元数据失败:', e?.message || e);

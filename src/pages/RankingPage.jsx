@@ -21,7 +21,7 @@ const MODES = [
 // 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
 const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
 
-export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 }) {
+export default function RankingPage({ active = true, onOpen, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
   const [category, setCategory] = useState('daily');
   const [r18, setR18] = useState(true);
@@ -29,6 +29,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [appendError, setAppendError] = useState(null); // 翻页失败：单独提示，不占用"没有更多了"
   const [hasMore, setHasMore] = useState(true);
   const [showFilters, setShowFilters] = useState(true);
   const pageRef = useRef(1);
@@ -75,21 +76,27 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
       if (seq !== fetchSeqRef.current) return; // 用户已切走，丢弃过期响应
       const rawList = r?.illusts || [];
       const filtered = rawList;
-      pageRef.current = page;
+      // fetchRanking 内部 catch 后返回 { illusts: [], error }，失败不能当成"没有更多了"
+      const failed = !rawList.length && !!(r?.error || r?.message);
+      if (!failed) pageRef.current = page; // 失败不推进游标，重试才会重拉同一页
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;
       setItems(nextItems);
-      const nextHasMore = rawList.length > 0;
+      // 失败时收起哨兵（避免自动重试风暴），由 appendError 渲染"点击重试"
+      const nextHasMore = failed && append ? false : rawList.length > 0;
       setHasMore(nextHasMore);
+      setAppendError(failed && append ? (r.error || r.message) : null);
       if (!append) {
         loadedModeRef.current = mode;
-        cacheRef.current.set(mode, { items: nextItems, hasMore: nextHasMore, page });
+        cacheRef.current.set(mode, { items: nextItems, hasMore: nextHasMore, page: pageRef.current });
       }
       if (!append && !filtered.length) setError(r?.message || r?.error || '排行榜为空');
       // 持久化缓存（24h TTL）：重启 App 后直接恢复
-      saveTabCache(CACHE_KEY, { category, r18, items: nextItems, hasMore: nextHasMore, page }).catch(() => { });
+      saveTabCache(CACHE_KEY, { category, r18, items: nextItems, hasMore: nextHasMore, page: pageRef.current }).catch(() => { });
     } catch (e) {
-      if (seq === fetchSeqRef.current) setError(e.message);
+      if (seq !== fetchSeqRef.current) return; // 已被切档取代，不写错误
+      if (append) setAppendError(e.message || '加载失败');
+      else setError(e.message);
     }
     if (seq === fetchSeqRef.current) {
       setLoading(false);
@@ -157,7 +164,9 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
   }, [refreshToken]);
 
   // 与主 TabBar 保持一致：下滑收起、上滑显示、回到顶部强制显示
+  // active 守卫：四个 tab 共用 .app-content，隐藏页继续监听会被别的 tab 滚动带着收起筛选栏
   useEffect(() => {
+    if (!active) return;
     const el = getMainScrollEl();
     if (!el) return;
     let last = el.scrollTop;
@@ -170,7 +179,12 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [active]);
+
+  // 回到本 tab 时恢复筛选栏（隐藏期间可能被其他 tab 的滚动收起）
+  useEffect(() => {
+    if (active) setShowFilters(true);
+  }, [active]);
 
   // 哨兵触底自动加载
   useEffect(() => {
@@ -210,7 +224,12 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
         <div ref={sentinelRef} style={{ height: 1 }} />
       )}
       {loadingMore && <div className="hint">加载中...</div>}
-      {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
+      {!loading && appendError && (
+        <div className="hint hint--error" onClick={() => load(true)} role="button">
+          加载失败，点击重试
+        </div>
+      )}
+      {!loading && !appendError && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
       <div className={`chips chips-bottom${showFilters ? '' : ' chips-hidden'}`}>
         {MODES.map(m => (
           <button

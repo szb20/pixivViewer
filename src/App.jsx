@@ -90,6 +90,7 @@ export default function App() {
             {visitedTabs.has('ranking') && (
               <ErrorBoundary key="ranking">
                 <RankingPage
+                  active={activeTab === 'ranking'}
                   onOpen={openDetail}
                   registerRefresh={registerRefresh}
                   refreshToken={tabTokens.ranking || 0}

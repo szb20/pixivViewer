@@ -37,11 +37,9 @@ npm run dev
 
 ## 环境变量
 
-复制 `.env.example` 为 `.env` 可预置 Cookie（设置页填写的值优先）：
-
-```
-VITE_PIXIV_COOKIE=your_phpsessid_here
-```
+**不需要 .env 文件**。Cookie 只在设置页填写，不通过构建期变量注入——
+`VITE_*` 变量会被 Vite 静态内联进前端产物，随 APK / Electron 包分发（反编译即可读到 PHPSESSID）。
+历史版本曾用 `.env` 的 `VITE_PIXIV_COOKIE` 预置 Cookie，该方式已移除；若你机器上还留着旧的 `.env`，可直接删除。
 
 代理地址环境变量：`PROXY_URL` / `VITE_PROXY_URL`（默认 `http://127.0.0.1:7890`）。
 

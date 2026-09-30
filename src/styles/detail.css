@@ -132,7 +132,6 @@
 .detail-overlay--exit .frosted,
 .detail-overlay--exit .glass-icon-btn {
   backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 @keyframes detail-exit-to-right {
@@ -231,7 +230,6 @@
   padding: 14px 14px 12px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.045);
-  -webkit-backdrop-filter: blur(14px) saturate(145%);
   backdrop-filter: blur(14px) saturate(145%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow:
@@ -304,7 +302,6 @@
   justify-content: center;
   border: 0.8px solid rgba(255, 255, 255, 0.35);
   background: rgba(15, 17, 21, 0.18);
-  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   cursor: pointer;
@@ -333,7 +330,6 @@
   border-color: rgba(74, 222, 128, 0.55);
   color: var(--ok);
   background: rgba(15, 17, 21, 0.18);
-  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -378,7 +374,6 @@
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.045);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
   backdrop-filter: blur(10px) saturate(140%);
   color: var(--text-secondary);
   font-size: 12px;
@@ -633,7 +628,6 @@
     overscroll-behavior: contain;
     border-left: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(15, 17, 21, 0.2);
-    -webkit-backdrop-filter: blur(10px) saturate(130%);
     backdrop-filter: blur(10px) saturate(130%);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
@@ -763,7 +757,6 @@
     border-left: 0.5px solid rgba(255, 255, 255, 0.06);
     border-right: 0.5px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 17, 21, 0.18);
-    -webkit-backdrop-filter: blur(8px) saturate(120%);
     backdrop-filter: blur(8px) saturate(120%);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
@@ -810,7 +803,6 @@
     overflow-x: hidden;
     overscroll-behavior: contain;
     background: rgba(15, 17, 21, 0.22);
-    -webkit-backdrop-filter: blur(10px) saturate(130%);
     backdrop-filter: blur(10px) saturate(130%);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));

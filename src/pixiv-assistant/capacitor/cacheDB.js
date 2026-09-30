@@ -33,22 +33,35 @@ function openDB() {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
-      const store = db.createObjectStore(STORE, { keyPath: 'cacheKey' });
-      store.createIndex('illustId', 'illustId', { unique: false });
-      store.createIndex('cachedAt', 'cachedAt', { unique: false });
-      store.createIndex('tags', 'tags', { unique: false, multiEntry: true });
-      store.createIndex('author', 'author', { unique: false });
-      store.createIndex('state', 'state', { unique: false });
-      store.createIndex('stateCachedAt', ['state', 'cachedAt'], { unique: false });
-      store.createIndex('likedAt', 'likedAt', { unique: false });
+      // 幂等建库：老库升级（DB_VERSION 变大）时该 store 已存在，
+      // 无条件 createObjectStore 会抛 ConstraintError 导致整个 open 失败、
+      // 后续读取静默变空（收藏/已保存标记全部消失）
+      const store = db.objectStoreNames.contains(STORE)
+        ? req.transaction.objectStore(STORE)
+        : db.createObjectStore(STORE, { keyPath: 'cacheKey' });
+      const ensureIndex = (name, keyPath, options) => {
+        if (!store.indexNames.contains(name)) store.createIndex(name, keyPath, options);
+      };
+      ensureIndex('illustId', 'illustId', { unique: false });
+      ensureIndex('cachedAt', 'cachedAt', { unique: false });
+      ensureIndex('tags', 'tags', { unique: false, multiEntry: true });
+      ensureIndex('author', 'author', { unique: false });
+      ensureIndex('state', 'state', { unique: false });
+      ensureIndex('stateCachedAt', ['state', 'cachedAt'], { unique: false });
+      ensureIndex('likedAt', 'likedAt', { unique: false });
     };
     req.onsuccess = (e) => {
       _db = e.target.result;
       resolve(_db);
     };
     req.onerror = () => {
+      // open 失败会让后续所有读写静默返回空值（数据"凭空消失"），必须留下明确日志
+      log.warn('IndexedDB 打开失败:', req.error?.message || req.error);
       _db = null;
       reject(req.error);
+    };
+    req.onblocked = () => {
+      log.warn('IndexedDB 升级被其他连接阻塞（可能有旧页面未关闭）');
     };
   }).finally(() => { _dbPromise = null; });
   return _dbPromise;
@@ -88,8 +101,8 @@ export async function putMeta(meta) {
       req.onerror = () => reject(req.error);
     });
   } catch (e) {
-    // silent fail
-    log.debug('putMeta 失败:', e?.message || e);
+    // 写失败只记日志：调用方多为"尽力而为"的乐观更新，但必须留下痕迹（磁盘满/事务 abort）
+    log.warn('putMeta 失败:', e?.message || e);
   }
 }
 
@@ -108,10 +121,18 @@ export async function putMetaBatch(metas) {
         store.put(meta);
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
+      tx.onerror = () => {
+        // 批量写失败（如恢复备份）不能静默：调用方会据此报"已恢复 N 条"
+        log.warn('putMetaBatch 事务失败:', tx.error?.message || tx.error);
+        resolve();
+      };
+      tx.onabort = () => {
+        log.warn('putMetaBatch 事务中止:', tx.error?.message || tx.error);
+        resolve();
+      };
     });
   } catch (e) {
-    log.debug('putMetaBatch 失败:', e?.message || e);
+    log.warn('putMetaBatch 失败:', e?.message || e);
   }
 }
 

@@ -161,7 +161,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
     showToast('已隐藏，不再推荐', { type: 'info' });
   }, []);
 
-  // 宫格分支：稳定的 onOpen（带 index），避免每个 item 内联箭头函数破坏 GridItem memo
+  // 宫格/瀑布流共用：包装成 { items, index } 供详情页左右切换（GridItem 传出的 index 是 items 下标）
   const handleGridOpen = useCallback((img, index) => {
     onOpen?.(img, { items: visibleItems, index });
   }, [onOpen, visibleItems]);
@@ -173,7 +173,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
       <MasonryFeed
         items={visibleItems}
         likedIllustIds={likedIllustIds}
-        onOpen={onOpen}
+        onOpen={handleGridOpen}
         toggleLike={toggleLike}
         onHide={handleHide}
       />

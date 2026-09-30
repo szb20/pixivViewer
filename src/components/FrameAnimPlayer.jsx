@@ -59,6 +59,9 @@ export default function FrameAnimPlayer({
   compact = false,
   onTogglePlay,
   _lazy = false,
+  // _lazy 为真时是否自动下载并播放。灯箱（GifPlayer）默认自动播；
+  // 详情页只想显示一帧预览，传 autoLoad={false} 等用户点击再下载整包（数 MB）。
+  autoLoad = true,
   maxWidth: maxWidthProp,
   maxHeight: maxHeightProp,
   thumbnailUrl = '',
@@ -92,6 +95,13 @@ export default function FrameAnimPlayer({
 
   const [frames, setFrames] = useState(initialFrames);
   const [playing, setPlaying] = useState(false);
+  // playing 的 ref 镜像：togglePlay 需要在不把副作用写进 setState updater 的前提下
+  // 读到当前播放态（StrictMode 会把 updater 执行两次 → 起两个 rAF 循环且只能取消最后一个）
+  const playingRef = useRef(false);
+  const applyPlaying = useCallback((next) => {
+    playingRef.current = next;
+    setPlaying(next);
+  }, []);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -122,7 +132,7 @@ export default function FrameAnimPlayer({
     preloadRetriedRef.current = false;
     setFrames(initialFrames);
     setLoaded(false);
-    setPlaying(false);
+    applyPlaying(false);
     setLoadProgress(0);
     setError(null);
     cancelAnimationFrame(timerRef.current);
@@ -139,13 +149,14 @@ export default function FrameAnimPlayer({
     }
   }, [illustId]);
 
-  // 灯箱模式：已缓存则自动加载播放，无需手动点击
+  // 自动播放：灯箱（autoLoad 默认 true）进页面就下整包；详情页传 autoLoad={false}
+  // 只显示一帧预览，等用户点击进灯箱后再下载（数 MB 的 ZIP + 全帧解码）
   useEffect(() => {
-    if (!compact && needsFetch && !autoLoadRef.current) {
+    if (!compact && autoLoad && needsFetch && !autoLoadRef.current) {
       autoLoadRef.current = true;
       loadFrames();
     }
-  }, [compact, needsFetch]); // oxlint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守护
+  }, [compact, autoLoad, needsFetch]); // oxlint-disable-line react-hooks/exhaustive-deps -- loadFrames 定义在后，靠 autoLoadRef 守护
 
   // 懒加载：点击时下载完整帧（支持后台下载不中断）
   const loadFrames = async (retry = false) => {
@@ -269,7 +280,7 @@ export default function FrameAnimPlayer({
           lastFrameTimeRef.current = null;
           lastProgressRef.current = 0;
           setProgress(0);
-          setPlaying(true);
+          applyPlaying(true);
           timerRef.current = requestAnimationFrame(playFrame);
         }
       };
@@ -340,20 +351,19 @@ export default function FrameAnimPlayer({
       lastToggleRef.current = now;
     }
 
-    setPlaying(prev => {
-      const next = !prev;
-      if (next) {
-        /* 继续播放：调整时间戳避免帧跳帧 */
-        lastFrameTimeRef.current = null;
-        timerRef.current = requestAnimationFrame(playFrame);
-      } else {
-        /* 暂停：停 rAF，保留当前帧 */
-        cancelAnimationFrame(timerRef.current);
-      }
-      onTogglePlay?.(next);
-      return next;
-    });
-  }, [loaded, playFrame, onTogglePlay, debounceToggle]);
+    // 副作用（rAF 启停）必须在 updater 之外执行：StrictMode 下 updater 会跑两次，
+    // 之前写法会起两个 playFrame 循环，cancelAnimationFrame 只能取消最后一个 → 点暂停仍在跑
+    const next = !playingRef.current;
+    applyPlaying(next);
+    if (next) {
+      lastFrameTimeRef.current = null;
+      cancelAnimationFrame(timerRef.current);
+      timerRef.current = requestAnimationFrame(playFrame);
+    } else {
+      cancelAnimationFrame(timerRef.current);
+    }
+    onTogglePlay?.(next);
+  }, [loaded, playFrame, onTogglePlay, debounceToggle, applyPlaying]);
 
   // 组件卸载时清理
   useEffect(() => {
@@ -369,7 +379,7 @@ export default function FrameAnimPlayer({
     // 重置
     frameIdxRef.current = 0;
     cancelAnimationFrame(timerRef.current);
-    setPlaying(false);
+    applyPlaying(false);
     setProgress(0);
 
     // 重渲染首帧
