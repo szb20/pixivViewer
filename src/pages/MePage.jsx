@@ -4,9 +4,13 @@ import FollowingPanel from '../components/panels/FollowingPanel.jsx';
 import FollowingAuthorsPanel from '../components/panels/FollowingAuthorsPanel.jsx';
 import LikedPanel from '../components/panels/LikedPanel.jsx';
 import BookmarksPanel from '../components/panels/BookmarksPanel.jsx';
+import { getSource } from '../sources/registry.js';
+import { useImageSourceId } from '../hooks/useImageSource.js';
 import { getMainScrollEl } from '../utils/scroll.js';
 import '../styles/me.css';
 
+// caps.accountTabs 为 false 的来源（booru）没有账号态：关注/订阅/收藏都拉不到数据，
+// 只留本地数据源「喜欢」。
 const SUB_TABS = [
   { key: 'following', label: '关注' },
   { key: 'subscriptions', label: '订阅' },
@@ -23,6 +27,9 @@ const SUB_TABS = [
  * - 不把 registerRefresh / refreshToken 透传给子面板，避免三面板互相覆盖或全量刷新
  */
 export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
+  const sourceId = useImageSourceId();
+  const hasAccountTabs = getSource(sourceId).caps.accountTabs !== false;
+  const tabs = hasAccountTabs ? SUB_TABS : SUB_TABS.filter(t => t.key === 'liked');
   const [subTab, setSubTab] = useState('liked');
   const [visitedSubs, setVisitedSubs] = useState(() => new Set(['liked']));
   // 子页签切换动画：旧面板淡出后再隐藏
@@ -102,7 +109,7 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
 
   return (
     <div className="page me-page">
-      <SubTabBar tabs={SUB_TABS} active={subTab} onChange={switchSubTab} hidden={!showBar} />
+      <SubTabBar tabs={tabs} active={subTab} onChange={switchSubTab} hidden={!showBar} />
 
       <div className="me-panels">
         {visitedSubs.has('following') && (

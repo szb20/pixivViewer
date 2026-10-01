@@ -1,6 +1,6 @@
 import { pixivApi } from './pixiv.js';
 import { saveItem } from './index.js';
-import { getCompositeKey, pixivReUrl } from '../pixiv-assistant/core/utils.js';
+import { getCompositeKey, pixivReUrl, sourceOfId } from '../pixiv-assistant/core/utils.js';
 
 const SAVE_BATCH_SIZE = 3;
 
@@ -12,6 +12,9 @@ const SAVE_BATCH_SIZE = 3;
  * - 分批并发，最多 3 页同时下载；
  * - 成功后更新 pixivCache 的 saved/cached 标记。
  *
+ * 非 Pixiv 来源（booru）：一条 post 就是一张图，pageCount 恒为 1，不走多页循环，
+ * 且**绝不**调用 pixivApi.fetchIllust —— 那会拿同号的 pixiv 作品顶包。
+ *
  * @param {object} item 作品条目（illustId / type / illustType / title / author / tags / URL 等）
  * @param {object} [opts]
  * @param {object} [opts.pixivCache]      当前缓存，用于跳过已保存页
@@ -22,16 +25,20 @@ const SAVE_BATCH_SIZE = 3;
  */
 export async function saveAllPages(item, { pixivCache = {}, setPixivCache, images, totalPages } = {}) {
   if (!item?.illustId) return { saved: 0, exists: 0 };
+  const source = item.source || sourceOfId(item.illustId);
+  const isPixiv = source === 'pixiv';
   const isGif = item.type === 'gif' || Number(item.illustType) === 2;
 
   let imgs = Array.isArray(images) ? images : [];
-  let total = Math.max(
-    Number(totalPages) || 0,
-    Number(item._totalPages || item.pageCount) || 0,
-    imgs.length || 0,
-    1,
-  );
-  if (imgs.length === 0) {
+  let total = isPixiv
+    ? Math.max(
+      Number(totalPages) || 0,
+      Number(item._totalPages || item.pageCount) || 0,
+      imgs.length || 0,
+      1,
+    )
+    : 1; // booru 无多页
+  if (isPixiv && imgs.length === 0) {
     try {
       const r = await pixivApi.fetchIllust(item.illustId);
       imgs = r?.illust?.images || [];
@@ -45,11 +52,13 @@ export async function saveAllPages(item, { pixivCache = {}, setPixivCache, image
     const ck = getCompositeKey({ illustId: item.illustId, _pageIndex: p });
     if (pixivCache[ck]?.saved) { existsInCache += 1; continue; }
     const pg = imgs[p] || {};
-    const derived = pixivReUrl(String(item.illustId), p);
+    // booru 的 URL 由适配器给出，没有任何 Pixiv 短链可推导
+    const derived = isPixiv ? pixivReUrl(String(item.illustId), p) : '';
     pages.push({
       ck,
       item: {
         illustId: item.illustId,
+        source,
         _pageIndex: p,
         _silent: true, // 批量保存不弹每页 toast，由调用方汇总提示
         type: isGif ? 'gif' : 'image',
@@ -60,6 +69,7 @@ export async function saveAllPages(item, { pixivCache = {}, setPixivCache, image
         author: item.author || item.authorName || '',
         authorName: item.authorName || item.author || '',
         tags: Array.isArray(item.tags) ? item.tags : [],
+        webUrl: item.webUrl || item.pixivUrl || '',
       },
     });
   }

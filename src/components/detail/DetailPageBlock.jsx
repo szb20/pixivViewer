@@ -69,8 +69,10 @@ export default function DetailPageBlock({
 
   // 详情流始终显示 540px 等比预览，避免打开作品时出现空白或加载高分图。
   // 后续页必须使用本页预览，不得复用第 0 页缩略图。
+  // pixivReUrl 只认 Pixiv 的 illustId：非 Pixiv 来源兜底为空，宁可空底也不拿同号 pixiv 图顶包。
+  const isBooru = (image?.source || 'pixiv') !== 'pixiv';
   const bg = placeholderUrl || (page === 0
-    ? (image?.thumbnailUrl || pixivReUrl(String(image.illustId), page))
+    ? (image?.thumbnailUrl || (isBooru ? '' : pixivReUrl(String(image.illustId), page)))
     : '');
   // 详情流只展示 540px 预览图；原图只由灯箱按需加载。
   const src = previewUrl;

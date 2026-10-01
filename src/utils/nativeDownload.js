@@ -13,6 +13,14 @@ export function isNativeDownloadAvailable() {
 }
 
 /**
+ * 按目标域名给 Referer：只有 Pixiv 图床需要，booru 图床不校验。
+ * 传空字符串即不设置该请求头（原生侧读取时以空串为准）。
+ */
+function refererFor(url) {
+  return /pximg\.net|pixiv\.re/i.test(url || '') ? 'https://www.pixiv.net/' : '';
+}
+
+/**
  * 原生流式下载图片，返回 base64。
  * @param {string} url — 完整图片 URL
  * @param {function} [onProgress] — (pct: 0-100) => void
@@ -33,7 +41,7 @@ export async function nativeDownload(url, onProgress) {
     }
   });
   try {
-    const ret = await StreamingDownload.download({ url, id, referer: 'https://www.pixiv.net/' });
+    const ret = await StreamingDownload.download({ url, id, referer: refererFor(url) });
     if (ret?.data) return ret.data;
     throw new Error('下载无数据');
   } finally {

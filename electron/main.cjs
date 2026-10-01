@@ -14,6 +14,7 @@ const path = require('node:path');
 
 let proxyUtils = null;
 let pixivProxy = null;
+let booruProxy = null;
 
 const DEFAULT_PROXY_PORT = 51380;
 const isDevServer = !!process.env.PIXIVVIEWER_DEV_URL;
@@ -65,12 +66,14 @@ async function startProxyServer() {
   // scripts/*.mjs 是 ESM，主进程（CJS）里动态 import
   proxyUtils = await import('../scripts/proxy-utils.mjs');
   pixivProxy = await import('../scripts/pixiv-proxy.mjs');
+  booruProxy = await import('../scripts/booru-proxy.mjs');
   const { createApiProxy } = proxyUtils;
 
   // 复用 scripts/ 下的现有中间件（与 Vite dev 完全同款），仅新增 CORS 包装：
   // /pixiv-api → www.pixiv.net（透传 x-pixiv-cookie 头）
   // /pixiv-img | /pixiv-thumb → i.pixiv.re
   // /pixiv-zip → 原始 ZIP（Ugoira）
+  // /yande-* / /konachan-* → 见 scripts/booru-proxy.mjs 的路由表
   const img = pixivProxy.pixivImageProxy();
   const routes = [
     { prefix: '/pixiv-api', fn: createApiProxy('https://www.pixiv.net') },
@@ -78,6 +81,11 @@ async function startProxyServer() {
     { prefix: '/pixiv-thumb', fn: img.thumb },
     { prefix: '/pixiv-zip', fn: img.zip },
   ];
+  for (const r of booruProxy.BOORU_ROUTES) {
+    routes.push({ prefix: r.prefix, fn: booruProxy.createBooruMiddleware(r) });
+  }
+  // 长前缀优先：/yande-img 与 /yande-thumb 不互为前缀，但保持通用规则以防后续加站点
+  routes.sort((a, b) => b.prefix.length - a.prefix.length);
 
   const server = http.createServer((req, res) => {
     optionsMiddleware(req, res, () => {
@@ -130,7 +138,7 @@ async function startProxyServer() {
   }
   if (!proxyPort) throw lastErr || new Error('代理端口分配失败');
   proxyServer = server;
-  console.log(`[desktop] Pixiv 代理服务已启动: http://127.0.0.1:${proxyPort}`);
+  console.log(`[desktop] 代理服务已启动: http://127.0.0.1:${proxyPort}（${routes.length} 条路由）`);
 }
 
 function createWindow() {

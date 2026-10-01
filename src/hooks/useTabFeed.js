@@ -11,7 +11,11 @@
  * 现收敛到本 hook，各页面只需提供 fetchPage 与 hydrate：
  *
  * @param {object}  opts
- * @param {string}  opts.cacheKey          持久化缓存的 key（同时作为下拉刷新注册名）
+ * @param {string}  opts.cacheKey          持久化缓存的 key（已含来源前缀）
+ * @param {string}  [opts.refreshKey]      下拉刷新注册名（默认同 cacheKey）。
+ *                                         来源前缀会进 cacheKey，但 store 的
+ *                                         triggerPullRefresh 按 activeTab（'discover'）取，
+ *                                         两者不一致时刷新会静默失效。
  * @param {function} [opts.registerRefresh] App 传入的回调注册器
  * @param {number}  [opts.refreshToken]     强制刷新令牌（重点当前 tab 时 +1）
  * @param {function} opts.fetchPage         async (append, currentItems) => ({
@@ -35,6 +39,7 @@ const log = createLogger('useTabFeed');
 
 export function useTabFeed({
   cacheKey,
+  refreshKey,
   registerRefresh,
   refreshToken = 0,
   fetchPage,
@@ -116,8 +121,8 @@ export function useTabFeed({
 
   useEffect(() => {
     if (!registerRefresh) return;
-    return registerRefresh(cacheKey, () => loadRef.current?.(false));
-  }, [registerRefresh, cacheKey]);
+    return registerRefresh(refreshKey || cacheKey, () => loadRef.current?.(false));
+  }, [registerRefresh, cacheKey, refreshKey]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -155,11 +160,16 @@ export function useTabFeed({
     load(false);
   }, [load, enabled, hydrated, autoLoad]);
 
+  // 强制刷新令牌（重点当前 tab 时 +1）。
+  // 跳过挂载那一次：切来源会整块重挂载组件，此时 token 往往已 > 0，
+  // 若照单全收就会在水合/首拉之外多发一次重复请求。
+  const lastTokenRef = useRef(refreshToken);
   useEffect(() => {
-    if (refreshToken > 0) {
+    if (refreshToken > 0 && refreshToken !== lastTokenRef.current) {
       log.debug('[refreshToken] 强制刷新, token:', refreshToken);
       loadRef.current?.(false);
     }
+    lastTokenRef.current = refreshToken;
   }, [refreshToken]);
 
   useEffect(() => {

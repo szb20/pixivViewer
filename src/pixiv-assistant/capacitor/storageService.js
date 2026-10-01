@@ -10,6 +10,7 @@ import { FileStore } from './fileStore.js';
 import { NetworkStore } from './networkStore.js';
 import { galleryHasFile, exportToGallery, isGalleryAvailable } from './gallery.js';
 import { pixivReUrl } from '../core/utils.js';
+import { fetchableImageUrls } from '../../sources/imageUrl.js';
 import { createLogger } from '../../utils/logger.js';
 import { downloadMonitor } from '../../utils/downloadMonitor.js';
 import { scheduleMetaBackup } from './metaBackup.js';
@@ -195,6 +196,7 @@ export class PixivStorageService {
     const probe = new PixivEntity({
       id,
       illustId: item.illustId,
+      source: item.source || 'pixiv',
       pageIndex: item._pageIndex ?? 0,
       type: 'image',
       title: cleanTitle,
@@ -205,6 +207,7 @@ export class PixivStorageService {
       const newEntity = new PixivEntity({
         id,
         illustId: item.illustId,
+        source: item.source || 'pixiv',
         pageIndex: item._pageIndex ?? 0,
         type: 'image',
         state: 'saved',
@@ -238,6 +241,7 @@ export class PixivStorageService {
     // 失败时登记完整重试信息（供下载管理一键重试；item 里带 _silent 时是批量，仍保留）
     const failMeta = {
       illustId: item.illustId,
+      source: item.source || 'pixiv',
       page: item._pageIndex ?? 0,
       type: 'image',
       illustType: item.illustType,
@@ -272,6 +276,7 @@ export class PixivStorageService {
       const newEntity = new PixivEntity({
         id,
         illustId: item.illustId,
+        source: item.source || 'pixiv',
         pageIndex: item._pageIndex ?? 0,
         type: 'image',
         state: 'saved',
@@ -326,6 +331,14 @@ export class PixivStorageService {
  */
 export function buildDownloadUrls(item) {
   if (!item) return [];
+  // 非 Pixiv 来源：API 返回的就是可直连的图床地址，直接用作候选，绝不回退 pixivReUrl
+  // （否则会拿同号的 pixiv 作品顶包，存下一张完全无关的图）。
+  // dev 下 fetchableImageUrls 会把图床域名换成同源代理（图床不返回 CORS 头，直连 fetch 会被拦）。
+  if (item.source && item.source !== 'pixiv') {
+    const urls = fetchableImageUrls(item);
+    log.debug('[buildDownloadUrls]', item.source, item.illustId, '→', urls);
+    return urls;
+  }
   const page = item._pageIndex ?? 0;
   const candidates = [];
   // 优先：从 API 返回的 originalUrl 推导（含日期路径，命中率高，避免短链 404）

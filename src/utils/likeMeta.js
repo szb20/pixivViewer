@@ -6,6 +6,7 @@
 export function buildLikeMeta(img) {
   const m = img || {};
   return {
+    source: m.source || '',
     thumbnailUrl: m.thumbnailUrl || m.mediumUrl || '',
     title: m.title || '',
     author: m.author || '',
@@ -15,6 +16,7 @@ export function buildLikeMeta(img) {
     authorId: m.authorId || '',
     tags: m.tags || [],
     pixivUrl: m.pixivUrl || '',
+    webUrl: m.webUrl || m.pixivUrl || '',
     pageCount: m.pageCount || m._totalPages || 0,
     width: m.width || 0,
     height: m.height || 0,

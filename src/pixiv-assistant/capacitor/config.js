@@ -7,6 +7,7 @@
  * - getFS: Capacitor Filesystem（原生环境），非原生环境返回 null
  */
 import { appStorage, migrateFromLegacyKey } from '../../utils/appStorage.js';
+import { DEFAULT_SOURCE } from '../core/utils.js';
 
 let _getSettings = null;
 let _getFS = null;
@@ -36,6 +37,10 @@ export function getSettingsSync() {
     pixivCookie: stored.pixivCookie || '',
     gridLayout: stored.gridLayout || 'waterfall',      // 内容页布局：'waterfall'（瀑布流）| 'grid'（方形宫格）
     saveDirectory: stored.saveDirectory || '',         // 桌面端图片保存目录（空 = 系统图片文件夹）
+    // 当前图片来源。老数据没有这个字段 → 落回 pixiv，行为与升级前完全一致。
+    imageSource: stored.imageSource || DEFAULT_SOURCE,
+    // 非 Pixiv 来源是否只显示 rating:safe。默认 false（全部显示），用户在设置页可收紧。
+    booruSafeOnly: stored.booruSafeOnly === true,
   };
 }
 

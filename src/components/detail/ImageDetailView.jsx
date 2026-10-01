@@ -4,6 +4,8 @@ import { saveItem } from '../../api/index.js';
 import { saveAllPages as saveAllPagesShared } from '../../api/saveAllPages.js';
 import { pixivReUrl, pixivPageUrl } from '../../pixiv-assistant/core/utils.js';
 import { masonryThumbUrl } from '../ImageGrid.jsx';
+import { getSource } from '../../sources/registry.js';
+import { booruApiFor } from '../../sources/api.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
 import { LikeButton } from '../LightboxActions.jsx';
 import MediaLightbox from '../MediaLightbox.jsx';
@@ -73,6 +75,12 @@ export default function ImageDetailView({
 
   // 兼容旧数据：列表接口映射可能只带 illustType 不带 type
   const isGif = image?.type === 'gif' || Number(image?.illustType) === 2;
+  // 来源：详情页据此在「Pixiv 接口」与「booru 接口」之间分流。
+  // 老数据没有 source 字段（历史收藏/备份）→ 落回 pixiv，行为与改动前一致。
+  const source = image?.source || 'pixiv';
+  const isBooru = source !== 'pixiv';
+  const booruApi = booruApiFor(source);
+  const caps = getSource(source).caps;
   // Tag 展示：优先列表返回的 tag；列表没带（如作者页/关注流，可能为空数组）则等 fetchIllust 回来用 API 的 tag 兜底
   const listTags = Array.isArray(image?.tags) ? image.tags : [];
   const apiTags = Array.isArray(illustData?.illust?.tags) ? illustData.illust.tags : [];
@@ -192,7 +200,10 @@ export default function ImageDetailView({
     let cancelled = false;
     (async () => {
       try {
-        const result = await pixivApi.fetchIllust(image.illustId);
+        // booru 的一条 post 就是全部信息（单图），适配器返回同一形状的 { illust }
+        const result = booruApi
+          ? await booruApi.fetchIllust(image.illustId)
+          : await pixivApi.fetchIllust(image.illustId);
         if (!cancelled) setIllustData(result);
       } catch (e) {
         // fetchIllust 失败 → illustData 保持 null，后续按页从 URL 推导
@@ -200,7 +211,7 @@ export default function ImageDetailView({
       }
     })();
     return () => { cancelled = true; };
-  }, [image?.illustId]);
+  }, [image?.illustId, booruApi]);
 
   // 浏览时回填：已保存/喜欢的实体缺元数据时，把 完整缩略图URL/标题/作者/tags 写回并更新备份
   // （这样「喜欢」页无需依赖 pixiv.re 短链反查，直接显示完整 URL 缩略图）
@@ -279,9 +290,13 @@ export default function ImageDetailView({
   const buildSaveItem = useCallback((page, images) => {
     const imgs = images || illustData?.illust?.images || [];
     const pg = imgs[page] || {};
-    const derived = image?.illustId ? pixivReUrl(String(image.illustId), page) : '';
+    // booru 的图床地址是直链，没有 pixiv.re 反查可用 → derived 恒为空，
+    // 缺 URL 时只能依赖列表/详情带回的地址（booru 单图必有一份）
+    const derived = !isBooru && image?.illustId ? pixivReUrl(String(image.illustId), page) : '';
     return {
       illustId: image.illustId,
+      source,
+      webUrl: image.webUrl || image.pixivUrl || '',
       _pageIndex: page,
       _silent: true, // 自动/批量保存不弹 toast
       type: isGif ? 'gif' : 'image',
@@ -293,7 +308,7 @@ export default function ImageDetailView({
       authorName: image.authorName,
       tags: image.tags || [],
     };
-  }, [image, illustData, isGif]);
+  }, [image, illustData, isGif, isBooru, source]);
 
   // 保存全部页（长按❤️/喜欢单图时调用）— 与网格长按共用同一实现
   const saveAllPages = useCallback(async () => {
@@ -313,8 +328,9 @@ export default function ImageDetailView({
     // saveFromNetwork 对已存在文件会自动跳过真实下载、只补元数据，不会重复下载。
     const alreadySaved = !!pixivCache[ck]?.saved;
     // 确保拿到完整日期路径原图 URL：详情未加载就补拉一次（否则会退回 pixiv.re 短链，短链当前不可用）
+    // booru 无短链可退：URL 全在条目里（mapPost 已给全），补拉 pixivApi 只会拿到同号的无关作品
     let imgs = illustData?.illust?.images || [];
-    if (imgs.length === 0) {
+    if (imgs.length === 0 && !isBooru) {
       try {
         const r = await pixivApi.fetchIllust(image.illustId);
         if (r?.illust?.images?.length) imgs = r.illust.images;
@@ -336,7 +352,7 @@ export default function ImageDetailView({
       log.warn('单页下载失败:', page, e?.message || e);
       showToast('下载失败');
     }
-  }, [image, buildSaveItem, pixivCache, setPixivCache, illustData]);
+  }, [image, buildSaveItem, pixivCache, setPixivCache, illustData, isBooru]);
 
   // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
   // useMemo：仅依赖详情/本地URL/作品变化，避免相关推荐追加、缓存更新等无关渲染
@@ -355,9 +371,11 @@ export default function ImageDetailView({
         localSrcs[p] || '',
         imgs[p]?.originalUrl || '',
         masterUrl,
-        p0Master ? pixivPageUrl(p0Master, p) : '',
-        pixivReUrl(String(image.illustId), p),
-        p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '') : '',
+        // pixivPageUrl / pixivReUrl 只会拿 illustrateId 拼 pximg 路径：
+        // 对 booru 的图床直链既拼不出正确地址，还会张冠李戴到同号 pixiv 作品上 → 仅 Pixiv 生成
+        !isBooru && p0Master ? pixivPageUrl(p0Master, p) : '',
+        !isBooru ? pixivReUrl(String(image.illustId), p) : '',
+        p === 0 ? masonryThumbUrl(image?.thumbnailUrl || '', 0, source) : '',
       ].filter(Boolean))];
       items.push({
         type: isGif ? 'gif' : 'image',
@@ -368,20 +386,22 @@ export default function ImageDetailView({
         _totalPages: totalPages,
         _lazy: isGif ? true : undefined,
         title: image?.title || '',
+        source,
+        webUrl: image?.webUrl || image?.pixivUrl || '',
         author: image?.author || '',
         authorId: image?.authorId || '',
         authorName: image?.authorName || image?.author || '',
-        pixivUrl: image?.pixivUrl || `https://www.pixiv.net/artworks/${image.illustId}`,
+        pixivUrl: image?.pixivUrl || (isBooru ? '' : `https://www.pixiv.net/artworks/${image.illustId}`),
         // 真实尺寸（详情接口）：供灯箱双击缩放计算倍率，避免依赖 img.naturalWidth（加载前为 0 导致前后不一致）
         width: image?.width || illustData?.illust?.width || 0,
         height: image?.height || illustData?.illust?.height || 0,
         // small 图（540px，同比例）——灯箱原图逐行渲染时托底，避免底部空黑
         previewUrl: imgs[p]?.previewUrl || '',
-        thumbnailUrl: image?.thumbnailUrl || pixivReUrl(String(image.illustId), 0),
+        thumbnailUrl: image?.thumbnailUrl || (isBooru ? '' : pixivReUrl(String(image.illustId), 0)),
       });
     }
     return items;
-  }, [image, illustData, localSrcs, pageCount, isGif]);
+  }, [image, illustData, localSrcs, pageCount, isGif, isBooru, source]);
 
   // 灯箱打开时注册返回处理（关闭灯箱，不回退到详情栈）
   useEffect(() => {
@@ -413,6 +433,8 @@ export default function ImageDetailView({
   const loadRelated = useCallback(async ({ requestSeq } = {}) => {
     const illustId = image?.illustId ? String(image.illustId) : '';
     if (!illustId || loadingRelatedRef.current) return;
+    // booru 站没有相关推荐接口：直接置空，区块随 related.length === 0 自动不渲染
+    if (!caps.related) { setRelated([]); setLoadingRelated(false); return; }
     const activeSeq = requestSeq || relatedRequestSeqRef.current;
     const isCurrentRequest = () => (
       relatedRequestSeqRef.current === activeSeq &&
@@ -446,7 +468,7 @@ export default function ImageDetailView({
         setLoadingRelated(false);
       }
     }
-  }, [image?.illustId]);
+  }, [image?.illustId, caps.related]);
 
   // 加载相关推荐（优先缓存）
   useEffect(() => {
@@ -544,7 +566,7 @@ export default function ImageDetailView({
                   // 优先用当页缩略图底座生成 540 等比预览（同步可得，不用等详情接口），
                   // 接口就绪后回落到当页 small 档。绝不能复用第 0 页的方形裁剪图，
                   // 否则多图作品的非首页会保持方形、比例错误。
-                  const placeholderUrl = masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '', p)
+                  const placeholderUrl = masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '', p, source)
                     || imgs[p]?.previewUrl
                     || '';
                   return (
@@ -574,13 +596,13 @@ export default function ImageDetailView({
             <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
             <div className="image-detail-author-row">
               {image?.authorName || image?.author ? (
-                <span className="image-detail-author"
-                  onClick={() => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar)}>
+                <span className={`image-detail-author${caps.follow ? '' : ' image-detail-author--static'}`}
+                  onClick={caps.follow ? () => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar) : undefined}>
                   <span className="image-detail-avatar-wrap">
                     {authorAvatar
                       ? <img className="image-detail-author-avatar" src={authorAvatar} alt="" loading="lazy" />
                       : <span className="image-detail-author-avatar image-detail-author-avatar--placeholder" />}
-                    {authorId && (
+                    {caps.follow && authorId && (
                       <button
                         className={`follow-btn${authorIsFollowed ? ' followed' : ''}`}
                         disabled={followUpdating}
@@ -602,10 +624,10 @@ export default function ImageDetailView({
                 </span>
               ) : null}
               <a className="image-detail-pixiv-link"
-                href={image?.pixivUrl || `https://www.pixiv.net/artworks/${image.illustId}`}
+                href={image?.webUrl || image?.pixivUrl || (isBooru ? '' : `https://www.pixiv.net/artworks/${image.illustId}`)}
                 target="_blank" rel="noreferrer"
                 onClick={e => e.stopPropagation()}>
-                Pixiv
+                {getSource(source).label}
               </a>
             </div>
           </div>

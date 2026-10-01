@@ -8,7 +8,7 @@
  */
 import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
-import { safeFileName, truncateUtf8Bytes, utf8ByteLen } from '../core/utils.js';
+import { safeFileName, truncateUtf8Bytes, utf8ByteLen, sourceOfId, rawIdOf } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { exportToGallery, deleteFromGallery, loadFromGallery } from './gallery.js';
 
@@ -175,7 +175,7 @@ export class FileStore {
 
   /**
    * 生成文件名。
-   * 格式：pixiv_{illustId}_p{pageIndex}_[{author}]_[{title}].{ext}
+   * 格式：{source}_{rawId}_p{pageIndex}_[{author}]_[{title}].{ext}
    * 动图扩展名用 .gif。
    * 整体按 UTF-8 字节截断（MediaStore/ext4 单文件名上限 255 字节，中文日文很容易超）。
    * @param {PixivEntity} entity
@@ -187,7 +187,12 @@ export class FileStore {
     const safeTitle = safeFileName(entity.title || entity.illustId || '');
     const authorPart = safeAuthor ? `[${safeAuthor}]` : '[]';
     const titlePart = safeTitle ? `[${safeTitle}]` : '[]';
-    const head = `pixiv_${entity.illustId}_p${entity.pageIndex}_${authorPart}_`;
+    // 用站点原始 id（rawIdOf）拼名：非 pixiv 条目的 illustId 形如 `yande_1269655`，
+    // 虽然 `_` 在文件名里合法，但统一走 rawIdOf 才能让 parseCacheFileName 往返一致。
+    // pixiv 时 source='pixiv' 且 rawIdOf 就是 illustId → 与历史文件名逐字节相同。
+    const source = entity.source || sourceOfId(entity.illustId);
+    const siteId = rawIdOf(entity.illustId);
+    const head = `${source}_${siteId}_p${entity.pageIndex}_${authorPart}_`;
     // 预留扩展名与结尾括号的字节，标题按剩余额度截断
     const suffix = `_${titlePart}.${ext}`;
     const budget = Math.max(16, 240 - utf8ByteLen(head) - utf8ByteLen(suffix));

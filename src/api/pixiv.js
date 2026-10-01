@@ -1,118 +1,36 @@
 /**
- * Pixiv API 适配层 — dev 走 Vite 代理，desktop 走壳内代理服务，prod 走 CapacitorHttp（手机系统代理）。
+ * Pixiv API 适配层 — 通道选择与鉴权头逻辑已抽到 transport.js，
+ * 这里只保留 Pixiv 专有的 Cookie 语义与 API 实例装配。
  */
-import { CapacitorHttp } from '@capacitor/core';
 import { createPixivApi, getSettings } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
-import { isDesktopShell, getDesktopProxyPort } from '../utils/platform.js';
+import { createTransport } from './transport.js';
 
-const log = createLogger('pixivFetch');
-
-const IS_DEV = import.meta.env.DEV;
 const PIXIV_BASE = 'https://www.pixiv.net';
-const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-const FORBIDDEN = new Set(['cookie', 'referer', 'user-agent']);
 
 /**
- * 构造带 status 的 HTTP 错误（显式错误契约：上层按 err.status 分类，不再解析消息字符串）。
+ * Pixiv 传输实例。Cookie 在 dev / 桌面壳下转成 x-pixiv-cookie 由代理还原透传
+ * （浏览器禁止设 Cookie），prod 走 CapacitorHttp 可直设。
  */
-function httpError(status, pathname = '') {
-  const e = new Error(`HTTP ${status}${pathname ? ` (${pathname})` : ''}`);
-  e.status = status;
-  return e;
-}
+export const pixivTransport = createTransport({
+  apiPrefix: '/pixiv-api',
+  origin: PIXIV_BASE,
+  cookieAs: 'x-pixiv-cookie',
+  referer: PIXIV_BASE,
+  logName: 'pixivFetch',
+});
 
-function buildHeaders(headers = {}) {
-  const h = {};
-  for (const [key, value] of Object.entries(headers || {})) {
-    if (value == null || value === '') continue;
-    const lower = key.toLowerCase();
-    // 浏览器/桌面壳禁止设置 Cookie，转为 x-pixiv-cookie 由代理（Vite / 壳内服务）透传
-    if (lower === 'cookie') {
-      if (IS_DEV || isDesktopShell()) { h['x-pixiv-cookie'] = value; continue; }
-      // Prod: CapacitorHttp 可以直接设 Cookie
-      h[key] = value; continue;
-    }
-    if (FORBIDDEN.has(lower)) continue;
-    h[key] = value;
-  }
-  if (!IS_DEV && !isDesktopShell()) {
-    h['Referer'] = PIXIV_BASE;
-    h['User-Agent'] = DESKTOP_UA;
-  }
-  return h;
-}
-
-async function devFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
-  const h = buildHeaders(headers);
-  const ctrl = new AbortController();
-  const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
-  try {
-    const res = await fetch(`/pixiv-api${pathname}`, { method, body, headers: h, signal: ctrl.signal });
-    if (!res.ok) throw httpError(res.status, pathname);
-    return raw ? await res.text() : await res.json();
-  } finally { if (timer) clearTimeout(timer); }
-}
-
-/**
- * 桌面壳：请求壳内代理服务（Electron main 进程内嵌，与 Vite dev 同款中间件）。
- * 绕开浏览器 CORS + Cookie 限制：Cookie 继续走 x-pixiv-cookie 头，由代理还原透传。
- */
-async function desktopFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
-  const port = await getDesktopProxyPort();
-  if (!port) throw new Error('桌面代理端口不可用');
-  const h = buildHeaders(headers);
-  const ctrl = new AbortController();
-  const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/pixiv-api${pathname}`, {
-      method, body, headers: h, signal: ctrl.signal,
-    });
-    if (!res.ok) throw httpError(res.status, pathname);
-    return raw ? await res.text() : await res.json();
-  } finally { if (timer) clearTimeout(timer); }
-}
-
-async function prodFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
-  const h = buildHeaders(headers);
-  const url = `${PIXIV_BASE}${pathname}`;
-  try {
-    const resp = await CapacitorHttp.request({
-      method, url,
-      headers: h,
-      data: method === 'GET' ? undefined : body,
-      connectTimeout: timeout || 15000,
-      readTimeout: timeout || 15000,
-    });
-    if (resp.status < 200 || resp.status >= 300) throw httpError(resp.status, pathname);
-    if (raw) return typeof resp.data === 'string' ? resp.data : JSON.stringify(resp.data);
-    return typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
-  } catch (e) {
-    // 用结构化错误契约判断（httpError 带 status），不要解析消息字符串：
-    // 'net::ERR_HTTP_RESPONSE_CODE_FAILURE' 之类的网络错误也含 "HTTP"，
-    // 曾被误判成 HTTP 错误直接上抛，丢掉了下面的 fetch 降级兜底。
-    if (e?.status) throw e;
-    // CapacitorHttp 失败时回退 fetch（可能直接走 WIFI 绕过代理）
-    log.info('CapacitorHttp 请求失败，降级 fetch:', pathname, e.message);
-    const ctrl = new AbortController();
-    const timer = timeout ? setTimeout(() => ctrl.abort(), timeout) : null;
-    try {
-      const res = await fetch(url, { method, body, headers: h, signal: ctrl.signal });
-      if (!res.ok) throw httpError(res.status, pathname);
-      return raw ? await res.text() : await res.json();
-    } finally { if (timer) clearTimeout(timer); }
-  }
-}
+export const browserFetch = pixivTransport.devFetch;
+export const prodFetch = pixivTransport.prodFetch;
+export const desktopFetch = pixivTransport.desktopFetch;
 
 async function getCookie() {
   const s = await getSettings();
   return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
 }
 
-export { devFetch as browserFetch, prodFetch, desktopFetch };
-
 export const pixivApi = createPixivApi({
-  fetch: isDesktopShell() ? desktopFetch : (IS_DEV ? devFetch : prodFetch),
+  fetch: pixivTransport,
   getCookie,
   // logger 由外层注入（core 不反向依赖 utils/logger）
   log: createLogger('pixivApi'),

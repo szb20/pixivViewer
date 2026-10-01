@@ -687,6 +687,8 @@ function bytesToBase64(bytes) {
  */
 export async function saveGifToAlbum(item, onProgress) {
   if (!item?.illustId) return { error: '缺少 illustId' };
+  // booru 站没有 Ugoira：只有 Pixiv 作品的 meta 接口存在，误入这里必然一路 404
+  if (item.source && item.source !== 'pixiv') return { error: '该来源不支持动图' };
   const sid = String(item.illustId);
   const inFlight = saveInFlight.get(sid);
   if (inFlight) return inFlight;

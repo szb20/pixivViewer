@@ -725,6 +725,12 @@ button,
   margin-bottom: 10px;
 }
 
+/* 推荐页顶部的来源切换条：左右留白与网格对齐，随内容一起滚动 */
+.chips--top {
+  padding: 10px var(--grid-pad-x) 0;
+  margin-bottom: 2px;
+}
+
 .chips-bottom {
   position: fixed;
   bottom: calc(80px + env(safe-area-inset-bottom, 0px));

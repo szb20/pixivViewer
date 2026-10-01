@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
 import { registerBackHandler } from '../utils/backHandler.js';
+import { SOURCE_LIST, getSource } from '../sources/registry.js';
+import { setImageSource, setBooruSafeOnly } from '../hooks/useImageSource.js';
 import '../styles/settings.css';
 
 const LAYOUT_OPTIONS = [
@@ -20,6 +22,10 @@ export default function SettingsPage({ onClose }) {
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridLayout, setGridLayout] = useState('waterfall');
   const [saveDirectory, setSaveDirectory] = useState('');
+  // 来源开关：改它同时走 useImageSource 的模块单例（立即广播 + 自行持久化），
+  // 所以这两个不能进 doSave——否则同一次改动会写两遍 settings。
+  const [imageSourceId, setImageSourceId] = useState('pixiv');
+  const [safeOnly, setSafeOnly] = useState(false);
 
   // Cookie 收起/展开
   const [cookieOpen, setCookieOpen] = useState(false);
@@ -54,6 +60,8 @@ export default function SettingsPage({ onClose }) {
       setProxyUrl(s.proxyUrl || '');
       setGridLayout(s.gridLayout || 'waterfall');
       setSaveDirectory(s.saveDirectory || '');
+      setImageSourceId(s.imageSource || 'pixiv');
+      setSafeOnly(s.booruSafeOnly === true);
       loadedResolveRef.current?.();
     });
     return () => { cancelled = true; };
@@ -134,6 +142,48 @@ export default function SettingsPage({ onClose }) {
               />
               <div className="settings-expand-hint">
                 获取方式：浏览器登录 pixiv.net → F12 开发者工具 → Application → Cookies → 复制 PHPSESSID 的值
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── 来源 ── */}
+        <div className="settings-group">
+          <div className="settings-group-label">来源</div>
+          <div className="settings-row">
+            <div style={{ minWidth: 0 }}>
+              <div className="settings-row-label">图片来源</div>
+              <div className="settings-row-hint">切换后各页签会按新来源重新加载</div>
+            </div>
+            <div className="settings-pill-group">
+              {SOURCE_LIST.map(s => (
+                <button
+                  key={s.id}
+                  className={`settings-pill${imageSourceId === s.id ? ' settings-pill--active' : ''}`}
+                  onClick={() => { setImageSourceId(s.id); setImageSource(s.id); }}
+                >{s.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* 分级过滤：仅图站有意义（Pixiv 的分级由账号设置决定） */}
+          {getSource(imageSourceId).kind !== 'pixiv' && (
+            <div className="settings-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="settings-row-label">分级过滤</div>
+                <div className="settings-row-hint">
+                  {safeOnly ? '只显示 rating:safe' : '显示全部（含 questionable / explicit）'}
+                </div>
+              </div>
+              <div className="settings-pill-group">
+                <button
+                  className={`settings-pill${safeOnly ? '' : ' settings-pill--active'}`}
+                  onClick={() => { setSafeOnly(false); setBooruSafeOnly(false); }}
+                >全部</button>
+                <button
+                  className={`settings-pill${safeOnly ? ' settings-pill--active' : ''}`}
+                  onClick={() => { setSafeOnly(true); setBooruSafeOnly(true); }}
+                >仅安全</button>
               </div>
             </div>
           )}

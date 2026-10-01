@@ -6,6 +6,10 @@ import ImageGrid from '../components/ImageGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
+import { useImageSourceId, useBooruSafeOnly, setImageSource } from '../hooks/useImageSource.js';
+import { booruApiFor } from '../sources/api.js';
+import { SOURCE_LIST } from '../sources/registry.js';
+import { scopedTabKey } from '../pixiv-assistant/index.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
@@ -14,26 +18,52 @@ const log = createLogger('Discover');
 export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
   const { recommendationExcludedSet, cacheReady } = usePixivCache();
+  const sourceId = useImageSourceId();
+  const safeOnly = useBooruSafeOnly();
+  const booruApi = booruApiFor(sourceId);
   const startRef = useRef(0);
+  const isBooru = !!booruApi;
 
   const feed = useTabFeed({
-    cacheKey: CACHE_KEY,
+    cacheKey: scopedTabKey(sourceId, CACHE_KEY),
     registerRefresh,
+    // 下拉刷新按 tab key 注册：store 的 triggerPullRefresh 取 refreshFns[activeTab]
+    refreshKey: 'discover',
     refreshToken,
     // 推荐排除以启动时的收藏/保存快照为准，避免本次收藏改变当前会话的推荐流。
-    enabled: cacheReady,
+    // booru 来源没有这份快照，无需等待，直接放行。
+    enabled: isBooru || cacheReady,
     // 缓存 hasMore=false（可能是不足一页的旧缓存）时不跳过网络请求，确保能继续加载
     shouldSkipFirstFetch: (applied) => !!applied.hasMore,
     hydrate: (cache) => {
       if (!cache?.items?.length) return null;
       if (cache.start > 0) startRef.current = cache.start;
       return {
-        items: cache.items.filter(item => !recommendationExcludedSet?.has(String(item.illustId))),
+        items: isBooru ? cache.items : cache.items.filter(item => !recommendationExcludedSet?.has(String(item.illustId))),
         hasMore: !!cache.hasMore,
       };
     },
     fetchPage: async (append, currentItems, isStale) => {
       if (!append) startRef.current = 0;
+
+      // ── 非 Pixiv 来源：Moebooru 没有 offset 游标，翻页就是 page+1 ──
+      if (isBooru) {
+        const page = append ? startRef.current + 1 : 1;
+        const r = await booruApi.feed({ page, limit: PAGE_SIZE, safeOnly });
+        if (isStale?.()) return null;
+        const list = r?.illusts || [];
+        const failed = !list.length && !!(r?.message || r?.error);
+        if (!failed) startRef.current = page;
+        const fresh = list.filter(img => !hiddenWorks.has(img.illustId));
+        return {
+          list: fresh,
+          hasMore: list.length > 0,
+          error: failed ? (r?.message || r?.error || '') : '',
+          emptyMessage: r?.message || '暂无推荐',
+          cacheExtra: { start: startRef.current },
+        };
+      }
+
       // 去重（discovery 可能重复返回同一批）
       const seen = new Set(currentItems.map(i => i.illustId));
       // 只过滤启动前已喜欢/已保存的作品。本会话新增收藏保留在后续推荐中，直到下次启动。
@@ -82,10 +112,22 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
 
   // 注意：已喜欢/已保存的作品保留在当前网格，仅在 fetchPage 中对后续新页过滤
 
-  const needCookie = !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
+  const needCookie = !isBooru && !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
 
   return (
     <div className="page">
+      {/* 来源快捷切换：与设置页共用同一状态源（模块单例），切换即全局生效 */}
+      {SOURCE_LIST.length > 1 && (
+        <div className="chips chips--top">
+          {SOURCE_LIST.map(s => (
+            <button
+              key={s.id}
+              className={`chip${sourceId === s.id ? ' active' : ''}`}
+              onClick={() => setImageSource(s.id)}
+            >{s.shortLabel || s.label}</button>
+          ))}
+        </div>
+      )}
       {needCookie
         ? <NeedCookieNotice onOpenSettings={onOpenSettings} />
         : (feed.error && (

@@ -37,8 +37,11 @@ function getCardRatio(img) {
 // 与详情页 small 预览图同档同路径：540px 长边等比、不裁剪，内容和比例一致。
 // page：目标页码，默认 0（瀑布流只展示每个作品第 0 页）；详情页多图需传真实页码，
 // 否则非首页会拿到第 0 页的方形裁剪图，比例错误。
-export function masonryThumbUrl(url, page = 0) {
+// source：非 Pixiv 来源的 URL 是图站直链（无 pximg 日期路径），交给 pixivPageUrl
+// 只会被正则抠出一个乱码 id，返回一张毫不相干的 pixiv 图 → 原样返回。
+export function masonryThumbUrl(url, page = 0, source = 'pixiv') {
   if (!url || typeof url !== 'string') return '';
+  if (source && source !== 'pixiv') return url;
   // 先转成等比底座（已处理 dev 代理），再补上 small 档的 c/540x540_70 前缀
   const base = pixivPageUrl(url, page, 1200);
   if (!base) return '';
@@ -102,7 +105,7 @@ export function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide,
   const renderItem = (i) => {
     const img = items[i];
     // 瀑布流用等比缩略图（540px），不用方形 250px 裁剪图，避免"方像素拼成瀑布"。
-    const thumbSrc = masonryThumbUrl(img.thumbnailUrl || img.mediumUrl || '')
+    const thumbSrc = masonryThumbUrl(img.thumbnailUrl || img.mediumUrl || '', 0, img.source)
       || img.thumbnailUrl
       || img.mediumUrl;
     return (

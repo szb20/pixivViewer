@@ -1,15 +1,19 @@
 /**
  * 作品状态工具 — 从 pixivCache 派生「已喜欢 / 已保存」的 illustId 集合。
  *
- * 键由 getCompositeKey 生成，格式统一为 `${illustId}_${pageIndex}`
- * （illustId 为纯数字，页码为非负整数，取最后一个 `_` 之后必为页码）。
+ * 键由 getCompositeKey 生成，格式统一为 `${illustId}_${pageIndex}`。
+ * illustId 对 pixiv 是裸数字，对其它来源是 `{source}_{站点id}`（见 qualifyId），
+ * 两者形状不同，反解时都要还原成完整的 illustId —— 集合成员就是 illustId，
+ * 与网格里 img.illustId 直接比对，跨来源靠 illustId 里的来源前缀天然隔离。
  */
 
-/** 从复合键反解 illustId（结构化约定：`{illustId}_{pageIndex}`，illustId 不含 `_`） */
+/** 从复合键反解 illustId（结构化约定：`{illustId}_{pageIndex}`，末尾 `_` 后必为页码） */
 function illustIdOfCompositeKey(key) {
   const k = String(key);
   const idx = k.lastIndexOf('_');
-  // 无 `_`（裸 illustId）或 `_` 后不是纯数字页码 → 整个 key 就是 illustId
+  // 无 `_`（裸 illustId）或 `_` 后不是纯数字页码 → 整个 key 就是 illustId。
+  // 注意：非 pixiv 的 illustId 自身含 `_`（yande_1269655），但其后的 `_0` 仍是页码，
+  // 所以 lastIndexOf 的语义对两种形状都成立。
   if (idx <= 0 || !/^\d+$/.test(k.slice(idx + 1))) return k;
   return k.slice(0, idx);
 }

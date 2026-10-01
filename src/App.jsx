@@ -17,6 +17,7 @@ import { storageFacade } from './pixiv-assistant/index.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useStartupProxyCheck } from './hooks/useStartupProxyCheck.js';
+import { useImageSourceId } from './hooks/useImageSource.js';
 import { restoreMainScrollOnColdStart } from './utils/scroll.js';
 import './index.css';
 import './styles/detail.css';
@@ -35,6 +36,9 @@ const TABS = [
 export default function App() {
   const [chromeHidden] = useChromeAutoHide();
   useAndroidBackButton();
+  // 全局来源：切换时 tab-pane 的 key 变化 → 整块重挂载，
+  // 列表 / 翻页游标 / 滚动位置 / 内存缓存全部天然重置（否则会残留另一站的列表）。
+  const activeSource = useImageSourceId();
   const {
     activeTab,
     visitedTabs,
@@ -76,7 +80,7 @@ export default function App() {
         <main className="app-content">
           <div className="tab-pane" style={{ display: activeTab === 'discover' ? undefined : 'none' }}>
             {visitedTabs.has('discover') && (
-              <ErrorBoundary key="discover">
+              <ErrorBoundary key={`${activeSource}:discover`}>
                 <DiscoverPage
                   onOpen={openDetail}
                   onOpenSettings={openSettings}
@@ -88,7 +92,7 @@ export default function App() {
           </div>
           <div className="tab-pane" style={{ display: activeTab === 'ranking' ? undefined : 'none' }}>
             {visitedTabs.has('ranking') && (
-              <ErrorBoundary key="ranking">
+              <ErrorBoundary key={`${activeSource}:ranking`}>
                 <RankingPage
                   active={activeTab === 'ranking'}
                   onOpen={openDetail}
@@ -100,7 +104,7 @@ export default function App() {
           </div>
           <div className="tab-pane" style={{ display: activeTab === 'search' ? undefined : 'none' }}>
             {visitedTabs.has('search') && (
-              <ErrorBoundary key="search">
+              <ErrorBoundary key={`${activeSource}:search`}>
                 <SearchPage
                   active={activeTab === 'search'}
                   onOpen={openDetail}
@@ -113,7 +117,7 @@ export default function App() {
           </div>
           <div className="tab-pane" style={{ display: activeTab === 'me' ? undefined : 'none' }}>
             {visitedTabs.has('me') && (
-              <ErrorBoundary key="me">
+              <ErrorBoundary key={`${activeSource}:me`}>
                 <MePage
                   active={activeTab === 'me'}
                   onOpen={openDetail}

@@ -9,7 +9,7 @@
 import { Capacitor } from '@capacitor/core';
 import { getAllMeta, getMeta, putMeta, putMetaBatch } from './cacheDB.js';
 import { PixivEntity } from './entity.js';
-import { parseCacheFileName } from '../core/utils.js';
+import { parseCacheFileName, sourceOfId } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { hiddenWorks } from '../../utils/hiddenWorks.js';
 
@@ -17,8 +17,8 @@ const log = createLogger('metaBackup');
 
 /** 新版备份文件名（Downloads 集合，卸载后保留，纯 JSON 可读） */
 const META_FILE = 'pixiv_meta.json';
-/** 备份格式版本 */
-const BACKUP_VERSION = 4;
+/** 备份格式版本（5：条目带 source 字段，支持多来源） */
+const BACKUP_VERSION = 5;
 /** 旧版曾用 1×1 PNG 藏 JSON（Images 集合），用于迁移兼容 */
 const LEGACY_META_PNG = 'pixiv_meta.png';
 
@@ -54,6 +54,8 @@ export async function writeMetaBackup(records) {
     .filter(r => (r.likedAt || 0) > 0 || r.state === 'saved')
     .map(r => ({
       illustId: r.illustId,
+      // v5 起带来源；老记录缺失时由 illustId 派生（pixiv 老记录即得 'pixiv'）
+      source: r.source || sourceOfId(r.illustId),
       pageIndex: r.pageIndex ?? 0,
       type: r.type || 'image',
       state: r.state || 'cached',
@@ -146,7 +148,7 @@ function mergeBackupItems(entries) {
   const byKey = new Map();
   for (const it of entries) {
     if (!it?.illustId) continue;
-    const key = `pixiv:${it.illustId}:${it.pageIndex ?? 0}`;
+    const key = PixivEntity.makeId(it.illustId, it.pageIndex ?? 0);
     const prev = byKey.get(key);
     if (!prev) {
       byKey.set(key, { ...it });
@@ -305,6 +307,7 @@ export async function restoreMetaBackupIfNeeded() {
           const light = new PixivEntity({
             id,
             illustId: it.illustId,
+            source: it.source || sourceOfId(it.illustId),
             pageIndex: it.pageIndex ?? 0,
             type: it.type === 'gif' ? 'gif' : 'image',
             state: it.state === 'saved' ? 'saved' : 'cached',
@@ -327,6 +330,7 @@ export async function restoreMetaBackupIfNeeded() {
         const entity = new PixivEntity({
           id: PixivEntity.makeId(it.illustId, it.pageIndex ?? 0),
           illustId: it.illustId,
+          source: it.source || sourceOfId(it.illustId),
           pageIndex: it.pageIndex ?? 0,
           type: it.type === 'gif' ? 'gif' : 'image',
           state: it.state === 'saved' ? 'saved' : 'cached',
@@ -378,6 +382,7 @@ export async function reconcileGallery() {
       toAdd.push({
         cacheKey: id,
         illustId: parsed.illustId,
+        source: parsed.source || sourceOfId(parsed.illustId),
         pageIndex: parsed.pageIndex,
         type,
         state: 'saved',

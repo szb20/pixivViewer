@@ -15,11 +15,15 @@ import { storageFacade } from '../pixiv-assistant/index.js';
  * 统一保存入口 —— 调用方无需关心动图/静图差异：
  * GIF → saveGifToAlbum（ZIP 解码 + GIF 编码）；
  * 静态图 → storageFacade.saveFromNetwork（原图优先下载）。
+ *
+ * booru 来源（source !== 'pixiv'）恒为静态图，走同一分支即可；
+ * 这里只做一次断言式分流，避免第三方条目被误送进 Ugoira 通道。
  * @param {object} item — 图片条目（含 type / illustType / illustId / 各 URL）
  * @returns {Promise<{success: boolean, ...}>}
  */
 export function saveItem(item) {
-  if (item?.type === 'gif' || Number(item?.illustType) === 2) {
+  const isPixiv = !item?.source || item.source === 'pixiv';
+  if (isPixiv && (item?.type === 'gif' || Number(item?.illustType) === 2)) {
     return saveGifToAlbum(item);
   }
   return storageFacade.saveFromNetwork(item);

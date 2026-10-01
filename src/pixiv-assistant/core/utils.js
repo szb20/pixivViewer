@@ -137,6 +137,9 @@ export function extractUserIdFromCookie(cookie) {
 
 /**
  * 获取图片的唯一复合键（用于缓存/去重）。
+ *
+ * 跨来源隔离靠 illustId 本身全局唯一（见 qualifyId）：pixiv 是裸数字，
+ * 其他来源是 `{source}_{站点id}`，因此这里不需要再拼来源。
  * @param {Object} img
  * @param {string} [img.illustId]
  * @param {number} [img._pageIndex]
@@ -147,6 +150,60 @@ export function getCompositeKey(img) {
   const id = img.illustId || '';
   const page = img._pageIndex ?? img.page ?? 0;
   return `${id}_${page}`;
+}
+
+/** 默认来源（历史数据与未标注来源的条目都归它） */
+export const DEFAULT_SOURCE = 'pixiv';
+
+/**
+ * 已知来源词表。
+ * 必须是封闭词表：文件名解析靠它区分"来源前缀"与"标题里的下划线"，
+ * 开放匹配会把第三方文件名误认成来源。
+ */
+export const KNOWN_SOURCES = ['pixiv', 'yande', 'konachan'];
+
+/**
+ * 站点原始 id → 全局唯一 illustId。
+ *
+ * pixiv 保持裸数字，与历史数据逐字节一致（零迁移）；
+ * 其他来源加 `{source}_` 前缀，避免与 pixiv 的数字 id 撞号
+ * （yande 约 127 万条，其 id 几乎全部落在 pixiv 的 id 区间内）。
+ *
+ * @param {string} source
+ * @param {string|number} rawId — 站点自己的 id
+ * @returns {string}
+ */
+export function qualifyId(source, rawId) {
+  const id = String(rawId ?? '');
+  if (!id) return '';
+  const s = String(source || DEFAULT_SOURCE);
+  return s === DEFAULT_SOURCE ? id : `${s}_${id}`;
+}
+
+/**
+ * illustId → 来源。未知形态一律按 pixiv 处理（fail-safe，不抛错）。
+ * @param {string} illustId
+ * @returns {string}
+ */
+export function sourceOfId(illustId) {
+  const s = String(illustId ?? '');
+  const i = s.indexOf('_');
+  if (i <= 0) return DEFAULT_SOURCE;
+  const head = s.slice(0, i);
+  return KNOWN_SOURCES.includes(head) ? head : DEFAULT_SOURCE;
+}
+
+/**
+ * illustId → 站点原始 id。
+ * 拼文件名必须用它：`yande_1269655` 里的 `_` 合法，但若误把带来源的
+ * illustId 直接拼进去，扩展名/前缀就会串味。
+ * @param {string} illustId
+ * @returns {string}
+ */
+export function rawIdOf(illustId) {
+  const s = String(illustId ?? '');
+  const src = sourceOfId(s);
+  return src === DEFAULT_SOURCE ? s : s.slice(src.length + 1);
 }
 
 /** 单个字符的 UTF-8 字节数 */
@@ -199,15 +256,30 @@ export function safeFileName(s) {
  *   12345678_p0_Author_Title.jpg — ID + 页码 + 作者 + 标题
  *   pixiv_{id}_g0_[Author]_[Title].gif — 新格式动图（{source}_{id}_g{page}_[{author}]_[{title}]）
  *   pixiv_{id}_p0_[Author]_[Title].jpg — 新格式图片
+ *   yande_{id}_p0_[Author]_[Title].jpg — 非 Pixiv 来源（同上格式，前缀换成来源名）
  *   ugoira_12345.gif — Ugoira 动图（旧）
  *   ugoira_12345_Author_Title.gif — Ugoira 动图 + 作者 + 标题（旧）
  * @param {string} name
- * @returns {{ illustId: string, pageIndex: number, isGif: boolean }|null}
+ * @returns {{ illustId: string, pageIndex: number, isGif: boolean, source?: string }|null}
  */
 export function parseCacheFileName(name) {
   const extMatch = name.match(/\.(jpg|jpeg|png|gif|webp|zip)$/i);
   if (!extMatch) return null;
   const base = name.slice(0, -extMatch[0].length);
+
+  // 非 Pixiv 来源：{source}_{rawId}_p|g{page}_[{author}]_[{title}]
+  // 单独开一支（而非放宽下面 pixiv 分支的 `(\d+)`），这样 Pixiv 老文件的解析路径一字不动。
+  // 用 KNOWN_SOURCES 白名单：否则标题里恰好含 `x_12_p0_[..]` 的第三方文件会被误认。
+  const altSource = base.match(/^([a-z][a-z0-9]*)_(\d+)_(p|g)(\d+)_\[(.*?)\]_\[(.*)\]$/);
+  if (altSource && altSource[1] !== 'pixiv' && KNOWN_SOURCES.includes(altSource[1])) {
+    return {
+      source: altSource[1],
+      illustId: qualifyId(altSource[1], altSource[2]),
+      pageIndex: parseInt(altSource[4], 10),
+      isGif: altSource[3] === 'g',
+      authorName: altSource[5], author: altSource[5], title: altSource[6],
+    };
+  }
 
   // 新格式动图：{source}_{illustId}_g{page}_[{authorName}]_[{title}].gif
   // 注意：author/title 可能为空（如修复前的遗留文件），用 * 不用 +

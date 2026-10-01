@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { getCompositeKey } from '../pixiv-assistant/core/utils.js';
+import { getCompositeKey, sourceOfId } from '../pixiv-assistant/core/utils.js';
 import { storageFacade } from '../pixiv-assistant/index.js';
 import { usePixivCache } from '../context/pixivCacheContext.js';
 import { showToast } from '../utils/toast.js';
@@ -35,8 +35,18 @@ export function useGridLikeToggle() {
     }
     window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));
 
-    // 只有喜欢真的成功（且是"喜欢"而非"取消"）才下载全部页
+    // 只有喜欢真的成功（且是"喜欢"而非"取消"）才下载
     if (!likedOk) return;
+    // 动图走帧序列通道，与静态图分开（booru 无动图，此分支只可能命中 pixiv）
+    if (img.source && img.source !== 'pixiv' && img.type !== 'gif') {
+      const { saveSingleItem } = await import('../api/saveSingle.js');
+      const r = await saveSingleItem({ ...img, source: img.source || sourceOfId(img.illustId), _silent: true });
+      if (r?.success || r?.cached) {
+        setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
+        showToast(r?.idempotent || r?.skipped ? '已在相册中' : '已保存到相册', { type: 'success' });
+      }
+      return;
+    }
     const { saved, exists } = await saveAllPages(img, { setPixivCache });
     if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`, { type: 'success' });
     else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });

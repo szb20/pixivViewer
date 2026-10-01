@@ -263,6 +263,11 @@
   min-width: 0;
 }
 
+/* booru 来源无作者页可跳（caps.follow 为 false）：只展示，不给可点击的手型光标 */
+.image-detail-author--static {
+  cursor: default;
+}
+
 .image-detail-author-text {
   display: flex;
   flex-direction: column;

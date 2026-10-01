@@ -33,7 +33,7 @@ export class PixivRepository {
 
   /**
    * 按 id 查找。
-   * @param {string} id — entity key (pixiv:{illustId}:{pageIndex})
+   * @param {string} id — entity key ({source}:{illustId}:{pageIndex})
    * @returns {PixivEntity|null}
    */
   async find(id) {
@@ -173,13 +173,12 @@ export class PixivRepository {
     const record = await getMeta(id);
     if (!record) {
       // 不存在 → 建轻记录
-      const parts = id.replace('pixiv:', '').split(':');
-      const illustId = parts[0];
-      const pageIndex = parseInt(parts[1], 10) || 0;
+      const { source, illustId, pageIndex } = PixivEntity.parseId(id);
       const now = Date.now();
       const lightRecord = {
         cacheKey: id,
         illustId,
+        source,
         pageIndex,
         state: 'cached',
         likedAt: now,
@@ -194,6 +193,7 @@ export class PixivRepository {
         tags: Array.isArray(meta.tags) ? meta.tags : [],
         thumbnailUrl: meta.thumbnailUrl || '',
         pixivUrl: meta.pixivUrl || '',
+        webUrl: meta.webUrl || meta.pixivUrl || '',
         pageCount: meta.pageCount || 0,
         width: meta.width || 0,
         height: meta.height || 0,
@@ -231,12 +231,11 @@ export class PixivRepository {
     const record = await getMeta(id);
     const now = Date.now();
     if (!record) {
-      const parts = id.replace('pixiv:', '').split(':');
-      const illustId = parts[0];
-      const pageIndex = parseInt(parts[1], 10) || 0;
+      const { source, illustId, pageIndex } = PixivEntity.parseId(id);
       const lightRecord = {
         cacheKey: id,
         illustId,
+        source,
         pageIndex,
         state: 'cached',
         likedAt: now,
@@ -251,6 +250,7 @@ export class PixivRepository {
         tags: Array.isArray(meta.tags) ? meta.tags : [],
         thumbnailUrl: meta.thumbnailUrl || '',
         pixivUrl: meta.pixivUrl || '',
+        webUrl: meta.webUrl || meta.pixivUrl || '',
         pageCount: meta.pageCount || 0,
         width: meta.width || 0,
         height: meta.height || 0,

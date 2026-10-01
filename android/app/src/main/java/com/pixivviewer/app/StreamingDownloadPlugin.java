@@ -53,7 +53,10 @@ public class StreamingDownloadPlugin extends Plugin {
             try {
                 conn = (HttpURLConnection) new URL(url).openConnection();
                 conn.setRequestMethod("GET");
-                conn.setRequestProperty("Referer", referer);
+                // 空串 = 不发送 Referer（非 Pixiv 图床不校验，白送 pixiv.net 的假 Referer 反而奇怪）
+                if (referer != null && !referer.isEmpty()) {
+                    conn.setRequestProperty("Referer", referer);
+                }
                 conn.setRequestProperty("User-Agent",
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36");
                 conn.setRequestProperty("Accept", "image/*,*/*;q=0.8");

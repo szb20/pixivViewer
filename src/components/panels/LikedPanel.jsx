@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { storageFacade } from '../../pixiv-assistant/index.js';
 import { pixivApi } from '../../api/pixiv.js';
+import { sourceOfId } from '../../pixiv-assistant/core/utils.js';
+import { booruApiFor } from '../../sources/api.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { createLogger } from '../../utils/logger.js';
 import ImageGrid from '../../components/ImageGrid.jsx';
@@ -48,7 +50,11 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
         if (cancelled) return;
         migrateInFlight.add(it.illustId);
         try {
-          const r = await pixivApi.fetchIllust(it.illustId);
+          // 按来源分发：booru 条目走 Moebooru 适配器，拿 pixivApi 查只会 404
+          const src = it.source || sourceOfId(it.illustId);
+          const api = src === 'pixiv' ? pixivApi : booruApiFor(src);
+          if (!api) { migrateFailed.add(it.illustId); continue; }
+          const r = await api.fetchIllust(it.illustId);
           if (cancelled || !r?.illust) { migrateFailed.add(it.illustId); continue; }
           const p0 = r.illust.images?.[0] || {};
           const res = await storageFacade.backfillMeta(it.illustId, it.pageIndex ?? 0, {

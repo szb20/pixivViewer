@@ -16,6 +16,17 @@ import { isNativeDownloadAvailable, nativeDownload } from '../../utils/nativeDow
 const log = createLogger('NetworkStore');
 const IS_DEV = import.meta.env.DEV;
 
+/**
+ * 按目标域名给 Referer。
+ * Pixiv 图床（pximg / pixiv.re）对缺失 Referer 敏感，必须带；
+ * booru 图床不校验，白送 pixiv.net 的假 Referer 既无意义也不诚实。
+ */
+function refererFor(url) {
+  return /pximg\.net|pixiv\.re/i.test(url || '')
+    ? 'https://www.pixiv.net/'
+    : '';
+}
+
 export class NetworkStore {
   /**
    * 下载图片，返回 base64。
@@ -55,7 +66,8 @@ export class NetworkStore {
       }
     }
     try {
-      const resp = await fetch(abs, { headers: { Referer: 'https://www.pixiv.net/' } });
+      const referer = refererFor(abs);
+      const resp = await fetch(abs, { headers: referer ? { Referer: referer } : undefined });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       log.debug('fetch OK, size:', blob.size);
@@ -121,9 +133,10 @@ export class NetworkStore {
   async _downloadWithCapacitor(url) {
     try {
       const fullUrl = this._absUrl(url);
+      const referer = refererFor(fullUrl);
       const resp = await CapacitorHttp.request({
         method: 'GET', url: fullUrl,
-        headers: { Referer: 'https://www.pixiv.net/' },
+        headers: referer ? { Referer: referer } : {},
         responseType: 'blob', connectTimeout: 30000, readTimeout: 30000,
       });
       if (resp.status < 200 || resp.status >= 300) return null;

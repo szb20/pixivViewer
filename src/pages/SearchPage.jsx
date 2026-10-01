@@ -7,6 +7,9 @@ import ImageGrid from '../components/ImageGrid.jsx';
 import SearchIcon from '../components/icons/SearchIcon.jsx';
 import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
 import { getMainScrollEl } from '../utils/scroll.js';
+import { useImageSourceId, useBooruSafeOnly } from '../hooks/useImageSource.js';
+import { booruApiFor } from '../sources/api.js';
+import { scopedTabKey } from '../pixiv-assistant/index.js';
 import '../styles/search.css';
 
 const PAGE_SIZE = 20;
@@ -35,6 +38,10 @@ migrateFromLegacyKey('pixiv_search_history', HISTORY_KEY);
 
 export default function SearchPage({ active = true, onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const likedSet = useLikedSet();
+  const sourceId = useImageSourceId();
+  const safeOnly = useBooruSafeOnly();
+  const booruApi = booruApiFor(sourceId);
+  const isBooru = !!booruApi;
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState(false);
   const [history, setHistory] = useState(() => {
@@ -48,8 +55,9 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   const pageRef = useRef(1);
 
   const feed = useTabFeed({
-    cacheKey: CACHE_KEY,
+    cacheKey: scopedTabKey(sourceId, CACHE_KEY),
     registerRefresh,
+    refreshKey: 'search',
     refreshToken,
     // 搜索不自动首拉，只有用户提交 / 点历史 / 详情页点 Tag 时才发起
     autoLoad: false,
@@ -69,6 +77,23 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       const q = queryRef.current.trim();
       if (!q) return null;
       const page = append ? pageRef.current + 1 : 1;
+
+      // ── 非 Pixiv 来源：Moebooru 用 page 翻页，最后一页不满即到底 ──
+      if (isBooru) {
+        const r = await booruApi.search(q, { page, limit: PAGE_SIZE, safeOnly });
+        if (isStale?.()) return null;
+        const list = r?.images || [];
+        const failed = !list.length && !!r?.error;
+        if (!failed) pageRef.current = page;
+        return {
+          list,
+          hasMore: list.length >= PAGE_SIZE,
+          error: r?.error || '',
+          emptyMessage: r?.error || '没有找到结果',
+          cacheExtra: { query: q, page: pageRef.current, searched: true },
+        };
+      }
+
       const r = await pixivApi.searchPixiv(q, { page, count: PAGE_SIZE });
       // 已被新搜索取代 → 不占用游标、不返回数据（否则换词后旧响应会把 pageRef 推走）
       if (isStale?.()) return null;
@@ -111,12 +136,8 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     setHistory([]);
   }, []);
 
-  // 下拉刷新按 tab key（'search'）注册：store 的 triggerPullRefresh 取 refreshFns[activeTab]，
-  // 而 useTabFeed 内部用的是 cacheKey（'search:last'），只靠它注册会导致搜索页下拉无反应
-  useEffect(() => {
-    if (!registerRefresh) return;
-    return registerRefresh('search', () => reload(false));
-  }, [registerRefresh, reload]);
+  // 下拉刷新按 tab key（'search'）注册由 useTabFeed 的 refreshKey 负责：
+  // store 的 triggerPullRefresh 取 refreshFns[activeTab]，而持久化 cacheKey 带来源前缀。
 
   const removeHistory = useCallback((item) => {
     setHistory(prev => {
@@ -154,9 +175,12 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     return () => el.removeEventListener('scroll', onScroll);
   }, [active]);
 
-  // 点击弹出：双击当前 Tab（refreshToken 触发）→ 弹出搜索栏
+  // 点击弹出：双击当前 Tab（refreshToken 触发）→ 弹出搜索栏。
+  // 跳过挂载那一次（切来源会整块重挂载，沿用旧 token 不该当作一次"双击"）。
+  const lastTokenRef = useRef(refreshToken);
   useEffect(() => {
-    if (refreshToken > 0) setHideBar(false);
+    if (refreshToken > 0 && refreshToken !== lastTokenRef.current) setHideBar(false);
+    lastTokenRef.current = refreshToken;
   }, [refreshToken]);
 
   // 回到本 tab 时恢复搜索栏（隐藏期间可能被其他 tab 的滚动收起）

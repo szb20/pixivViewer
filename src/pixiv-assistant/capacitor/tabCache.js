@@ -50,10 +50,21 @@ function openDB() {
   return _dbPromise;
 }
 
-/** 解析 key 获取 TTL */
+/** 解析 key 获取 TTL。
+ * key 形如 `{source}:discover` / `{source}:ranking:{mode}` —— 用 includes 而非
+ * startsWith，来源前缀不会让 TTL 查找落空。 */
 function getTTL(key) {
-  const base = key.startsWith('ranking:') ? 'ranking' : key;
-  return TTL_MAP[base] || DEFAULT_TTL;
+  return key.includes('ranking') ? TTL_MAP.ranking : (TTL_MAP[key] || DEFAULT_TTL);
+}
+
+/**
+ * 给 tab 缓存 key 加来源前缀。
+ * 切成 yande 后若沿用同一个 key，水合出来的会是上一站的列表。
+ * @param {string} source
+ * @param {string} key
+ */
+export function scopedTabKey(source, key) {
+  return `${source || 'pixiv'}:${key}`;
 }
 
 /**
