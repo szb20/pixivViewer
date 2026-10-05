@@ -6,6 +6,7 @@ import { createLogger } from '../../utils/logger.js';
 import { getDetailScrollEl, getMainScrollEl } from '../../utils/scroll.js';
 import { showToast } from '../../utils/toast.js';
 import BackIcon from '../icons/BackIcon.jsx';
+import { useOverlayFocus } from '../../hooks/useOverlayFocus.js';
 
 const log = createLogger('DetailView');
 
@@ -19,6 +20,9 @@ const navKeyOf = (img) => (
 
 const SWIPE_TRIGGER_PX = 72;
 const SWIPE_DIRECTION_RATIO = 1.35;
+// 慢速拖拽的触发距离，按触发元素自身宽度算：桌面端详情页只占侧边栏右侧那一块，
+// 用 window.innerWidth 会让慢速拖拽多滑一个侧边栏的距离才翻页
+const swipeSlowDistance = (e) => (e.currentTarget?.getBoundingClientRect().width || window.innerWidth) * 0.22;
 const SLIDE_ANIMATION_MS = 260;
 // 退出动画时长：与 detail.css 的 detail-exit-to-right 保持一致，动画结束后才真正卸载详情页
 const EXIT_ANIMATION_MS = 260;
@@ -77,6 +81,9 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
   const exitingRef = useRef(false);
   const scrollMapRef = useRef({}); // `${illustId}:${pageIndex}` → { top, anchor }
 
+  // 只做焦点管理，不接管 Esc（Esc 归灯箱，见 hooks/useOverlayFocus.js 的说明）
+  const overlayRef = useOverlayFocus(true, null);
+
   // 切换作品时播放入场滑动：先清掉方向（让动画能重新触发），下一帧再挂上方向 class
   const animateSlide = useCallback((direction) => {
     if (!direction) return;
@@ -98,7 +105,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     const shouldHide = (el?.scrollTop || 0) >= 24;
     try {
       (shouldHide ? StatusBar.hide() : StatusBar.show()).catch(() => { });
-    } catch (_) { }
+    } catch { }
   };
 
   // 退出详情页：只播"整页右滑离场"，动画结束后才真正卸载。
@@ -255,7 +262,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     const ay = Math.abs(dy);
     const elapsed = Math.max(1, Date.now() - swipe.t);
     const velocity = ax / elapsed;
-    if (ax >= SWIPE_TRIGGER_PX && ax > ay * SWIPE_DIRECTION_RATIO && (velocity > 0.18 || ax > window.innerWidth * 0.22)) {
+    if (ax >= SWIPE_TRIGGER_PX && ax > ay * SWIPE_DIRECTION_RATIO && (velocity > 0.18 || ax > swipeSlowDistance(e))) {
       handleSibling(dx < 0 ? 1 : -1);
     }
   }, [handleSibling]);
@@ -294,7 +301,7 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
     const ay = Math.abs(dy);
     const elapsed = Math.max(1, Date.now() - swipe.t);
     const velocity = ax / elapsed;
-    if (ax >= SWIPE_TRIGGER_PX && ax > ay * SWIPE_DIRECTION_RATIO && (velocity > 0.18 || ax > window.innerWidth * 0.22)) {
+    if (ax >= SWIPE_TRIGGER_PX && ax > ay * SWIPE_DIRECTION_RATIO && (velocity > 0.18 || ax > swipeSlowDistance(e))) {
       handleSibling(dx < 0 ? 1 : -1);
     }
   }, [handleSibling]);
@@ -316,6 +323,8 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
   return (
     <div
       className={`detail-overlay${exiting ? ' detail-overlay--exit' : ''}`}
+      ref={overlayRef}
+      tabIndex={-1}
       onAnimationEnd={(e) => {
         // 只认整页离场动画自身的事件，忽略内部子元素的动画
         if (e.target === e.currentTarget && exitingRef.current) finishExit();

@@ -24,7 +24,7 @@
   transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
 }
 
-/* 收起时：顶部搜索栏向上滑出，底部搜索栏向下滑出 */
+/* 收起时：搜索栏向上滑出 */
 .search-bar--hidden {
   opacity: 0;
   pointer-events: none;
@@ -32,10 +32,6 @@
 
 .search-bar--top.search-bar--hidden {
   transform: translateX(-50%) translateY(calc(-100% - 24px));
-}
-
-.search-bar--bottom.search-bar--hidden {
-  transform: translateY(calc(100% + 20px));
 }
 
 .search-bar:focus-within {
@@ -125,25 +121,25 @@
 }
 
 /* ── 历史搜索 ── */
-.search-page .search-history {
+.search-history {
   margin-bottom: 6px;
 }
 
-.search-page .search-history-head {
+.search-history-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin: 2px 2px 8px;
 }
 
-.search-page .search-history-label {
+.search-history-label {
   font-size: 12px;
   letter-spacing: 0.5px;
   color: var(--text-tertiary);
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
 }
 
-.search-page .search-history-clear {
+.search-history-clear {
   padding: 2px 8px;
   border: none;
   border-radius: 8px;
@@ -154,18 +150,18 @@
   transition: color 0.2s ease, background 0.2s ease;
 }
 
-.search-page .search-history-clear:hover {
+.search-history-clear:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.06);
 }
 
-.search-page .search-history-tags {
+.search-history-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.search-page .search-history-chip {
+.search-history-chip {
   display: inline-flex;
   align-items: center;
   max-width: 100%;
@@ -176,7 +172,7 @@
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, text-shadow 0.2s ease;
 }
 
-.search-page .search-history-tag {
+.search-history-tag {
   min-width: 0;
   max-width: min(220px, calc(100vw - 96px));
   padding: 6px 9px 6px 14px;
@@ -190,7 +186,7 @@
   cursor: pointer;
 }
 
-.search-page .search-history-delete {
+.search-history-delete {
   flex: none;
   width: 28px;
   height: 28px;
@@ -204,12 +200,12 @@
   cursor: pointer;
 }
 
-.search-page .search-history-delete:active {
+.search-history-delete:active {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.12);
 }
 
-.search-page .search-history-chip:hover {
+.search-history-chip:hover {
   color: var(--text-primary);
   border-color: rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.10);
@@ -219,17 +215,17 @@
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.18);
 }
 
-.search-page .search-history-chip:hover .search-history-tag {
+.search-history-chip:hover .search-history-tag {
   color: var(--text-primary);
 }
 
 /* ══════════════════════════════════════════════
-   搜索栏 · 固定顶部（毛玻璃）
-   注：.search-page 不再需要额外底部留白。原先的 176px 是为底部悬浮栏
-   （.search-bar--bottom）预留的，搜索栏改为固定顶部后该值已失效。
+   搜索栏 · 固定悬浮（毛玻璃胶囊）
+   · 手机：贴视口顶部，为右上角齿轮按钮让位
+   · 桌面：内容区顶部居中，历史词以下拉形式挂在胶囊下方
    ══════════════════════════════════════════════ */
 
-/* 桌面/宽屏：固定顶部居中，视口宽度内不溢出（宽屏图标 42px，底部留 14px） */
+/* 手机/窄屏：固定顶部居中，视口宽度内不溢出（宽屏图标 42px，底部留 14px） */
 .search-bar--top {
   position: fixed;
   top: calc(env(safe-area-inset-top, 0px) + 12px);
@@ -251,36 +247,86 @@
   }
 }
 
-/* 底部弹出（手机端原形态保留，双栏时代柱同理窄栏） */
-.search-bar--bottom {
-  position: fixed;
-  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
-  left: 12px;
-  right: 12px;
-  margin: 0;
-  width: calc(100% - 24px);
-  max-width: 560px;
-  z-index: 5;
-}
-
+/* ── 桌面（≥900px）：内容区顶部居中的悬浮胶囊 + 历史下拉 ──
+   手机那条「贴顶浮动 + 胶囊 + 毛玻璃」在这里保留，只把定位从视口居中换成内容区居中
+   （左边界让开侧边栏），并去掉手机上为齿轮按钮让位的右移。 */
 @media (min-width: 900px) {
-  /* 桌面顶部搜索栏与底部 Tab 栏在宽度上对齐 */
   .search-bar--top {
-    width: calc(100vw - 120px);
-    max-width: 1200px;
+    top: 16px;
+    left: var(--sidebar-w);
+    right: 0;
+    /* left/right + auto 外边距 = 在内容区里水平居中（百分比按内容区宽度算） */
+    width: min(560px, calc(100% - 48px));
+    max-width: none;
+    margin: 0 auto;
+    transform: none;
+    /* 高于页面内容(1)，低于详情(50)/设置(70)/侧边栏(80)/对话框(100) */
+    z-index: 30;
+  }
+
+  /* 滚动隐藏是手机行为；桌面胶囊常驻，唤起与否另由 display 控制 */
+  .search-bar--top.search-bar--hidden {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  /* 桌面搜索页：给悬浮胶囊留位（16 上边距 + 约 46 胶囊高 + 间隙） */
+  .search-page .search-head {
+    padding-top: 80px;
+  }
+
+  /* 最近搜索下拉：挂在胶囊下方；底比胶囊实一点，压在图片上也读得清 */
+  .search-history--dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    margin-bottom: 0;
+    padding: 10px 12px 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(15, 17, 21, 0.88);
+    backdrop-filter: blur(20px) saturate(160%);
+    box-shadow:
+      0 16px 40px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* 下拉里的历史词不换行空间有限，收窄一点 */
+  .search-history--dropdown .search-history-tag {
+    max-width: min(220px, calc(100vw - var(--sidebar-w) - 120px));
   }
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
-  .search-bar--bottom {
-    bottom: calc(44px + env(safe-area-inset-bottom, 0px));
-    left: max(12px, env(safe-area-inset-left, 0px));
-    right: max(12px, env(safe-area-inset-right, 0px));
-    width: auto;
-    max-width: none;
-    padding: 5px 10px;
-  }
+/* 结果页「‹」返回：只在桌面结果页渲染（回唤起搜索前所在的页面） */
+.search-back {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
 
+.search-back:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.search-back-icon {
+  display: block;
+}
+
+/* 仅手机宽度（≥900px 走侧边栏布局，见 index.css 的桌面块） */
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 899px) {
   .search-bar--top {
     top: calc(env(safe-area-inset-top, 0px) + 8px);
     width: calc(100vw - 120px);

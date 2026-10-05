@@ -30,7 +30,10 @@ scripts/tmp-*
 .codex/
 
 # Editor directories and files
-.claude/
+# .claude/ 下的 skills 是本项目的实际资产（启动/驱动脚本），要入库；
+# settings.local.json 含本机权限授予，不入库。
+.claude/*
+!.claude/skills/
 .vscode/*
 !.vscode/extensions.json
 .idea

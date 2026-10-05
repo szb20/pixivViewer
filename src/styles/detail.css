@@ -532,6 +532,43 @@
   object-fit: initial;
 }
 
+/* 小图不放大：加载完成后主图收到自身像素宽（大图仍不超过列宽，行为不变）。
+   不够列宽的原图被 width:100% 拉满会糊，而 align-items:center / margin:0 auto
+   这些居中意图本来就在（见 .detail-media-stack），只是被 width:100% 架空了。
+   未加载时保持 width:100% —— 那时 img 没有内在宽度，fit-content 会让占位框塌成 0。 */
+.image-detail-main--flow.is-loaded {
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* 卡片收紧到贴合图片（多页时取最宽的一页），再由 .detail-media-stack 居中。
+   必须一起收：高清原图层是 inset:0 覆盖在卡片上的，卡片宽了它就会把原图放大裁切。 */
+.image-detail-hero:has(> .image-detail-main--flow.is-loaded) {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+/* 桌面端详情流的高清原图：绝对铺满预览图那块（两者同比例，cover 即精确覆盖），
+   原图到货后淡入。pointer-events: none —— 点击/长按/滑动仍落到下面的主图上 */
+.image-detail-hd {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  z-index: 2;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.image-detail-hd.is-loaded {
+  opacity: 1;
+}
+
 /* 详情页预览图加载占位（居中转圈） */
 .image-detail-placeholder {
   position: absolute;
@@ -550,6 +587,11 @@
   border-top-color: rgba(255, 255, 255, 0.7);
   border-radius: 50%;
   animation: ptr-spin 0.8s linear infinite;
+}
+
+/* 详情操作条 — 桌面端专用（手机端仍是图片上的悬浮爱心 + 长按下载） */
+.detail-actions {
+  display: none;
 }
 
 /* 详情页右下角悬浮 like 按钮 */
@@ -591,7 +633,8 @@
   pointer-events: none;
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
+/* 仅手机宽度（≥900px 走侧边栏布局，见 index.css 的桌面块） */
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 899px) {
   .detail-overlay {
     background: rgba(15, 17, 21, 0.32);
   }
@@ -697,15 +740,48 @@
 
 /* ── 桌面端：三栏布局（图片 / 作者信息 / 相关推荐） ── */
 @media (min-width: 900px) {
+  /* 覆盖层让出左侧边栏 —— 侧边栏在详情/作者页之上常驻可点（z-index 见 index.css .side-nav） */
+  .detail-overlay,
+  .author-works-overlay {
+    left: var(--sidebar-w);
+  }
+
+  /* 左上角"返回主页"按钮：浮在图片左上角内部（媒体区留白 16/24 + 内缩 12），
+     平时不显示 —— 桌面端侧边栏常驻，不靠它导航，没必要一直挡着画面 */
+  .detail-back-home {
+    top: 28px;
+    left: calc(var(--sidebar-w) + 36px);
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+
+  /* 鼠标移到图片上才浮出；键盘 Tab 到它时同样显示（:focus-visible） */
+  .detail-overlay:has(.detail-media-stack:hover) .detail-back-home,
+  .detail-back-home:focus-visible {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
   .char-state-bar {
     max-width: none;
-    width: 100vw;
+    /* 原 100vw：覆盖层已缩到侧边栏右侧，这里必须用百分比跟随父层 */
+    width: 100%;
     background: rgba(15, 17, 21, 0.14);
   }
 
+  /* 两栏：图片 + 右侧信息栏（作者信息在上、相关推荐在下）。
+     重点是「图片吃掉剩余宽度、信息栏固定」，而不是三栏等分 ——
+     等分时窗口再宽，图片也只有 1/3 宽（1200px 窗口实测图片栏仅 350px）。 */
   .char-state-content {
-    flex-direction: row;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(320px, 1fr) clamp(280px, 30vw, 340px);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'media author'
+      'media related';
     overflow: hidden;
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
@@ -717,9 +793,9 @@
 
   /* ── 左栏：图片 ── */
   .detail-media-stack {
-    flex: 1 1 0;
+    grid-area: media;
     min-width: 0;
-    height: 100%;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
@@ -742,7 +818,10 @@
 
   .image-detail-hero {
     width: 100%;
-    max-height: calc(100dvh - 120px);
+    /* 不再限高：宽栏 + 限高会让长图被 overflow:hidden 裁掉下半截。
+       详情流用的是 --flow 变体（height:auto），高度本来就由图片自身撑开，
+       放开后由 .detail-media-stack 整体滚动。 */
+    max-height: none;
     margin: 0 auto;
     border-radius: 12px;
     overflow: hidden;
@@ -751,20 +830,20 @@
       0 16px 48px rgba(0, 0, 0, 0.28);
   }
 
-  /* ── 中栏：作者信息 ── */
+  /* ── 右栏上：作者信息 ── */
   .detail-author-panel {
-    flex: 1 1 0;
+    grid-area: author;
     min-width: 0;
-    height: 100%;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
     border-left: 0.5px solid rgba(255, 255, 255, 0.06);
-    border-right: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 17, 21, 0.18);
     backdrop-filter: blur(8px) saturate(120%);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: 8px;
   }
 
   .image-detail-meta {
@@ -799,17 +878,17 @@
     border-radius: 14px;
   }
 
-  /* ── 右栏：相关推荐 ── */
+  /* ── 右栏下：相关推荐 ── */
   .detail-related-panel {
-    flex: 1 1 0;
+    grid-area: related;
     min-width: 0;
-    height: 100%;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
+    border-left: 0.5px solid rgba(255, 255, 255, 0.06);
     background: rgba(15, 17, 21, 0.22);
     backdrop-filter: blur(10px) saturate(130%);
-    padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
 
@@ -821,10 +900,86 @@
     letter-spacing: 0.3px;
   }
 
-  /* 分屏后悬浮爱心移到图片区一侧，避免压住右侧面板 */
+  /* 桌面改用信息栏里的操作条，悬浮爱心退场 */
   .detail-floating-like {
-    left: max(16px, env(safe-area-inset-left, 0px));
-    right: auto;
+    display: none;
+  }
+
+  /* 操作条：一排等大的图标方块钮。没有文字标签，语义靠 title / aria-label */
+  .detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 2px 10px 14px;
+  }
+
+  .detail-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+  }
+
+  /* 主操作（喜欢 / 下载）：底更实、图标更亮，和右边两个次要操作拉开层次 */
+  .detail-action--fill {
+    border-color: rgba(255, 255, 255, 0.13);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.05));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    color: var(--text-primary);
+  }
+
+  .detail-action svg {
+    flex: none;
+  }
+
+  /* 心形图标不自带 width/height（灯箱那边由 .glass-icon-btn .heart-icon 给 24px），
+     操作条里必须显式定尺寸：否则它按 SVG 默认的 300×150 参与布局、高度跟着宽度走，
+     会把按钮撑成方块（旧版则被挤成 0 宽，等于没显示） */
+  .detail-action .heart-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .detail-action:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .detail-action:focus-visible {
+    outline: 2px solid rgba(var(--color-accent-rgb), 0.65);
+    outline-offset: 2px;
+  }
+
+  /* 下载转圈：文字标签没了，忙碌状态改用 spinner 表达 */
+  .detail-action-spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: ptr-spin 0.8s linear infinite;
+  }
+
+  /* 已喜欢：整颗按钮跟着红心一起变调，别只剩图标是红的 */
+  .detail-action[aria-pressed='true'] {
+    border-color: rgba(255, 71, 87, 0.42);
+    background: linear-gradient(180deg, rgba(255, 71, 87, 0.2), rgba(255, 71, 87, 0.09));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      0 0 14px rgba(255, 71, 87, 0.16);
+    color: #ffd9dd;
+  }
+
+  .detail-action:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   /* 桌面端：详情页翻页角标放在图片右下角 */
@@ -837,8 +992,76 @@
   }
 }
 
+/* ── 桌面端：窗口足够宽才把相关推荐拆成独立一栏，否则宁可把宽度留给图片 ── */
+@media (min-width: 1600px) {
+  .char-state-content {
+    grid-template-columns: minmax(320px, 1fr) clamp(300px, 22vw, 380px) clamp(280px, 20vw, 360px);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'media author related';
+  }
+
+  /* 变成中栏后：去掉与下方分隔的底边，改回与右栏分隔的右边 */
+  .detail-author-panel {
+    border-bottom: none;
+    border-right: 0.5px solid rgba(255, 255, 255, 0.06);
+  }
+}
+
+/* ── 桌面端 · 宽图（宽高比 > 1）：改成「图在上、信息在下」的上下布局 ──
+   左右分栏时宽图被压在左列（1200px 窗口只有 628px 宽），铺满内容区能大一圈。
+   必须放在 ≥1600 三栏块之后：同特异度下靠源码顺序取胜，否则宽屏会被改回左右栏。 */
+@media (min-width: 900px) {
+  .char-state-content--wide {
+    display: flex;
+    flex-direction: column;
+    /* 三块依次堆叠时各自滚动会很别扭，整页一起滚 */
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .char-state-content--wide .detail-media-stack,
+  .char-state-content--wide .detail-author-panel,
+  .char-state-content--wide .detail-related-panel {
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
+
+  /* 信息栏从右侧挪到图片下方：分隔线跟着由竖改横；
+     正文限宽居中，免得在 1400px 宽的内容区里拉成一条长线 */
+  .char-state-content--wide .detail-author-panel {
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+    padding-inline: max(10px, calc((100% - 900px) / 2));
+  }
+
+  .char-state-content--wide .detail-related-panel {
+    border-left: none;
+    border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+  }
+}
+
 /* ── 桌面端：详情页悬停反馈 ── */
 @media (hover: hover) and (pointer: fine) {
+  .detail-action:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: var(--text-primary);
+  }
+
+  .detail-action--fill:not(:disabled):hover {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.085));
+    border-color: rgba(255, 255, 255, 0.24);
+  }
+
+  .detail-action[aria-pressed='true']:not(:disabled):hover {
+    border-color: rgba(255, 71, 87, 0.58);
+    background: linear-gradient(180deg, rgba(255, 71, 87, 0.28), rgba(255, 71, 87, 0.15));
+  }
+
   .image-detail-author:hover {
     color: var(--text-primary);
   }
@@ -868,7 +1091,9 @@
   .author-works-overlay,
   .detail-slide-from-right,
   .detail-slide-from-left,
+  .detail-back-home,
   .image-detail-main,
+  .image-detail-hd,
   .grid-item,
   .grid-item .grid-thumb {
     animation: none !important;
@@ -880,5 +1105,15 @@
   .grid-item .grid-thumb {
     opacity: 1;
     filter: none;
+  }
+}
+
+/* 只有触摸没有鼠标的设备（触屏笔电/一体机）：详情返回钮常显，
+   否则 :hover 永远不会触发，按钮就等于没了 */
+@media (min-width: 900px) and (hover: none) {
+  .detail-back-home {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
   }
 }

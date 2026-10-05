@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
 import SearchIcon from '../components/icons/SearchIcon.jsx';
+import BackIcon from '../components/icons/BackIcon.jsx';
 import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
 import { getMainScrollEl } from '../utils/scroll.js';
 import { useImageSourceId, useBooruSafeOnly } from '../hooks/useImageSource.js';
+import { useIsDesktop } from '../hooks/useIsDesktop.js';
+import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
+import { useAppStore } from '../store/useAppStore.js';
 import { booruApiFor } from '../sources/api.js';
 import { scopedTabKey } from '../pixiv-assistant/index.js';
 import '../styles/search.css';
@@ -36,6 +40,38 @@ function normalizeHistory(value) {
 // 迁移旧版独立历史 key → 统一 key
 migrateFromLegacyKey('pixiv_search_history', HISTORY_KEY);
 
+/**
+ * 最近搜索面板 —— 手机渲染在页内 .search-head，桌面渲染成悬浮搜索框下方的下拉。
+ * variant='dropdown' 时多一个定位 / 面板样式类。
+ */
+function HistoryPanel({ history, onPick, onRemove, onClear, variant = '', ...rest }) {
+  return (
+    <div className={`search-history${variant ? ` search-history--${variant}` : ''}`} {...rest}>
+      <div className="search-history-head">
+        <span className="search-history-label">最近搜索</span>
+        <button type="button" className="search-history-clear" onClick={onClear}>清空</button>
+      </div>
+      <div className="search-history-tags">
+        {history.map(h => (
+          <span className="search-history-chip" key={h}>
+            <button
+              type="button"
+              className="search-history-tag"
+              onClick={() => onPick(h)}
+            >{h}</button>
+            <button
+              type="button"
+              className="search-history-delete"
+              aria-label={`删除 ${h}`}
+              onClick={(e) => { e.stopPropagation(); onRemove(h); }}
+            >×</button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function SearchPage({ active = true, onOpen, registerRefresh, refreshToken = 0, searchSeed = null }) {
   const likedSet = useLikedSet();
   const sourceId = useImageSourceId();
@@ -53,6 +89,23 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   const [hideBar, setHideBar] = useState(false); // 滚动时弹入/弹出搜索栏（同筛选栏）
   const queryRef = useRef('');
   const pageRef = useRef(1);
+
+  const isDesktop = useIsDesktop();
+  const composerOpen = useAppStore(s => s.searchComposerOpen);
+  const composerSeq = useAppStore(s => s.searchComposerSeq);
+  const searchReturnTab = useAppStore(s => s.searchReturnTab);
+  const setActiveTab = useAppStore(s => s.setActiveTab);
+  const closeSearchComposer = useAppStore(s => s.closeSearchComposer);
+  const inputRef = useRef(null);
+  // Esc（只作用最上层覆盖层）与关闭后的焦点归还由它负责；
+  // 同一个 ref 顺带给「点空白处关闭」做包含判定
+  const barRef = useOverlayFocus(isDesktop && composerOpen, closeSearchComposer);
+  // 桌面端搜索面板启动即挂载（保持隐藏），首帧 .app 还没进 DOM——
+  // portal 目标必须等挂载后再解析，否则 createPortal(node, null) 直接抛错
+  const [portalTarget, setPortalTarget] = useState(null);
+  useLayoutEffect(() => {
+    setPortalTarget(document.querySelector('.app'));
+  }, []);
 
   const feed = useTabFeed({
     cacheKey: scopedTabKey(sourceId, CACHE_KEY),
@@ -149,8 +202,26 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     });
   }, []);
 
-  const submit = (e) => { e.preventDefault(); runSearch(query); };
+  // 回车 / 点历史词：手机只重跑搜索（与今天一致）；
+  // 桌面端若还停在别的页面，搜完顺手切到结果页（setActiveTab 会顺带收起唤起态）
+  const performSearch = useCallback((raw) => {
+    const q = String(raw || '').trim();
+    if (!q) return;
+    runSearch(q);
+    if (!isDesktop) return;
+    inputRef.current?.blur();
+    if (!active) setActiveTab('search');
+  }, [runSearch, isDesktop, active, setActiveTab]);
+
+  const submit = (e) => { e.preventDefault(); performSearch(query); };
+
+  const barVisible = isDesktop ? (active || composerOpen) : active;
   const showHistory = history.length > 0 && (!searched || searchFocused);
+  // 桌面端历史只出现在悬浮框下方的下拉里，避免和结果页页内的那组重复
+  const showHistoryDropdown = isDesktop && barVisible && history.length > 0
+    && (composerOpen || searchFocused);
+  // 结果页「‹」返回：只在有明确来路（唤起搜索前所在的 tab）时出现
+  const showBack = isDesktop && active && !!searchReturnTab && searchReturnTab !== 'search';
 
   // 详情页点 Tag → 关闭详情并切到搜索 tab 后直接搜索该 tag
   useEffect(() => {
@@ -188,33 +259,48 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
     if (active) setHideBar(false);
   }, [active]);
 
+  // ── 桌面端悬浮搜索框（唤起态）──
+  // 唤起 → 聚焦输入框；已开着再点一次侧边栏时 seq 会 +1，同样重新聚焦
+  const lastComposerSeqRef = useRef(composerSeq);
+  useEffect(() => {
+    if (composerSeq === lastComposerSeqRef.current) return;
+    lastComposerSeqRef.current = composerSeq;
+    if (!isDesktop || !composerOpen) return;
+    setHideBar(false);
+    const el = inputRef.current;
+    el?.focus({ preventScroll: true });
+    el?.select(); // 上次的词成选中态，直接打字即覆盖
+  }, [composerSeq, isDesktop, composerOpen]);
+
+  // 收起唤起态时主动失焦，免得 searchFocused 残留到下一次打开
+  useEffect(() => {
+    if (!composerOpen && isDesktop) inputRef.current?.blur();
+  }, [composerOpen, isDesktop]);
+
+  // 点空白处关闭唤起态。非模态：这次点击照常落到页面上（可能顺势打开作品）
+  useEffect(() => {
+    if (!isDesktop || !composerOpen) return undefined;
+    const onPointerDown = (e) => {
+      if (barRef.current?.contains(e.target)) return;
+      // 侧边栏「搜索」项自己负责开/关，跳过，免得太快「先关再开」闪一下
+      if (e.target?.closest?.('[data-search-toggle]')) return;
+      closeSearchComposer();
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [isDesktop, composerOpen, closeSearchComposer, barRef]);
+
   return (
     <div className="page search-page">
       <div className="search-head">
-        {showHistory && (
-          <div className="search-history">
-            <div className="search-history-head">
-              <span className="search-history-label">最近搜索</span>
-              <button type="button" className="search-history-clear" onClick={clearHistory}>清空</button>
-            </div>
-            <div className="search-history-tags">
-              {history.map(h => (
-                <span className="search-history-chip" key={h}>
-                  <button
-                    type="button"
-                    className="search-history-tag"
-                    onClick={() => runSearch(h)}
-                  >{h}</button>
-                  <button
-                    type="button"
-                    className="search-history-delete"
-                    aria-label={`删除 ${h}`}
-                    onClick={(e) => { e.stopPropagation(); removeHistory(h); }}
-                  >×</button>
-                </span>
-              ))}
-            </div>
-          </div>
+        {/* 桌面端这组历史移进了悬浮框下方的下拉（见 portal 里的 HistoryPanel） */}
+        {!isDesktop && showHistory && (
+          <HistoryPanel
+            history={history}
+            onPick={performSearch}
+            onRemove={removeHistory}
+            onClear={clearHistory}
+          />
         )}
 
         {feed.error && (
@@ -230,13 +316,25 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
 
-      {createPortal(
+      {portalTarget && createPortal(
         <form
+          ref={barRef}
           className={`search-bar search-bar--top${hideBar ? ' search-bar--hidden' : ''}`}
-          style={{ display: active ? 'flex' : 'none' }}
+          style={{ display: barVisible ? 'flex' : 'none' }}
           onSubmit={submit}
         >
+          {showBack && (
+            <button
+              type="button"
+              className="search-back"
+              aria-label="返回"
+              onClick={() => setActiveTab(searchReturnTab)}
+            >
+              <BackIcon className="search-back-icon" size={18} />
+            </button>
+          )}
           <input
+            ref={inputRef}
             className="search-input"
             type="text"
             value={query}
@@ -249,8 +347,19 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
           <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
             {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
           </button>
+          {/* 最近搜索下拉：按下时不夺焦点，否则 120ms 的失焦延迟会先把面板收掉，慢点击点不中 */}
+          {showHistoryDropdown && (
+            <HistoryPanel
+              variant="dropdown"
+              onMouseDown={e => e.preventDefault()}
+              history={history}
+              onPick={performSearch}
+              onRemove={removeHistory}
+              onClear={clearHistory}
+            />
+          )}
         </form>,
-        document.querySelector('.app')
+        portalTarget
       )}
     </div>
   );

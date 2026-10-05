@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useEffect, useRef, useState } from 'react';
 import GridItem from './GridItem.jsx';
-import { pixivPageUrl } from '../pixiv-assistant/core/utils.js';
+import { masonryThumbUrl } from '../utils/imageUrl.js';
 import { buildLikedIllustIdSet } from '../utils/worksState.js';
 import { hiddenWorks, useHiddenWorks } from '../utils/hiddenWorks.js';
 import { useGridLikeToggle } from '../hooks/useGridLikeToggle.js';
@@ -12,7 +12,6 @@ const MASONRY_RATIOS = [1, 4 / 5, 3 / 4, 1, 4 / 5, 3 / 4, 2 / 3, 1];
 // 高宽比 h/w >= 1：卡片只允许竖图/方图（w/h <= 1），横图一律钳成方图
 const RATIO_MIN = 0.5; // 最极端竖图：高 = 2×宽
 const RATIO_MAX = 1;   // 上限 1：不允许横图
-const MIN_RATIO_FOR_HEIGHT = 0.3; // 列高估算保底，防除零
 
 function clampRatio(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -31,24 +30,6 @@ function getCardRatio(img) {
   const r = w > 0 && h > 0 ? w / h : fallbackRatio(img?.illustId);
   // 高宽比 h/w >= 1：只允许竖图/方图（w/h <= 1），横图一律钳成方图
   return clampRatio(r, RATIO_MIN, RATIO_MAX);
-}
-
-// 方形缩略图（c/250x250_80_a2/.../square1200.jpg）→ small 档（c/540x540_70/.../master1200.jpg）。
-// 与详情页 small 预览图同档同路径：540px 长边等比、不裁剪，内容和比例一致。
-// page：目标页码，默认 0（瀑布流只展示每个作品第 0 页）；详情页多图需传真实页码，
-// 否则非首页会拿到第 0 页的方形裁剪图，比例错误。
-// source：非 Pixiv 来源的 URL 是图站直链（无 pximg 日期路径），交给 pixivPageUrl
-// 只会被正则抠出一个乱码 id，返回一张毫不相干的 pixiv 图 → 原样返回。
-export function masonryThumbUrl(url, page = 0, source = 'pixiv') {
-  if (!url || typeof url !== 'string') return '';
-  if (source && source !== 'pixiv') return url;
-  // 先转成等比底座（已处理 dev 代理），再补上 small 档的 c/540x540_70 前缀
-  const base = pixivPageUrl(url, page, 1200);
-  if (!base) return '';
-  // pixivPageUrl 一律产出 img-master，故这里只需处理 img-master 一种路径
-  return base
-    .replace('https://i.pixiv.re/img-master', 'https://i.pixiv.re/c/540x540_70/img-master')
-    .replace('/pixiv-img/img-master', '/pixiv-img/c/540x540_70/img-master');
 }
 
 const MIN_COL_WIDTH = 250;

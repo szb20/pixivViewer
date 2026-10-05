@@ -18,6 +18,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createLogger } from '../utils/logger.js';
 import { fetchUgoiraFrames, getCachedFrames, clearFrameCache } from '../api/gif.js';
+import { masonryThumbUrl } from '../utils/imageUrl.js';
 
 const log = createLogger('FrameAnimPlayer');
 
@@ -65,6 +66,8 @@ export default function FrameAnimPlayer({
   maxWidth: maxWidthProp,
   maxHeight: maxHeightProp,
   thumbnailUrl = '',
+  // 来源 id：决定 thumbnailUrl 怎么转成等比小图（非 pixiv 原样返回）
+  source = 'pixiv',
   src,
   width: widthProp = 0,
   height: heightProp = 0,
@@ -105,6 +108,11 @@ export default function FrameAnimPlayer({
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  // 兜底图不合适（太小会被放大成糊图 / 比例对不上）时置真，直接不显示
+  const [thumbRejected, setThumbRejected] = useState(false);
+  // 转成等比小图再用：Pixiv 的 thumbnailUrl 是 250×250 方形裁剪图，
+  // 非 Pixiv 来源 masonryThumbUrl 原样返回（各站缩略图另说，靠下面的比例校验兜底）。
+  const thumbSrc = thumbnailUrl ? (masonryThumbUrl(thumbnailUrl, 0, source) || thumbnailUrl) : '';
   const [progress, setProgress] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState(null);
@@ -443,10 +451,37 @@ export default function FrameAnimPlayer({
       } : undefined}
     >
       <div className={`${cssPrefix}-canvas-wrap`} style={{ width: displayWidth, height: displayHeight }}>
-        {/* 缩略图兜底：帧加载完成前始终显示卡片同款缩略图 */}
-        {thumbnailUrl && !loaded && (
-          <img src={thumbnailUrl} alt="" className={`${cssPrefix}-thumb-fallback`}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        {/* 帧加载前的兜底图。两个前提缺一不可，否则宁可空着（用户明确要的行为）：
+            ① 同比例 —— Pixiv 的 thumbnailUrl 是 250×250 方形裁剪图，直接铺上去会既裁又糊；
+            ② 分辨率够 —— 桌面端这块区域能到 700px+，250px 的图拉上去就是一团糊。
+            所以先把缩略图转成等比小图（Pixiv 走上面那个 540 档，网格已缓存、不额外发请求），
+            加载后再按实际放大倍数和真实比例复核，不达标就整张不画。 */}
+        {thumbSrc && !loaded && !thumbRejected && (
+          <img
+            src={thumbSrc}
+            alt=""
+            className={`${cssPrefix}-thumb-fallback`}
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            onLoad={(e) => {
+              const el = e.currentTarget;
+              const box = el.getBoundingClientRect();
+              if (!el.naturalWidth || !el.naturalHeight || !box.width || !box.height) return;
+              // object-fit:contain 下图片实际被缩放到的倍数
+              const scale = Math.min(box.width / el.naturalWidth, box.height / el.naturalHeight);
+              const ratio = el.naturalWidth / el.naturalHeight;
+              const known = widthProp > 0 && heightProp > 0 ? widthProp / heightProp : 0;
+              const ratioBad = known > 0 && Math.abs(ratio - known) / known > 0.02;
+              // 阈值 2.5：540 档等比图在桌面宽栏（~1200px）下约放大 1.6 倍，属于「偏软但能用」；
+              // 而修复前那张 250×250 方图要放大近 5 倍，才是用户说的「非常模糊」。
+              const tooBlurry = scale > 2.5;
+              if (ratioBad || tooBlurry) {
+                log.warn('动图兜底图不合适，不显示:', {
+                  ratio: +ratio.toFixed(3), known: +(known || 0).toFixed(3), scale: +scale.toFixed(2),
+                });
+                setThumbRejected(true);
+              }
+            }}
+          />
         )}
         <canvas
           ref={canvasRef}

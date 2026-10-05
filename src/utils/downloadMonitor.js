@@ -110,14 +110,34 @@ export const downloadMonitor = {
       recordFailure(retryMeta = {}) {
         recordFailureFor(key, retryMeta);
       },
-      setProgress(pct) {
+      /**
+       * @param {number|null} pct   0-100；null 表示只有字节数、算不出百分比
+       * @param {{loaded?: number, total?: number}} [bytes] 真实字节数（可选）。
+       *        只有原生/桌面流式通道会给；CapacitorHttp 降级与 web 的 fetch 拿不到，
+       *        那时 UI 只显示状态文案，不显示大小和速度 —— 宁可不说，不给假数。
+       */
+      setProgress(pct, bytes) {
         const j = jobs.get(key);
         if (!j || j.status === 'done' || j.status === 'error') return;
         const value = Number(pct);
-        if (!Number.isFinite(value)) return;
-        // 进度只增不减：模拟进度/真实进度/写相册阶段混用时不回退
-        if (j.progress != null && value < j.progress) return;
-        j.progress = value;
+        if (Number.isFinite(value)) {
+          // 进度只增不减：模拟进度/真实进度/写相册阶段混用时不回退
+          if (j.progress == null || value >= j.progress) j.progress = value;
+        }
+        if (bytes && typeof bytes.loaded === 'number') {
+          const now = Date.now();
+          const dt = now - (j._lastAt || 0);
+          const dBytes = bytes.loaded - (j._lastLoaded || 0);
+          if (dt > 0 && dBytes >= 0) {
+            const inst = (dBytes * 1000) / dt;
+            // 指数平滑：瞬时速度抖动太大，直接显示会一直跳
+            j.speed = j.speed == null ? inst : j.speed * 0.65 + inst * 0.35;
+          }
+          j._lastAt = now;
+          j._lastLoaded = bytes.loaded;
+          j.loaded = bytes.loaded;
+          if (bytes.total > 0) j.total = bytes.total;
+        }
         emit();
       },
       setStatus(status, message = '') {
@@ -132,7 +152,8 @@ export const downloadMonitor = {
         if (!j) return;
         j.status = ok ? 'done' : 'error';
         j.error = ok ? '' : error;
-        if (ok) j.progress = 100;
+        // 完成/失败后速度没有意义，留着会让列表显示一个不断变小的“速度”
+        if (ok) { j.progress = 100; j.speed = null; }
         emit();
         if (!ok) {
           // 失败：任务常驻内存不自动移除；跨会话保留需先由 recordFailure 登记重试信息，

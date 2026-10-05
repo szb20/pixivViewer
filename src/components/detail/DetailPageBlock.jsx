@@ -1,19 +1,25 @@
 import { useCallback, useRef, useState } from 'react';
 import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
 import { createLogger } from '../../utils/logger.js';
+import { markImageLoaded } from '../../utils/loadedImages.js';
 
 const log = createLogger('DetailPageBlock');
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
  * 进入视口时懒加载原图（本地相册优先 → 网络原图），
- * 原图就绪前用缩略图模糊铺底；点击打开灯箱；长按下载该页原图。
+ * 原图就绪前用缩略图/等比预览铺底；点击打开灯箱；长按下载该页原图。
+ *
+ * hdUrl：桌面端传高清原图（本地原图或详情接口的原图直链）。
+ * 预览先渲染保证秒开，原图到货后淡入覆盖；失败就保持预览，不打断阅读。
+ * 手机端不传（流量/内存），行为与改动前一致。
  */
 export default function DetailPageBlock({
   page,
   totalPages,
   image,
   previewUrl,
+  hdUrl = '',
   placeholderUrl,
   defaultRatio,
   cachedRatio,
@@ -25,6 +31,7 @@ export default function DetailPageBlock({
   const [failedSrc, setFailedSrc] = useState('');
   const [ratio, setRatio] = useState(null); // 预览图加载后按真实比例覆盖占位
   const [loadedSrc, setLoadedSrc] = useState(''); // 详情预览图是否已加载，按 URL 区分避免换源沿用旧状态
+  const [hdLoaded, setHdLoaded] = useState(''); // 高清原图已加载的 URL（同上，按 URL 区分）
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
   const pressStartRef = useRef(null); // { x, y } long-press origin; tolerate tiny finger jitter
@@ -144,11 +151,12 @@ export default function DetailPageBlock({
             loading="lazy"
             draggable={false}
             onLoad={(e) => {
+              markImageLoaded(src);
               setLoadedSrc(src);
               const nw = e.currentTarget.naturalWidth;
               const nh = e.currentTarget.naturalHeight;
-              const isSquareCrop = nw === nh && (nw === 540 || nw === 250);
-              // 仅等比预览图参与宽高比校准，跳过 Pixiv 方形裁剪缩略图（540×540, 250×250）
+              const isSquareCrop = nw === nh && (nw === 540 || nw === 250 || nw === 1200);
+              // 仅等比预览图参与宽高比校准，跳过 Pixiv 方形裁剪缩略图（540×540, 250×250, 1200×1200）
               if (nw && nh && !isSquareCrop) {
                 const nextRatio = `${nw} / ${nh}`;
                 setRatio(nextRatio);
@@ -160,6 +168,19 @@ export default function DetailPageBlock({
               setFailedSrc(src);
             }}
           />
+          {/* 高清原图：懒加载（滚到附近才请求），到货后淡入盖在预览上。
+              失败就静默保留预览——画面仍然可用，只是没升到原图 */}
+          {hdUrl && (
+            <img
+              className={`image-detail-hd${hdLoaded === hdUrl ? ' is-loaded' : ''}`}
+              src={hdUrl}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              onLoad={() => { markImageLoaded(hdUrl); setHdLoaded(hdUrl); }}
+              onError={() => log.debug('高清图加载失败，保留预览:', page, hdUrl.slice(0, 120))}
+            />
+          )}
         </>
       ) : (
         <div className="image-detail-error">加载失败</div>

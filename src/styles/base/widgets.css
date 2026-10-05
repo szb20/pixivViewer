@@ -1,0 +1,210 @@
+/* GIF/Ugoira 播放器通用样式 */
+.gif-canvas-wrap,
+.ugoira-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.gif-progress-bar,
+.ugoira-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  z-index: 3;
+}
+
+.gif-progress-fill,
+.ugoira-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  transition: none;
+}
+
+.gif-loading-overlay,
+.ugoira-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gif-play-overlay,
+.ugoira-play-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 代理连接失败弹窗（复用 .dialog-overlay + .dialog-panel） ── */
+
+.proxy-check-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  animation: proxy-icon-float 2.6s ease-in-out infinite;
+  filter: drop-shadow(0 8px 20px rgba(255, 255, 255, 0.14));
+}
+
+@keyframes proxy-icon-float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.proxy-check-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.proxy-check-url {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-tertiary);
+  word-break: break-all;
+}
+
+.proxy-check-hint {
+  margin: 0 0 22px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.proxy-check-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.proxy-check-actions .btn {
+  flex: 1;
+  padding: 11px 0;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.proxy-check-actions .btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.proxy-check-actions .btn-primary {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-primary);
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* ── 网格占位高光扫描（缩略图加载完成前）── */
+.grid-shimmer {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+    rgba(15, 17, 21, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+}
+
+/* 高光扫过：比整卡实时模糊更廉价的加载质感 */
+.grid-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg,
+      transparent 20%,
+      rgba(255, 255, 255, 0.06) 46%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0.06) 54%,
+      transparent 80%);
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.6s ease-in-out infinite;
+}
+
+@keyframes shimmer-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 子页签切换：新面板叠在上层淡入（旧面板留在文档流中，高度稳定） */
+.tab-pane--fade-in {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  animation: pane-in 0.2s ease;
+}
+
+/* 子页签切换：旧面板原位淡出 */
+.tab-pane--fade-out {
+  animation: pane-out 0.2s ease forwards;
+}
+
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pane-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+/* ── 全屏遮罩淡入（详情/作者页/设置）── */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 横屏矮窗口的紧凑布局只针对手机宽度：≥900px 已切到侧边栏行布局，
+   若不加 max-width 限制，宽而矮的窗口会同时命中两条规则互相打架 */

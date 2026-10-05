@@ -9,7 +9,7 @@ import { createLogger } from '../../utils/logger.js';
 const log = createLogger('tabCache');
 
 const DB_NAME = 'teyvat_pixiv_tabs';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE = 'tabs';
 
 /** 各 Tab 的 TTL（毫秒），统一 24 小时 */
@@ -36,8 +36,10 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'key' });
-      } else if (e.oldVersion < 2) {
+      } else if (e.oldVersion < 3) {
         // v1 → v2：清空旧缓存，强制重新拉取（旧条目缺少 authorAvatar 等新字段）
+        // v2 → v3：同样清空 —— Wallhaven 条目里缓存的 mediumUrl 指向固定比例的裁剪缩略图
+        //   （实测恒为 300×200），详情页会按错误比例显示；重拉一次即修正。
         e.target.transaction.objectStore(STORE).clear();
       }
     };

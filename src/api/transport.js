@@ -30,8 +30,11 @@ export function httpError(status, pathname = '') {
  * dev / 桌面壳下浏览器禁止设置 Cookie，按 cookieAs 转成自定义头交给代理还原透传
  * （Pixiv 用 x-pixiv-cookie；booru 站不需要 Cookie，cookieAs 传 null 即可直接丢弃）。
  * prod 走 CapacitorHttp，可直设 Cookie。
+ *
+ * userAgent 只在 prod 生效：dev / 桌面壳下请求经代理转发，UA 由代理侧设置
+ * （浏览器也禁止脚本改 User-Agent，见 FORBIDDEN）。
  */
-function makeBuildHeaders({ cookieAs = null, referer = null } = {}) {
+function makeBuildHeaders({ cookieAs = null, referer = null, userAgent = null } = {}) {
   return function buildHeaders(headers = {}) {
     const h = {};
     for (const [key, value] of Object.entries(headers || {})) {
@@ -50,7 +53,7 @@ function makeBuildHeaders({ cookieAs = null, referer = null } = {}) {
     }
     if (!IS_DEV && !isDesktopShell()) {
       if (referer) h['Referer'] = referer;
-      h['User-Agent'] = DESKTOP_UA;
+      h['User-Agent'] = userAgent || DESKTOP_UA;
     }
     return h;
   };
@@ -68,6 +71,7 @@ function makeBuildHeaders({ cookieAs = null, referer = null } = {}) {
  * @param {string} [opts.desktopPrefix] — 桌面壳内的代理前缀（默认同 apiPrefix）
  * @param {string} [opts.referer]       — prod 下发送的 Referer（默认 origin）
  * @param {string} [opts.cookieAs]      — dev/桌面下 Cookie 转成的自定义头名（默认 null＝丢弃）
+ * @param {string} [opts.userAgent]     — prod 直连时发送的 UA（默认 DESKTOP_UA）
  * @param {string} [opts.logName]       — 日志模块名
  * @returns {(pathname: string, opts?: object) => Promise<any>}
  */
@@ -77,11 +81,12 @@ export function createTransport({
   desktopPrefix = null,
   referer = null,
   cookieAs = null,
+  userAgent = null,
   logName = 'transport',
 }) {
   const log = createLogger(logName);
   const desktopPath = desktopPrefix || apiPrefix;
-  const buildHeaders = makeBuildHeaders({ cookieAs, referer: referer || origin });
+  const buildHeaders = makeBuildHeaders({ cookieAs, referer: referer || origin, userAgent });
 
   async function devFetch(pathname, { headers = {}, timeout, method = 'GET', body, raw = false } = {}) {
     const h = buildHeaders(headers);

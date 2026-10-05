@@ -37,9 +37,14 @@ npm run dev
 
 ## 环境变量
 
-**不需要 .env 文件**。Cookie 只在设置页填写，不通过构建期变量注入——
+**正式版不需要 .env 文件**。Cookie 只在设置页填写，不通过构建期变量注入——
 `VITE_*` 变量会被 Vite 静态内联进前端产物，随 APK / Electron 包分发（反编译即可读到 PHPSESSID）。
-历史版本曾用 `.env` 的 `VITE_PIXIV_COOKIE` 预置 Cookie，该方式已移除；若你机器上还留着旧的 `.env`，可直接删除。
+历史版本曾用 `.env` 的 `VITE_PIXIV_COOKIE` 预置 Cookie，该方式已移除。
+
+> ⚠️ **测试期例外（临时）**：为了免去每次重装都要手填 Cookie，测试包会内置一个 Cookie。
+> 本地创建 `.env` 写入 `VITE_PIXIV_COOKIE` 和 `VITE_DEV_COOKIE`（同一个 PHPSESSID）即可，
+> 详见 `.env.example`。**发版前必须删掉 `.env`，并删除
+> [src/pixiv-assistant/capacitor/config.js](src/pixiv-assistant/capacitor/config.js) 顶部的 `buildCookie` 注入**。
 
 代理地址环境变量：`PROXY_URL` / `VITE_PROXY_URL`（默认 `http://127.0.0.1:7890`）。
 

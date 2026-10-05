@@ -89,11 +89,17 @@ public class StreamingDownloadPlugin extends Plugin {
                                 lastNotify = now;
                                 lastPct = pct;
                                 int finalPct = pct;
+                                long finalLoaded = downloaded;
+                                long finalTotal = total;
                                 try {
                                     getActivity().runOnUiThread(() -> {
                                         JSObject prog = new JSObject();
                                         prog.put("id", id);
                                         prog.put("progress", finalPct);
+                                        // 真实字节数：下载管理用它显示「已下载 / 总大小」和速度。
+                                        // total 为 -1（无 Content-Length）时只给 loaded。
+                                        prog.put("loaded", finalLoaded);
+                                        prog.put("total", finalTotal);
                                         notifyListeners("onProgress", prog);
                                     });
                                 } catch (Exception ignored) {

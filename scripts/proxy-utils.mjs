@@ -15,6 +15,14 @@ import { Socket } from 'node:net';
 
 const DEFAULT_PROXY = 'http://127.0.0.1:7890';
 
+/**
+ * 默认向源站声明的 UA。
+ * ⚠️ 个别站点（Danbooru 系，及其 cdn）在 Cloudflare 后面，会拒掉
+ *    「浏览器 UA + 非浏览器 TLS 指纹」的组合 → 403 JS 挑战。
+ *    这类来源要在路由定义里显式给 userAgent（见 scripts/booru-proxy.mjs）。
+ */
+const DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
 /** 获取代理 URL — 优先读环境变量，其次用默认值 */
 export function getProxyUrl() {
   return process.env.VITE_PROXY_URL || process.env.PROXY_URL || DEFAULT_PROXY;
@@ -90,11 +98,13 @@ export function checkProxyAvailability() {
  * @param {string} targetHost — 如 'https://www.pixiv.net'
  * @param {Object} [opts]
  * @param {Object} [opts.extraHeaders] — 额外的请求头
+ * @param {string} [opts.userAgent] — 覆盖默认 UA
  * @returns {Function} Vite 中间件
  */
 export function createApiProxy(targetHost, opts = {}) {
   const holder = createAgentHolder();
   const extraHeaders = opts.extraHeaders || {};
+  const userAgent = opts.userAgent || DEFAULT_UA;
 
   return (req, res) => {
     // Vite 已剥离挂载前缀，req.url 是剩余路径
@@ -115,7 +125,7 @@ export function createApiProxy(targetHost, opts = {}) {
         path: parsed.pathname + parsed.search,
         method: req.method,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': userAgent,
           'Accept': 'application/json, */*',
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
           'Referer': targetHost,
@@ -206,6 +216,7 @@ export function createApiProxy(targetHost, opts = {}) {
  * @param {string} [opts.referer] — Referer 头（默认同 targetHost）
  * @param {number} [opts.timeout=30000] — 超时毫秒（图片可能较大）
  * @param {string} [opts.cacheControl] — 响应 Cache-Control 头（例如 'public, max-age=604800'），缺省透传上游
+ * @param {string} [opts.userAgent] — 覆盖默认 UA（图床在 Cloudflare 后面时需要，见 DEFAULT_UA）
  * @returns {Function} Vite 中间件
  */
 export function createImageProxy(targetHost, opts = {}) {
@@ -213,6 +224,7 @@ export function createImageProxy(targetHost, opts = {}) {
   const referer = opts.referer || targetHost;
   const timeout = opts.timeout || 30000;
   const cacheControl = opts.cacheControl || null;
+  const userAgent = opts.userAgent || DEFAULT_UA;
 
   return (req, res) => {
     let parsed;
@@ -231,7 +243,7 @@ export function createImageProxy(targetHost, opts = {}) {
         path: parsed.pathname + parsed.search,
         method: 'GET',
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': userAgent,
           'Referer': referer,
           'Accept': '*/*',
         },

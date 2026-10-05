@@ -12,6 +12,7 @@
 import { CapacitorHttp } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
 import { isNativeDownloadAvailable, nativeDownload } from '../../utils/nativeDownload.js';
+import { isDesktopDownloadAvailable, desktopDownload } from '../../utils/desktopDownload.js';
 
 const log = createLogger('NetworkStore');
 const IS_DEV = import.meta.env.DEV;
@@ -42,6 +43,16 @@ export class NetworkStore {
     if (!url) return null;
     const abs = this._absUrl(url);
     log.debug('downloadImage:', { raw: url, abs });
+    // 桌面壳：主进程 Node https 流式下载 —— 绕开渲染进程 CORS，且能拿到真实字节进度。
+    // 放在最前面是因为它比 CapacitorHttp 快且能报进度，且 dev 模式下也适用。
+    if (isDesktopDownloadAvailable()) {
+      try {
+        const data = await desktopDownload(abs, onProgress);
+        if (data) return data;
+      } catch (e) {
+        log.info('桌面流式下载失败，降级:', e?.message || e);
+      }
+    }
     // 生产环境：优先原生流式下载（真实字节进度、不受 CORS 限制），失败降级 CapacitorHttp
     if (!IS_DEV) {
       if (isNativeDownloadAvailable()) {
@@ -52,18 +63,10 @@ export class NetworkStore {
           log.info('原生下载失败，降级 CapacitorHttp:', e?.message || e);
         }
       }
-      // CapacitorHttp 没有进度事件，用正弦估算模拟下载中状态
-      let ramp = 0;
-      const rampTimer = setInterval(() => {
-        ramp = Math.min(90, ramp + 3);
-        onProgress?.(ramp);
-        if (ramp >= 90) clearInterval(rampTimer);
-      }, 400);
-      try {
-        return await this._downloadWithCapacitor(url);
-      } finally {
-        clearInterval(rampTimer);
-      }
+      // CapacitorHttp 拿不到字节数。这里原本用一条 0→90 的定时估算假装有进度，
+      // 结果下载管理显示一个与真实速度无关的百分比（甚至下完前就停在 90%）。
+      // 现在直接不报进度：UI 只显示「下载中…」。宁可没有，也不给假数。
+      return await this._downloadWithCapacitor(url);
     }
     try {
       const referer = refererFor(abs);

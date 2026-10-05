@@ -159,8 +159,14 @@ export const DEFAULT_SOURCE = 'pixiv';
  * 已知来源词表。
  * 必须是封闭词表：文件名解析靠它区分"来源前缀"与"标题里的下划线"，
  * 开放匹配会把第三方文件名误认成来源。
+ * ⚠️ 加来源时必须同步这里，否则 qualifyId 产出的 id 会被 sourceOfId 判回 pixiv，
+ *    下载文件名 / 缓存恢复 / 点赞 key 全部错位且不报错。
+ *    与 sources/registry.js 的一致性由 scripts/check-sources.mjs 断言守住。
+ * ⚠️ 来源 id 不得含下划线（sourceOfId 按第一个下划线切分）。
  */
-export const KNOWN_SOURCES = ['pixiv', 'yande', 'konachan'];
+export const KNOWN_SOURCES = [
+  'pixiv', 'yande', 'konachan', 'konachan-net', 'danbooru', 'safebooru', 'wallhaven',
+];
 
 /**
  * 站点原始 id → 全局唯一 illustId。

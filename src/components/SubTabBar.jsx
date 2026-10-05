@@ -9,6 +9,7 @@ export default function SubTabBar({ tabs, active, onChange, hidden }) {
           key={t.key}
           className={`sub-tab-btn${t.key === active ? ' active' : ''}`}
           onClick={() => onChange(t.key)}
+          aria-current={t.key === active ? 'page' : undefined}
         >
           {t.label}
         </button>

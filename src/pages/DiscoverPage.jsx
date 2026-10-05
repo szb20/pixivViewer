@@ -124,6 +124,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
               key={s.id}
               className={`chip${sourceId === s.id ? ' active' : ''}`}
               onClick={() => setImageSource(s.id)}
+              aria-pressed={sourceId === s.id}
             >{s.shortLabel || s.label}</button>
           ))}
         </div>

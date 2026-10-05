@@ -18,8 +18,9 @@ export default function HeartIcon({ filled = false, className = '', onClick }) {
       viewBox="0 0 24 24"
       fill="none"
       onClick={onClick}
-      role="img"
-      aria-label="heart"
+      /* 纯装饰：外层按钮/卡片自己提供可访问名，图标再报一次 "heart" 只是噪音 */
+      aria-hidden="true"
+      focusable="false"
       style={{ display: 'block', margin: 0 }}
     >
       <path

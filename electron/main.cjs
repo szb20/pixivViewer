@@ -9,6 +9,7 @@
  */
 const { app, BrowserWindow, dialog, ipcMain, session } = require('electron');
 const http = require('node:http');
+const https = require('node:https');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -141,6 +142,72 @@ async function startProxyServer() {
   console.log(`[desktop] 代理服务已启动: http://127.0.0.1:${proxyPort}（${routes.length} 条路由）`);
 }
 
+/**
+ * 桌面流式下载通道 —— 主进程用 Node HTTPS 拉图（走 Clash 代理），
+ * 边下边把 { id, progress, loaded, total } 推给渲染进程，最后回 base64。
+ * 与安卓 StreamingDownload 插件对等：给下载管理提供真实字节进度。
+ * 渲染进程侧见 src/utils/desktopDownload.js。
+ */
+function registerDownloadIpc() {
+  ipcMain.handle('download:image', async (event, { id, url, referer } = {}) => {
+    if (!id || !url) throw new Error('bad_request');
+    const holder = proxyUtils.createAgentHolder();
+    const sender = event.sender;
+
+    const once = (agent) => new Promise((resolve, reject) => {
+      const req = https.request(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'image/*,*/*',
+          ...(referer ? { Referer: referer } : {}),
+        },
+        agent,
+      }, (res) => {
+        if (res.statusCode >= 400) {
+          res.resume();
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        const total = Number(res.headers['content-length']) || 0;
+        let loaded = 0;
+        let lastAt = 0;
+        const chunks = [];
+        res.on('data', (chunk) => {
+          chunks.push(chunk);
+          loaded += chunk.length;
+          const now = Date.now();
+          if (now - lastAt < 80 && (!total || loaded < total)) return;
+          lastAt = now;
+          // 下载期间窗口可能已关闭，发之前确认
+          if (!sender.isDestroyed()) {
+            sender.send('download:progress', {
+              id,
+              loaded,
+              total,
+              // 上游没给 Content-Length（total=0）时算不出百分比，给 null 由 UI 兜底
+              progress: total ? Math.min(100, Math.round((loaded * 100) / total)) : null,
+            });
+          }
+        });
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    let buf;
+    try {
+      buf = await once(holder.get());
+    } catch {
+      // 连接级失败（Clash 间歇性断流）换全新 Agent 重试一次，与图片代理同策略
+      holder.reset();
+      buf = await once(holder.get());
+    }
+    return { id, size: buf.length, data: buf.toString('base64') };
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -158,11 +225,18 @@ function createWindow() {
   });
 
   // 加载诊断：白屏/加载失败/渲染进程报错都在主进程终端打出，便于排查
-  mainWindow.webContents.on('console-message', (eventOrLevel, maybeMessage) => {
-    // Electron 33 兼容：新式 event 对象 / 旧式 (level, message)
-    const level = typeof eventOrLevel === 'object' ? eventOrLevel.level : eventOrLevel;
-    const msg = typeof eventOrLevel === 'object' ? eventOrLevel.message : maybeMessage;
-    console.log(`[renderer:${level}]`, msg);
+  // 签名兼容：Electron ≤34 是 (event, level, message, line, sourceId)，≥35 改为单个 details 对象。
+  // 必须按实参个数区分：旧式的第一个参数也是 Event 对象，只判断 typeof === 'object' 会
+  // 永远走新式分支，把所有 renderer 日志读成 "[renderer:undefined] undefined"（等于没有日志）。
+  const CONSOLE_LEVELS = ['verbose', 'info', 'warning', 'error'];
+  mainWindow.webContents.on('console-message', (...args) => {
+    const d = (args.length === 1 && args[0] && typeof args[0] === 'object' && 'message' in args[0])
+      ? args[0]
+      : { level: args[1], message: args[2], lineNumber: args[3], sourceId: args[4] };
+    // 旧式 level 是数字（0-3），新式是字符串
+    const level = typeof d.level === 'number' ? (CONSOLE_LEVELS[d.level] ?? d.level) : d.level;
+    const where = d.sourceId ? ` (${d.sourceId}:${d.lineNumber})` : '';
+    console.log(`[renderer:${level}] ${d.message}${where}`);
   });
   mainWindow.webContents.on('did-finish-load', () => {
     console.log('[desktop] 页面加载完成');
@@ -194,28 +268,74 @@ app.whenReady().then(async () => {
     callback({ requestHeaders: headers });
   });
 
+  // Danbooru 的图床在 Cloudflare 后面，而 Electron 渲染进程的直连会被它挡掉：
+  // 换 UA（onBeforeSendHeaders）实测无效 —— 判定依据是 TLS/HTTP2 指纹，不是 UA。
+  // 所以这里把图床请求整个改道到壳内代理：代理走 Node 的 TLS 通道 + 非浏览器 UA，
+  // 实测 200（见 scripts/booru-proxy.mjs 的 userAgent 说明）。
+  // 只改道这一个域：yande / konachan 的图床没有 Cloudflare，直连一直正常，不必冒代理挂掉的风险。
+  const DANBOORU_IMG_HOST = 'cdn.donmai.us';
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ['*://*.donmai.us/*'] }, (details, callback) => {
+    let target = null;
+    try {
+      target = new URL(details.url);
+    } catch {
+      callback({});
+      return;
+    }
+    if (target.hostname !== DANBOORU_IMG_HOST || !proxyPort) {
+      callback({});
+      return;
+    }
+    callback({ redirectURL: `http://127.0.0.1:${proxyPort}/danbooru-img${target.pathname}${target.search}` });
+  });
+
   ipcMain.handle('proxy:get-port', () => proxyPort);
 
-  ipcMain.handle('dialog:save-file', async (_event, { data, fileName, mimeType, directory } = {}) => {
-    try {
-      if (!data) return false;
-      const baseName = String(fileName || 'pixiv_untitled.jpg').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
-      // 保存目录优先取用户设置，未设置时默认系统图片文件夹
-      const dir = typeof directory === 'string' && directory ? directory : app.getPath('pictures');
-      const defaultPath = path.join(dir, baseName);
-      const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
-        defaultPath,
-        filters: [{ name: mimeType || 'Image', extensions: [baseName.split('.').pop() || 'jpg'] }],
-      });
-      if (canceled || !filePath) return false;
-      const buf = Buffer.from(data, 'base64');
+/**
+ * 给同名文件找一个不冲突的路径：`图.jpg` → `图 (2).jpg` → `图 (3).jpg` …
+ * 直接覆盖会无声吞掉用户已有的文件；自动改名是下载器的常规做法。
+ */
+function uniquePath(dir, baseName) {
+  const ext = path.extname(baseName);
+  const stem = path.basename(baseName, ext);
+  let candidate = path.join(dir, baseName);
+  for (let i = 2; fs.existsSync(candidate) && i < 1000; i++) {
+    candidate = path.join(dir, `${stem} (${i})${ext}`);
+  }
+  return candidate;
+}
+
+/** 保存文件到磁盘。ask=false 且配置了目录时直接写入，不弹对话框 */
+ipcMain.handle('dialog:save-file', async (_event, { data, fileName, mimeType, directory, ask = true } = {}) => {
+  try {
+    if (!data) return false;
+    const baseName = String(fileName || 'pixiv_untitled.jpg').replace(/[\\/:*?"<>|]/g, '_').slice(0, 200);
+    const dir = typeof directory === 'string' && directory ? directory : '';
+    const buf = Buffer.from(data, 'base64');
+
+    // 用户已在设置里指定目录且关掉了「每次询问」→ 直接落盘
+    if (dir && ask === false) {
+      await fs.promises.mkdir(dir, { recursive: true });
+      const filePath = uniquePath(dir, baseName);
       await fs.promises.writeFile(filePath, buf);
+      console.log('[desktop] 已保存:', filePath);
       return true;
-    } catch (e) {
-      console.warn('[desktop] 保存文件失败:', e?.message || e);
-      return false;
     }
-  });
+
+    // 其余情况弹系统保存框；配置了目录就以它为起点
+    const startDir = dir || app.getPath('pictures');
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: path.join(startDir, baseName),
+      filters: [{ name: mimeType || 'Image', extensions: [baseName.split('.').pop() || 'jpg'] }],
+    });
+    if (canceled || !filePath) return false;
+    await fs.promises.writeFile(filePath, buf);
+    return true;
+  } catch (e) {
+    console.warn('[desktop] 保存文件失败:', e?.message || e);
+    return false;
+  }
+});
 
   ipcMain.handle('dialog:choose-directory', async () => {
     try {
@@ -233,6 +353,7 @@ app.whenReady().then(async () => {
   });
 
   await startProxyServer();
+  registerDownloadIpc();
   createWindow();
 
   app.on('activate', () => {

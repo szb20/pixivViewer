@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
 import { registerBackHandler } from '../utils/backHandler.js';
+import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
 import { SOURCE_LIST, getSource } from '../sources/registry.js';
 import { setImageSource, setBooruSafeOnly } from '../hooks/useImageSource.js';
 import '../styles/settings.css';
@@ -22,6 +23,7 @@ export default function SettingsPage({ onClose }) {
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridLayout, setGridLayout] = useState('waterfall');
   const [saveDirectory, setSaveDirectory] = useState('');
+  const [askEachTimeState, setAskEachTimeState] = useState(false);
   // 来源开关：改它同时走 useImageSource 的模块单例（立即广播 + 自行持久化），
   // 所以这两个不能进 doSave——否则同一次改动会写两遍 settings。
   const [imageSourceId, setImageSourceId] = useState('pixiv');
@@ -60,12 +62,15 @@ export default function SettingsPage({ onClose }) {
       setProxyUrl(s.proxyUrl || '');
       setGridLayout(s.gridLayout || 'waterfall');
       setSaveDirectory(s.saveDirectory || '');
+      setAskEachTimeState(s.saveAskEachTime === true);
       setImageSourceId(s.imageSource || 'pixiv');
       setSafeOnly(s.booruSafeOnly === true);
       loadedResolveRef.current?.();
     });
     return () => { cancelled = true; };
   }, []);
+
+  const overlayRef = useOverlayFocus(true, onClose);
 
   // 系统返回键
   useEffect(() => {
@@ -100,8 +105,14 @@ export default function SettingsPage({ onClose }) {
     doSave({ saveDirectory: '' });
   };
 
+  // 指定目录后是否仍每次弹「另存为」
+  const setAskEachTime = (v) => {
+    setAskEachTimeState(v);
+    doSave({ saveAskEachTime: v });
+  };
+
   return (
-    <div className="settings-overlay">
+    <div className="settings-overlay" ref={overlayRef} tabIndex={-1}>
       {/* 毛玻璃 sticky 顶栏 */}
       <div className="settings-header">
         <button className="settings-header-back" onClick={onClose} aria-label="返回">‹</button>
@@ -161,6 +172,7 @@ export default function SettingsPage({ onClose }) {
                   key={s.id}
                   className={`settings-pill${imageSourceId === s.id ? ' settings-pill--active' : ''}`}
                   onClick={() => { setImageSourceId(s.id); setImageSource(s.id); }}
+                  aria-pressed={imageSourceId === s.id}
                 >{s.label}</button>
               ))}
             </div>
@@ -172,17 +184,20 @@ export default function SettingsPage({ onClose }) {
               <div style={{ minWidth: 0 }}>
                 <div className="settings-row-label">分级过滤</div>
                 <div className="settings-row-hint">
-                  {safeOnly ? '只显示 rating:safe' : '显示全部（含 questionable / explicit）'}
+                  {/* 各站的过滤语法不同（rating:safe / rating:g / purity），这里不写死某一种 */}
+                  {safeOnly ? '只显示安全级作品' : '显示该站可获取的全部分级'}
                 </div>
               </div>
               <div className="settings-pill-group">
                 <button
                   className={`settings-pill${safeOnly ? '' : ' settings-pill--active'}`}
                   onClick={() => { setSafeOnly(false); setBooruSafeOnly(false); }}
+                  aria-pressed={!safeOnly}
                 >全部</button>
                 <button
                   className={`settings-pill${safeOnly ? ' settings-pill--active' : ''}`}
                   onClick={() => { setSafeOnly(true); setBooruSafeOnly(true); }}
+                  aria-pressed={safeOnly}
                 >仅安全</button>
               </div>
             </div>
@@ -230,6 +245,7 @@ export default function SettingsPage({ onClose }) {
                     doSave({ gridLayout: opt.value });
                     window.dispatchEvent(new CustomEvent('pixiv:grid-layout-changed', { detail: opt.value }));
                   }}
+                  aria-pressed={gridLayout === opt.value}
                 >{opt.label}</button>
               ))}
             </div>
@@ -250,6 +266,29 @@ export default function SettingsPage({ onClose }) {
                 {saveDirectory && (
                   <button className="settings-pill" onClick={resetDir}>恢复默认</button>
                 )}
+              </div>
+            </div>
+
+            <div className="settings-row">
+              <div style={{ minWidth: 0 }}>
+                <div className="settings-row-label">保存方式</div>
+                <div className="settings-row-hint">
+                  {!saveDirectory
+                    ? '未指定目录，保存时会弹「另存为」'
+                    : (askEachTimeState ? '每次保存都弹「另存为」' : '直接存进上面的目录，不再打断')}
+                </div>
+              </div>
+              <div className="settings-pill-group">
+                <button
+                  className={`settings-pill${askEachTimeState ? '' : ' settings-pill--active'}`}
+                  onClick={() => setAskEachTime(false)}
+                  aria-pressed={!askEachTimeState}
+                >直接保存</button>
+                <button
+                  className={`settings-pill${askEachTimeState ? ' settings-pill--active' : ''}`}
+                  onClick={() => setAskEachTime(true)}
+                  aria-pressed={askEachTimeState}
+                >每次询问</button>
               </div>
             </div>
           </div>

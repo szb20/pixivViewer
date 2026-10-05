@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # lint 目前是 0 warning，加 --deny-warnings 防止回退
+      - run: npm run lint -- --deny-warnings
+
+      - run: npm run build
+
+# 说明：桌面端的 run-desktop 驱动（.claude/skills/run-desktop）刻意不进 CI。
+# 它要启动 Electron、连真实 Pixiv（经本机代理），在 CI 上既需要 xvfb 又依赖外网，
+# 失败原因多半是环境而非代码。它是**本地改完布局后的验证手段**，用法见 CLAUDE.md。

@@ -1,0 +1,423 @@
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+/* 毛玻璃氛围背景：固定渐变色块，让玻璃面板有可模糊的光源 */
+.app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(46% 36% at 16% 10%, rgba(var(--color-accent-rgb), 0.24), transparent 70%),
+    radial-gradient(40% 32% at 90% 18%, rgba(var(--color-r18-rgb), 0.15), transparent 70%),
+    radial-gradient(48% 40% at 82% 88%, rgba(var(--color-success-rgb), 0.11), transparent 70%),
+    radial-gradient(42% 34% at 10% 86%, rgba(var(--color-warning-rgb), 0.11), transparent 70%);
+  animation: ambient-breathe 24s ease-in-out infinite alternate;
+}
+
+/* 极慢呼吸：让玻璃面板有"活"的光源 */
+@keyframes ambient-breathe {
+  from {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1.07);
+  }
+}
+
+.app-content {
+  flex: 1;
+  /* 桌面行布局下不被网格内容撑开 */
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  /* 避开底部 .tab-bar（几何由 --bottom-chrome-h 统一给出）；
+     各页面的额外留白交给 .page 处理 */
+  padding-bottom: var(--bottom-chrome-h);
+}
+
+.app-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* 滚动式顶部安全区：初始时内容避开状态栏，滚动时可滑入状态栏下（沉浸式） */
+.app-content::before {
+  content: '';
+  display: block;
+  height: env(safe-area-inset-top, 0px);
+  flex-shrink: 0;
+}
+
+.ptr-indicator {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+  /* 加深暗部 + 加粗边框，让圆盘在各种背景上更显眼 */
+  background: linear-gradient(150deg,
+      rgba(255, 255, 255, 0.32) 0%,
+      rgba(255, 255, 255, 0.16) 45%,
+      rgba(255, 255, 255, 0.08) 100%);
+  backdrop-filter: blur(10px) saturate(140%);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 0 2px rgba(255, 255, 255, 0.12),
+    0 2px 12px rgba(0, 0, 0, 0.25);
+}
+
+.ptr-orbit {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  transform-origin: center;
+}
+
+.ptr-dot {
+  position: absolute;
+  top: -13px;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  margin-left: -13px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+      #fff 0%,
+      rgba(255, 255, 255, 0.9) 18%,
+      rgba(255, 255, 255, 0.4) 45%,
+      rgba(255, 255, 255, 0) 70%);
+}
+
+.ptr-refreshing .ptr-orbit {
+  animation: ptr-orbit 1s linear infinite;
+}
+
+@keyframes ptr-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 搜索按钮等小 spinner 共用的旋转动画 */
+@keyframes ptr-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── 毛玻璃通用样式 ── */
+.frosted {
+  background: rgba(15, 17, 21, 0.34);
+  backdrop-filter: blur(10px) saturate(140%);
+}
+
+.frosted-light {
+  background: rgba(255, 255, 255, 0.075);
+  backdrop-filter: blur(8px) saturate(135%);
+}
+
+/* 玻璃圆形图标按钮（喜欢 / 下载悬浮等通用） */
+.glass-icon-btn {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0.8px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px) saturate(150%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.glass-icon-btn:active {
+  transform: scale(0.94);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.glass-icon-btn:active .heart-icon {
+  animation: heart-pop 0.3s ease;
+}
+
+@keyframes heart-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  30% {
+    transform: scale(1.3);
+  }
+
+  60% {
+    transform: scale(0.9);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 顶部状态栏毛玻璃 */
+.status-bar-frosted {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  z-index: 30;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(8px);
+  /* 隐藏时整块毛玻璃随系统状态栏一起上滑收走（不做透明度渐隐），
+     缓动/时长与底部 .tab-bar 保持一致，上下 chrome 出入同步 */
+  transform: translateY(0);
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 向下滚动隐藏 chrome：毛玻璃底整体上滑出屏（-1px 连底部那条 1px 分隔线一起收走） */
+.status-bar-frosted--hidden {
+  transform: translateY(calc(-100% - 1px));
+}
+
+.tab-bar {
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  margin: 0 auto;
+  width: auto;
+  max-width: 532px;
+  height: 52px;
+  display: flex;
+  z-index: 10;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 26px;
+  background: rgba(22, 25, 32, 0.52);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    0 14px 36px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  transform: translateY(0);
+  opacity: 1;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s ease;
+}
+
+.tab-bar--hidden {
+  transform: translateY(calc(100% + 30px));
+  opacity: 0.18;
+  pointer-events: none;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0;
+  font-size: 15px;
+  border: none;
+  background: transparent;
+  color: #d9dce2;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 0 8px rgba(107, 112, 128, 0.3);
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.tab-btn.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.85),
+    0 0 22px rgba(255, 255, 255, 0.5);
+}
+
+/* ===== 桌面左侧边栏（≥900px 显示；手机端 display:none，继续用底部 .tab-bar）===== */
+.side-nav {
+  display: none;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: var(--sidebar-w);
+  padding: 18px 12px 14px;
+  /* 窗口矮时底部「设置」不能被裁掉且无处可滚 */
+  overflow-y: auto;
+  /* 高于详情(50)/作者页(60)/设置(70) —— 覆盖层让出侧边栏后它仍可点；
+     低于模态对话框(100)与灯箱(10000)，那两者仍应盖住一切 */
+  z-index: 80;
+  border-right: 1px solid var(--border);
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px) saturate(150%);
+}
+
+.side-nav-brand {
+  padding: 2px 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: var(--text-primary);
+}
+
+.side-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 来源组：与主导航之间用一条分隔线断开 */
+.side-nav-group--source {
+  padding-bottom: 12px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.side-nav-group-label {
+  padding: 0 10px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.6px;
+  color: var(--text-tertiary);
+}
+
+.side-nav-footer {
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.side-nav-item {
+  width: 100%;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.side-nav-item.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.side-nav-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.side-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 下载入口的任务数角标 */
+.side-nav-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 18px;
+  text-align: center;
+}
+
+.side-nav-badge--fail {
+  background: rgba(var(--color-danger-rgb), 0.2);
+  color: var(--color-danger);
+}
+
+/* 「我」的二级页签：缩进对齐主项的文字（10 padding + 19 图标 + 10 gap） */
+.side-nav-subs {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 0 6px;
+}
+
+.side-nav-item--sub {
+  padding: 6px 10px 6px 39px;
+  font-size: 13px;
+}
+
+.side-nav-item--sub.active {
+  background: rgba(255, 255, 255, 0.07);
+  font-weight: 500;
+}
+
+/* 带状态值的二级项（R18 开关）：标签靠左、状态胶囊靠右 */
+.side-nav-item--switch {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 当前档位没有 R18 变体（R18G / 月榜 / 新人 / 原创）时整行置灰 */
+.side-nav-item--switch:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.side-nav-state {
+  flex-shrink: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 400;
+  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.side-nav-state.on {
+  border-color: rgba(var(--color-r18-rgb), 0.55);
+  background: rgba(var(--color-r18-rgb), 0.16);
+  color: var(--color-r18);
+}

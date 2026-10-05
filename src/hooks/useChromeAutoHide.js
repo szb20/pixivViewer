@@ -20,11 +20,11 @@ export function useChromeAutoHide(selector = '.app-content') {
     const lastTopRef = useRef(0);
 
     const hideStatusBar = useCallback(() => {
-        try { StatusBar.hide().catch(() => { }); } catch (_) { }
+        try { StatusBar.hide().catch(() => { }); } catch { }
     }, []);
 
     const showStatusBar = useCallback(() => {
-        try { StatusBar.show().catch(() => { }); } catch (_) { }
+        try { StatusBar.show().catch(() => { }); } catch { }
     }, []);
 
     useEffect(() => {

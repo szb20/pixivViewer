@@ -7,7 +7,7 @@
  */
 import JSZip from 'jszip';
 import { Unzip } from 'fflate';
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { CapacitorHttp } from '@capacitor/core';
 import { browserFetch, prodFetch, desktopFetch } from './pixiv.js';
 import {
   PixivEntity, PixivRepository, getSettings, safeFileName, truncateUtf8Bytes, utf8ByteLen, getFS, CACHE_DIR,

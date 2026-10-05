@@ -260,8 +260,10 @@ export class PixivStorageService {
     let usedUrl = '';
     try {
       for (const url of urls) {
-        data = await this.networkStore.downloadImage(url, (pct) => {
-          mon.setProgress(pct);
+        data = await this.networkStore.downloadImage(url, (info) => {
+          // info = { pct, loaded, total }：字节数只有原生/桌面流式通道才给得出，
+          // 拿不到时 pct 为 null，下载管理就不显示百分比（不编造）
+          mon.setProgress(info?.pct ?? null, info);
         });
         if (data) { usedUrl = url; break; }
       }

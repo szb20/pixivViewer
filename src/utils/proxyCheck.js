@@ -19,6 +19,11 @@ const IS_DEV = import.meta.env.DEV;
 
 /**
  * 走代理隧道探测（dev= Vite / desktop= 壳内代理，判定一致：502/504 = 代理层连不上 Pixiv）。
+ *
+ * 探针打 Pixiv 首页，不打业务 ajax 端点：`/ajax/discovery/artworks` 之类的端点在无 Cookie 时
+ * 恒返回 400（实测与 limit 无关），会在控制台留下一条红色失败请求，而探针并不需要区分它——
+ * 首页无凭据同样是 200，已足以证明「隧道通、拿到了真实 HTTP 响应」。也与 prod 分支探测
+ * `https://www.pixiv.net/` 保持同一语义。
  * @returns {Promise<boolean>}
  */
 async function probeThroughProxy(timeoutMs) {
@@ -31,18 +36,12 @@ async function probeThroughProxy(timeoutMs) {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       try {
-        res = await fetch(
-          `http://127.0.0.1:${port}/pixiv-api/ajax/discovery/artworks?mode=all&limit=1`,
-          { signal: ctrl.signal, headers: { Accept: 'application/json' } },
-        );
+        res = await fetch(`http://127.0.0.1:${port}/pixiv-api/`, { signal: ctrl.signal });
       } finally {
         clearTimeout(timer);
       }
     } else {
-      res = await fetch(
-        '/pixiv-api/ajax/discovery/artworks?mode=all&limit=1',
-        { signal: AbortSignal.timeout(timeoutMs), headers: { Accept: 'application/json' } },
-      );
+      res = await fetch('/pixiv-api/', { signal: AbortSignal.timeout(timeoutMs) });
     }
     if (res?.status === 502 || res?.status === 504) {
       log.warn('代理不可达（', res.status, '）');

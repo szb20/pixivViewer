@@ -17,11 +17,47 @@
   text-align: left;
 }
 
+/* 桌面：下载管理改成右侧抽屉。
+   居中弹窗是手机形态（窄屏上没别的地方放），宽屏下它既挡视觉中心又浪费两侧空间，
+   而下载队列本来就是「挂在一边看看进度」的东西。 */
+@media (min-width: 900px) {
+  .dialog-overlay[data-variant="download"] {
+    align-items: stretch;
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  .dialog-overlay[data-variant="download"] .dialog-panel {
+    --dialog-alpha: 1;
+    --dialog-radius: 0;
+    --dialog-max-w: 420px;
+    --dialog-max-h: none;
+    --dialog-overflow: auto;
+    border-top: none;
+    border-right: none;
+    border-bottom: none;
+    box-shadow: -16px 0 48px rgba(0, 0, 0, 0.45);
+    animation: dialog-drawer-in 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+@keyframes dialog-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .download-fab {
   position: fixed;
   right: 16px;
-  /* 紧贴 like 按钮上方，间距 20px */
-  bottom: max(116px, calc(env(safe-area-inset-bottom, 16px) + 100px));
+  /* 沿底部悬浮栏之上堆叠，间距 48px（几何统一由 --bottom-chrome-h 给出） */
+  bottom: calc(var(--bottom-chrome-h) + 48px);
   z-index: 60;
   box-shadow:
     0 4px 18px rgba(0, 0, 0, 0.35);
@@ -47,12 +83,6 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-@media (orientation: landscape) and (max-height: 560px) {
-  .download-fab {
-    bottom: max(116px, calc(env(safe-area-inset-bottom, 16px) + 80px));
-  }
-}
-
 /* ── 列表 ── */
 
 .download-list {
@@ -62,10 +92,47 @@
 }
 
 .download-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   text-align: center;
   padding: 40px 0;
   color: rgba(255, 255, 255, 0.4);
   font-size: 14px;
+}
+
+.download-empty span {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ── 分组（进行中 / 失败 / 已完成）── */
+.download-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.download-group + .download-group {
+  margin-top: 10px;
+}
+
+.download-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.download-group-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 400;
 }
 
 /* ── 每行 ── */
@@ -93,9 +160,20 @@
 }
 
 .download-row-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   white-space: nowrap;
+}
+
+/* 已下载/总大小 · 速度：只有真实字节数可用时才渲染 */
+.download-row-bytes {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .download-row--error .download-row-status {
@@ -173,18 +251,37 @@
   color: #fff;
 }
 
-.download-head-clear {
+.download-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.download-head-summary {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.download-head-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.download-head-btn {
   padding: 3px 10px;
   border: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
+  font-family: inherit;
   font-size: 12px;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.download-head-clear:hover {
+.download-head-btn:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.14);
 }

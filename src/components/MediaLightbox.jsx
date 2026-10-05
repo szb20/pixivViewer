@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import GifPlayer from './GifPlayer.jsx';
 import { useTouchGesture } from '../hooks/useTouchGesture.js';
 import { createLogger } from '../utils/logger.js';
+import { markImageLoaded } from '../utils/loadedImages.js';
+import { masonryThumbUrl } from '../utils/imageUrl.js';
 import '../styles/lightbox.css';
 
 const log = createLogger('Lightbox');
@@ -80,6 +82,8 @@ export default function MediaLightbox({
   zIndex = 10000,
 }) {
   const [retryMap, setRetryMap] = useState({});
+  // 比例对不上的托底图按 slide 下标记下来，直接不渲染（见下面 underlay 的注释）
+  const [underlayHidden, setUnderlayHidden] = useState(() => new Set());
   const videoRefs = useRef({});
   const [iwaraQuality, setIwaraQuality] = useState('Source');
 
@@ -275,6 +279,9 @@ export default function MediaLightbox({
       const candIdx = Math.min(errCount, lastIdx);
       const attempt = errCount - candIdx; // 当前候选的第几次尝试（0 = 首次）
       const activeSrc = candidates[candIdx] || '';
+      // 托底小图：优先详情接口给的等比 small 图；没有就把缩略图转成等比 small（Pixiv）
+      const underlaySrc = item.previewUrl
+        || masonryThumbUrl(item.thumbnailUrl || '', item._pageIndex ?? 0, item.source);
       const failed = !candidates.length
         || (candIdx === lastIdx && attempt >= MAX_IMG_RETRY);
       if (failed) {
@@ -303,15 +310,37 @@ export default function MediaLightbox({
             }
             : undefined}
         >
-          {/* sharp small 图托底：原图逐行渲染时，底部未渲染区域先由同比例 small 图垫着 */}
-          {(item.previewUrl || item.thumbnailUrl) && (
-            <img className="lightbox-img-underlay" src={item.previewUrl || item.thumbnailUrl} alt="" />
+          {/* sharp small 图托底：原图逐行渲染时，底部未渲染区域先由同比例 small 图垫着。
+              前提是**托底图与原图同比例** —— 比例不同的话，contain 留白处会露出托底图的边，
+              看起来就是「灯箱里有两张图」。
+              Pixiv 的 thumbnailUrl 是 250×250 方图，直接拿来托底必错；
+              用 masonryThumbUrl 转成 c/540x540_70/img-master 的等比 small 图。
+              非 Pixiv 来源它原样返回（各站缩略图也可能是裁剪过的），
+              所以再加一道比例校验兜底：对不上就整张不画。 */}
+          {underlaySrc && !underlayHidden.has(idx) && (
+            <img
+              className="lightbox-img-underlay"
+              src={underlaySrc}
+              alt=""
+              onLoad={(e) => {
+                const el = e.currentTarget;
+                // 已知真实尺寸时用它当基准；拿不到就跳过校验（Pixiv 那条路已由 src 保证等比）
+                const known = item.width > 0 && item.height > 0 ? item.width / item.height : 0;
+                if (!known || !el.naturalHeight) return;
+                const ratio = el.naturalWidth / el.naturalHeight;
+                if (Math.abs(ratio - known) / known > 0.02) {
+                  log.warn('灯箱托底图与原图比例不符，隐藏:', ratio.toFixed(3), 'vs', known.toFixed(3), underlaySrc.slice(-60));
+                  setUnderlayHidden(prev => new Set(prev).add(idx));
+                }
+              }}
+            />
           )}
           <img
             className="lightbox-img-full"
             src={attempt > 0 && !/^(blob:|file:|content:)/.test(activeSrc) ? `${activeSrc}?r=${attempt}` : activeSrc}
             alt={item.title || ''}
             draggable={false}
+            onLoad={() => markImageLoaded(activeSrc)}
             onError={() => {
               const next = errCount + 1;
               if (candIdx < lastIdx) {
@@ -325,7 +354,7 @@ export default function MediaLightbox({
             fetchPriority={idx === index ? 'high' : 'auto'}
             style={{
               width: '100%',
-              maxHeight: '75vh',
+              maxHeight: 'var(--lightbox-media-h)',
               objectFit: 'contain',
             }}
           />
@@ -339,7 +368,7 @@ export default function MediaLightbox({
           ref={el => slideRefs.current[idx] = el}
           style={{
             width: '100%',
-            maxHeight: '75vh',
+            maxHeight: 'var(--lightbox-media-h)',
             display: 'flex',
             justifyContent: 'center',
             ...(idx === index && zoomTrans
@@ -358,9 +387,10 @@ export default function MediaLightbox({
             author={item.author}
             src={item.src}
             thumbnailUrl={item.thumbnailUrl || item.mediumUrl}
+            source={item.source}
             width={item.width}
             height={item.height}
-            style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain' }}
+            style={{ width: '100%', maxHeight: 'var(--lightbox-media-h)', objectFit: 'contain' }}
           />
         </div>
       );

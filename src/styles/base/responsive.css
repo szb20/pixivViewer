@@ -1,0 +1,204 @@
+@media (orientation: landscape) and (max-height: 560px) and (max-width: 899px) {
+  /* 横屏矮窗口：底栏压到 44px，所有依赖它的偏移跟着一起缩 */
+  :root {
+    --bottom-chrome-h: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app {
+    max-width: none;
+    width: 100vw;
+  }
+
+  .app-content {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .tab-bar {
+    max-width: none;
+    height: 44px;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .tab-btn {
+    font-size: 15px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .glass-icon-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .status-bar-frosted {
+    left: env(safe-area-inset-left, 0px);
+    right: env(safe-area-inset-right, 0px);
+  }
+}
+
+/* ── 桌面（Electron 壳 / 宽屏窗口）：左侧边栏 + 内容区，去掉手机窄条布局 ── */
+@media (min-width: 900px) {
+  :root {
+    /* 底部没有悬浮栏了，所有由它推导的偏移一次性归零 */
+    --bottom-chrome-h: 0px;
+    /* 灯箱媒体区同理：没有底栏要避让，直接铺满窗口高度（手机端是 75vh） */
+    --lightbox-media-h: 100vh;
+  }
+
+  .app {
+    max-width: none;
+    /* 行布局：.side-nav | .app-content */
+    flex-direction: row;
+  }
+
+  .app::before {
+    max-width: none;
+  }
+
+  .side-nav {
+    display: flex;
+  }
+
+  /* 手机导航形态在桌面全部退场（设置入口移入侧边栏，状态栏毛玻璃只服务于手机沉浸式） */
+  .tab-bar,
+  .sub-tab-bar,
+  .me-settings-btn,
+  .status-bar-frosted {
+    display: none;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+
+  /* 排行榜筛选条与来源切换都已移入侧边栏，桌面端不再需要这两条浮动栏 */
+  .chips-bottom,
+  .chips--top {
+    display: none;
+  }
+}
+
+@media (min-width: 1400px) {
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+}
+
+/* ── 桌面端：恢复细窄滚动条（手机端全局隐藏，桌面宽屏需识别滚动位置） ── */
+@media (min-width: 900px) {
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+    -ms-overflow-style: auto;
+  }
+
+  *::-webkit-scrollbar {
+    display: block !important;
+    width: 10px !important;
+    height: 10px !important;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.28);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* ── 桌面端：全站悬停反馈（仅在支持 hover 的精确指针设备上生效） ── */
+@media (hover: hover) and (pointer: fine) {
+  .tab-btn:hover {
+    color: #ffffff;
+  }
+
+  .side-nav-item:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+  }
+
+  .glass-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.32);
+  }
+
+  .chips-bottom .chip:hover,
+  .chip:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .grid-item:hover {
+    transform: translateY(-3px);
+    box-shadow:
+      0 12px 34px rgba(0, 0, 0, 0.42),
+      0 0 0 1px rgba(255, 255, 255, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    z-index: 2;
+  }
+
+  .grid-item:hover .grid-thumb {
+    transform: scale(1.045);
+  }
+
+  .feed-extra:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .grid-hide:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app::before {
+    animation: none;
+  }
+
+  .tab-bar,
+  .grid-item,
+  .grid-thumb,
+  .grid-like,
+  .grid-like::after,
+  .toast,
+  .dialog-overlay,
+  .dialog-panel,
+  .grid-shimmer::after,
+  .ptr-refreshing .ptr-orbit {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .tab-bar--hidden {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .grid-thumb {
+    opacity: 1;
+    filter: none;
+  }
+}

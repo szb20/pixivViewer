@@ -11,10 +11,22 @@
  */
 import { createTransport } from '../api/transport.js';
 import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/core/utils.js';
-import { getSource } from './registry.js';
 import { createLogger } from '../utils/logger.js';
+import { classifyError, extractPostId, toIllust } from './shared.js';
 
 const log = createLogger('moebooru');
+
+/**
+ * 推荐流的分数下限 —— 配合默认序（新→旧）取「近期高分」。
+ *
+ * order:score 是**纯分数序**，榜首常年是十几年前的图（实测 yande 首条 id 315186，
+ * 而站点最新 id 是 127 万），拿它当推荐流用户一眼就看出「全是老图」。
+ * 默认序 + score:>=N 才能拿到「刚上传不久、已经有人投票」的那批。
+ *
+ * 实测（2026-10）N=20：首条只比站点最新 id 落后个位数到二十几条，
+ * 且翻到第 500 页仍有数据（yande id 1267655 / konachan id 407026），够刷。
+ */
+const FEED_MIN_SCORE = 20;
 
 /** yande / konachan 的 tags 语法用 `+` 连接多个 tag（AND 语义） */
 function encodeTags(tags) {
@@ -25,21 +37,8 @@ function encodeTags(tags) {
 const POST_URL = {
   yande: (id) => `https://yande.re/post/show/${id}`,
   konachan: (id) => `https://konachan.com/post/show/${id}`,
+  'konachan-net': (id) => `https://konachan.net/post/show/${id}`,
 };
-
-function classifyError(e, what) {
-  const msg = e?.message || String(e);
-  if (/Failed to fetch|NetworkError|ERR_NETWORK|ENOTFOUND|ECONNREFUSED|abort|timeout/i.test(msg)) {
-    return `网络连接失败（${what}），请检查网络或代理设置`;
-  }
-  const code = typeof e?.status === 'number' ? e.status : Number(msg.match(/HTTP\s+(\d+)/)?.[1]);
-  if (code === 403) return `${what}被拒绝访问（403）`;
-  if (code === 404) return `${what}未找到，可能已被删除`;
-  if (code === 429) return '请求过于频繁，请稍后再试';
-  if (code >= 500) return `${what}服务暂时不可用，请稍后重试`;
-  if (code) return `${what}请求失败（HTTP ${code}）`;
-  return msg;
-}
 
 /**
  * 一条 Moebooru post → 应用统一条目。
@@ -80,43 +79,6 @@ function mapPost(post, sourceId) {
   };
 }
 
-/** 统一条目 → 详情页需要的 illust 结构（与 pixiv fetchIllust 的返回形状对齐） */
-function toIllust(item) {
-  return {
-    illustId: item.illustId,
-    title: item.title,
-    authorName: item.authorName,
-    authorAccount: '',
-    authorId: '',
-    tags: item.tags,
-    pageCount: 1,
-    illustType: 0,
-    width: item.width,
-    height: item.height,
-    webUrl: item.webUrl,
-    images: [{
-      index: 0,
-      url: item.mediumUrl,
-      previewUrl: item.mediumUrl,
-      thumbnailUrl: item.thumbnailUrl,
-      mediumUrl: item.mediumUrl,
-      originalUrl: item.originalUrl,
-      width: item.width,
-      height: item.height,
-    }],
-  };
-}
-
-/**
- * 从用户输入里抽站点原始 id：纯数字、或 `yande.re/post/show/123` 这类链接。
- * @returns {string} 未命中返回 ''
- */
-function extractPostId(query) {
-  const url = query.match(/\/post\/show\/(\d+)/i)?.[1];
-  if (url) return url;
-  return /^\d+$/.test(query) ? query : '';
-}
-
 /**
  * 创建一个 Moebooru 系来源。
  * @param {{id:string}} def — registry 里的来源定义
@@ -127,6 +89,7 @@ export function createMoebooruSource(def) {
     apiPrefix: def.net.apiPrefix,
     origin: def.net.apiOrigin,
     logName: `booru:${sourceId}`,
+    userAgent: def.net.userAgent,
   });
 
   /** 取一页 post */
@@ -148,7 +111,7 @@ export function createMoebooruSource(def) {
     async search(query, { page = 1, limit = 20, safeOnly = false } = {}) {
       const trimmed = String(query || '').trim();
       if (!trimmed) return { images: [], query: '' };
-      const postId = extractPostId(trimmed);
+      const postId = extractPostId(trimmed, /\/post\/show\/(\d+)/i);
       try {
         if (postId) {
           const posts = await listPosts(`id:${postId}`, { page: 1, limit: 1 });
@@ -165,14 +128,14 @@ export function createMoebooruSource(def) {
     },
 
     /**
-     * 推荐流 — 按评分排序的「精选」。
-     * Moebooru 没有 Pixiv 那种个性化推荐，order:score 是它唯一可用的排序语义
-     * （order:random 与 post/random.json 实测均返回空）。
+     * 推荐流 — 近期高分：默认序（新→旧）+ score:>=N，**不用 order:score**（见 FEED_MIN_SCORE）。
      * @returns {Promise<{illusts: object[], message?: string}>}
      */
-    async feed({ page = 1, limit = 20 } = {}) {
+    async feed({ page = 1, limit = 20, safeOnly = false } = {}) {
       try {
-        const posts = await listPosts('order:score', { page, limit });
+        let tags = `score:>=${FEED_MIN_SCORE}`;
+        if (safeOnly) tags += ' rating:safe';
+        const posts = await listPosts(tags, { page, limit });
         return { illusts: posts.map(p => mapPost(p, sourceId)).filter(Boolean) };
       } catch (e) {
         log.error('[feed] 失败:', e?.message || e);
@@ -217,18 +180,4 @@ export function createMoebooruSource(def) {
       }
     },
   };
-}
-
-/** 单例缓存：每个来源一个适配器实例 */
-const instances = new Map();
-
-/**
- * 取某来源的适配器（懒建）。
- * @param {string} sourceId
- */
-export function getMoebooruSource(sourceId) {
-  const def = getSource(sourceId);
-  if (def.kind !== 'moebooru') return null;
-  if (!instances.has(sourceId)) instances.set(sourceId, createMoebooruSource(def));
-  return instances.get(sourceId);
 }

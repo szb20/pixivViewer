@@ -9,6 +9,7 @@
  *    改这里时务必同步那边。
  */
 import { DEFAULT_SOURCE } from '../pixiv-assistant/core/utils.js';
+import { API_CLIENT_UA } from './shared.js';
 
 /**
  * @typedef {object} SourceCaps
@@ -27,6 +28,7 @@ import { DEFAULT_SOURCE } from '../pixiv-assistant/core/utils.js';
  * @property {string} apiOrigin      — 生产环境 API 直连源
  * @property {string} apiPrefix      — dev / 桌面壳的 API 代理前缀
  * @property {Record<string,string>} imgHosts — 图片域名 → dev 下的代理前缀
+ * @property {string} [userAgent]    — 覆盖默认 UA（见 shared.js 的 API_CLIENT_UA 说明）
  */
 
 /**
@@ -36,7 +38,8 @@ import { DEFAULT_SOURCE } from '../pixiv-assistant/core/utils.js';
  * @property {string} shortLabel  — 短名（胶囊按钮）
  * @property {SourceCaps} caps
  * @property {SourceNet} net
- * @property {string} [kind]      — 适配器类型，'moebooru' 走 createMoebooruSource
+ * @property {string} [kind]      — 适配器类型：'moebooru' | 'danbooru' | 'gelbooru' | 'wallhaven'
+ *                                  （由 sources/api.js 的 FACTORIES 分发；'pixiv' 没有适配器）
  */
 
 /** @type {Record<string, SourceDef>} */
@@ -84,6 +87,74 @@ export const SOURCES = {
       apiOrigin: 'https://konachan.com',
       apiPrefix: '/konachan-api',
       imgHosts: { 'konachan.com': '/konachan-img' },
+    },
+  },
+  'konachan-net': {
+    id: 'konachan-net',
+    label: 'Konachan.net',
+    shortLabel: 'Kona-S',
+    kind: 'moebooru',
+    caps: {
+      feed: true, ranking: true, search: true, multiPage: false,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      // konachan.com 的纯 SFW 镜像，同一套 Moebooru API，只是站内过滤掉 R18。
+      // ⚠️ 站点在 Cloudflare 后面：直连（不经代理）会吃到 JS 挑战，
+      //    走 booru-proxy 的 Node 通道则正常（实测 200）。
+      apiOrigin: 'https://konachan.net',
+      apiPrefix: '/konachan-net-api',
+      imgHosts: { 'konachan.net': '/konachan-net-img' },
+    },
+  },
+  danbooru: {
+    id: 'danbooru',
+    label: 'Danbooru',
+    shortLabel: 'Danbooru',
+    kind: 'danbooru',
+    caps: {
+      feed: true, ranking: true, search: true, multiPage: false,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      apiOrigin: 'https://danbooru.donmai.us',
+      apiPrefix: '/danbooru-api',
+      imgHosts: { 'cdn.donmai.us': '/danbooru-img' },
+      // 必须用非浏览器 UA：Cloudflare 会拒掉「Chrome UA + 非浏览器 TLS 指纹」的组合
+      userAgent: API_CLIENT_UA,
+    },
+  },
+  safebooru: {
+    id: 'safebooru',
+    label: 'Safebooru',
+    shortLabel: 'Safebooru',
+    kind: 'gelbooru',
+    caps: {
+      feed: true, ranking: true, search: true, multiPage: false,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      // 唯一一个实测大陆网络可直连的图库（无需代理），且免 API key、无防盗链。
+      // 内容是 Danbooru 的 SFW 子集镜像。
+      apiOrigin: 'https://safebooru.org',
+      apiPrefix: '/safebooru-api',
+      imgHosts: { 'safebooru.org': '/safebooru-img' },
+    },
+  },
+  wallhaven: {
+    id: 'wallhaven',
+    label: 'Wallhaven',
+    shortLabel: 'Wallhaven',
+    kind: 'wallhaven',
+    caps: {
+      feed: true, ranking: true, search: true, multiPage: false,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      apiOrigin: 'https://wallhaven.cc',
+      apiPrefix: '/wallhaven-api',
+      imgHosts: { 'w.wallhaven.cc': '/wallhaven-img', 'th.wallhaven.cc': '/wallhaven-thumb' },
+      userAgent: API_CLIENT_UA,
     },
   },
 };

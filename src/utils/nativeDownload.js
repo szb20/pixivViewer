@@ -23,7 +23,10 @@ function refererFor(url) {
 /**
  * 原生流式下载图片，返回 base64。
  * @param {string} url — 完整图片 URL
- * @param {function} [onProgress] — (pct: 0-100) => void
+ * @param {function} [onProgress] — ({pct, loaded, total}) => void
+ *        loaded/total 是真实字节数（原生侧上报），下载管理用它显示大小与速度。
+ *        total 归一化为 0 表示上游没给 Content-Length（原生 `getContentLengthLong()`
+ *        在无该响应头时返回 -1，这里统一成 0，避免下游要同时判 -1 和 0）。
  * @returns {Promise<string>} base64 数据
  */
 export async function nativeDownload(url, onProgress) {
@@ -36,7 +39,11 @@ export async function nativeDownload(url, onProgress) {
       const now = Date.now();
       if (now - lastUiAt >= 80 || info.progress >= 100) {
         lastUiAt = now;
-        onProgress?.(info.progress);
+        onProgress?.({
+          pct: info.progress,
+          loaded: info.loaded,
+          total: info.total > 0 ? info.total : 0,
+        });
       }
     }
   });

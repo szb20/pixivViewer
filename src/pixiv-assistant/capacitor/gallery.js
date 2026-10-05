@@ -7,7 +7,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
-import { getGallerySaver, isDesktopShell } from '../../utils/platform.js';
+import { isDesktopShell } from '../../utils/platform.js';
 import { getSettingsSync } from './config.js';
 
 const log = createLogger('gallery');
@@ -89,14 +89,20 @@ export async function galleryHasFile(fileName) {
   }
 }
 
-/** 导出到系统相册（MediaStore / Pictures/PixivViewer；桌面 = 保存对话框） */
+/** 导出到系统相册（MediaStore / Pictures/PixivViewer；桌面 = 直接落盘或保存对话框） */
 export async function exportToGallery(data, fileName, mimeType = mimeFor(fileName)) {
   try {
-    // 桌面壳：弹系统保存对话框写文件
+    // 桌面壳：设置里指了目录且没勾「每次询问」就直接写，否则弹系统保存对话框
     if (isDesktopShell()) {
       try {
-        const directory = getSettingsSync().saveDirectory || '';
-        const ok = await window.desktopProxy.saveFile({ data, fileName, mimeType, directory });
+        const s = getSettingsSync();
+        const ok = await window.desktopProxy.saveFile({
+          data,
+          fileName,
+          mimeType,
+          directory: s.saveDirectory || '',
+          ask: s.saveAskEachTime === true,
+        });
         if (!ok) log.warn('桌面保存被取消或失败:', fileName);
         return !!ok;
       } catch (e) {

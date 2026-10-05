@@ -6,41 +6,29 @@ import ImageGrid from '../components/ImageGrid.jsx';
 import { getMainScrollEl } from '../utils/scroll.js';
 import { useImageSourceId } from '../hooks/useImageSource.js';
 import { booruApiFor } from '../sources/api.js';
+import { getRankingModes, clampRankingCategory, R18_CATEGORIES } from '../utils/rankingModes.js';
+import { useAppStore } from '../store/useAppStore.js';
 
 const CACHE_KEY = 'ranking';
 /** booru 的 popular_recent 一次返回整批，不分页 */
 const BOORU_LIMIT = 60;
-
-const MODES = [
-  { key: 'daily', label: '日榜' },
-  { key: 'weekly', label: '周榜' },
-  { key: 'monthly', label: '月榜' },
-  { key: 'male', label: '男性向' },
-  { key: 'female', label: '女性向' },
-  { key: 'rookie', label: '新人' },
-  { key: 'original', label: '原创' },
-  { key: 'r18g', label: 'R18G' },
-];
-
-/** 非 Pixiv 来源：popular_recent 的日 / 周 / 月三档 */
-const BOORU_MODES = [
-  { key: '1d', label: '日榜' },
-  { key: '1w', label: '周榜' },
-  { key: '1m', label: '月榜' },
-];
-
-// 支持 R-18 变体的分类（monthly / rookie / original 无 R18 档）
-const R18_CATEGORIES = new Set(['daily', 'weekly', 'male', 'female']);
 
 export default function RankingPage({ active = true, onOpen, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
   const sourceId = useImageSourceId();
   const booruApi = booruApiFor(sourceId);
   const isBooru = !!booruApi;
-  const modes = isBooru ? BOORU_MODES : MODES;
+  const { modes } = getRankingModes(sourceId);
   const cacheKey = scopedTabKey(sourceId, CACHE_KEY);
-  const [category, setCategory] = useState(isBooru ? BOORU_MODES[0].key : 'daily');
-  const [r18, setR18] = useState(true);
+  // 档位与 R18 放在 store：桌面端由侧边栏驱动，手机端仍用底部的筛选条
+  const rawCategory = useAppStore(s => s.rankingCategory);
+  const r18 = useAppStore(s => s.rankingR18);
+  const selectRankingCategory = useAppStore(s => s.selectRankingCategory);
+  const toggleRankingR18 = useAppStore(s => s.toggleRankingR18);
+  const setRankingSelection = useAppStore(s => s.setRankingSelection);
+  // 切来源会按 key 重挂载本页，但档位留在 store 里：booru 的档位 key 与 pixiv 不通用，
+  // 这里按当前来源的可用档位兜底（不写回 store，切回 pixiv 仍记得原来的档）
+  const category = clampRankingCategory(modes, rawCategory);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -158,8 +146,8 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         const cache = await loadTabCache(cacheKey);
         if (cancelled || !cache?.items?.length) return;
         cacheUsedRef.current = true;
-        if (cache.category) setCategory(cache.category);
-        if (typeof cache.r18 === 'boolean') setR18(cache.r18);
+        // 档位与 R18 来自同一条缓存记录，必须一次写入，避免被「选档位联动 R18」的规则改写
+        setRankingSelection({ category: cache.category, r18: cache.r18 });
         const hydratedR18 = typeof cache.r18 === 'boolean' ? cache.r18 : true;
         loadedModeRef.current = cache.mode
           || ((hydratedR18 && R18_CATEGORIES.has(cache.category)) ? `${cache.category}_r18` : (cache.category || 'daily'));
@@ -180,7 +168,8 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
       }
     })();
     return () => { cancelled = true; };
-  }, [cacheKey]);
+    // setRankingSelection 是 zustand action，引用稳定，加进来只为满足 exhaustive-deps
+  }, [cacheKey, setRankingSelection]);
 
   // 切换档位（mode 变化）时重新加载；已挂载后不再重复首次请求
   useEffect(() => {
@@ -236,19 +225,6 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
     return () => io.disconnect();
   }, [hasMore, loading, loadingMore, load]);
 
-  const handleCategory = (cat) => {
-    // 选 R18G 时自动开 R18；选无 R18 档的分类时自动关
-    if (cat === 'r18g') setR18(true);
-    else if (!R18_CATEGORIES.has(cat)) setR18(false);
-    setCategory(cat);
-  };
-
-  const handleR18Toggle = () => {
-    if (category === 'r18g') return; // R18G 固定 R18
-    if (!R18_CATEGORIES.has(category)) return; // 当前分类无 R18 档
-    setR18(v => !v);
-  };
-
   return (
     <div className="page">
       {error && (
@@ -269,19 +245,23 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         </div>
       )}
       {!loading && !appendError && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
+      {/* 手机端的档位筛选条；桌面端已移入侧边栏，这一行在 ≥900px 被隐藏 */}
       <div className={`chips chips-bottom${showFilters ? '' : ' chips-hidden'}`}>
         {modes.map(m => (
           <button
             key={m.key}
             className={`chip${m.key === category ? ' active' : ''}${m.label.length > 2 && m.key !== 'r18g' ? ' chip--small' : ''}`}
-            onClick={() => handleCategory(m.key)}
+            onClick={() => selectRankingCategory(m.key)}
+            aria-pressed={m.key === category}
           >{m.label}</button>
         ))}
         {!isBooru && (
           <button
             className={`chip r18-toggle${r18 ? ' on' : ''}`}
-            onClick={handleR18Toggle}
+            onClick={toggleRankingR18}
             style={{ marginLeft: 'auto' }}
+            aria-pressed={r18}
+            aria-label={`R18 内容：${r18 ? '已开启' : '已关闭'}`}
           >{r18 ? 'R18' : '公开'}</button>
         )}
       </div>

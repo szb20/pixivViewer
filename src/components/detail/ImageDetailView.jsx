@@ -3,7 +3,8 @@ import { pixivApi } from '../../api/pixiv.js';
 import { saveItem } from '../../api/index.js';
 import { saveAllPages as saveAllPagesShared } from '../../api/saveAllPages.js';
 import { pixivReUrl, pixivPageUrl } from '../../pixiv-assistant/core/utils.js';
-import { masonryThumbUrl } from '../ImageGrid.jsx';
+import { masonryThumbUrl } from '../../utils/imageUrl.js';
+import { isImageLoaded } from '../../utils/loadedImages.js';
 import { getSource } from '../../sources/registry.js';
 import { booruApiFor } from '../../sources/api.js';
 import { getCompositeKey } from '../../pixiv-assistant/core/utils.js';
@@ -31,6 +32,25 @@ const RELATED_FETCH_LIMIT = 100;
 // 实例内缓存会丢失、推荐区需重新走网络，导致滚动恢复等待且闪烁。LRU 上限防长会话膨胀。
 const relatedCache = new Map();
 const RELATED_CACHE_MAX = 20;
+
+/** 操作条图标规格：与侧边栏/设置齿轮一致（24 视窗、currentColor 描边、线宽 2） */
+const actionIconProps = {
+  width: 18,
+  height: 18,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+};
+
+/**
+ * 宽高比超过它就用「图在上、信息在下」的上下布局。
+ * 桌面端左右分栏时宽图被压在左列（1200px 窗口只有 628px 宽），铺满内容区能大一圈。
+ * 调阈值只改这里；判定在 ImageDetailView，样式见 detail.css 的 char-state-content--wide。
+ */
+const WIDE_LAYOUT_RATIO = 1;
 
 /**
  * 图片详情页 — 全屏展示大图 + 信息 + 操作 + 相关推荐网格。
@@ -71,6 +91,7 @@ export default function ImageDetailView({
   const prevLocalSrcsRef = useRef({});
   const lastRestoreRef = useRef(null); // 最近一次滚动恢复记录（用于数据就绪后校正）
   const ratioCacheRef = useRef({}); // illustId → { page: "w / h" }，返回时复用，避免高度二次校准闪动
+  const reuseHdRef = useRef({}); // page → 可复用的高清源；见 render 里「档位复用」的说明
   const userInteractedAfterRestoreRef = useRef(false); // 恢复后用户是否已主动操作滚动/触控
 
   // 兼容旧数据：列表接口映射可能只带 illustType 不带 type
@@ -79,6 +100,10 @@ export default function ImageDetailView({
   // 老数据没有 source 字段（历史收藏/备份）→ 落回 pixiv，行为与改动前一致。
   const source = image?.source || 'pixiv';
   const isBooru = source !== 'pixiv';
+  // 宽屏下详情栏能到 600px 以上，540 档预览会被拉伸到模糊，主图改取 1200 档。
+  // 断点对应 index.css 的 @media (min-width: 900px)；窗口尺寸变化不重渲染，
+  // 但换一张作品就会重算，实际用不到边拖边变的场景。
+  const useLargePreview = typeof window !== 'undefined' && window.innerWidth >= 900;
   const booruApi = booruApiFor(source);
   const caps = getSource(source).caps;
   // Tag 展示：优先列表返回的 tag；列表没带（如作者页/关注流，可能为空数组）则等 fetchIllust 回来用 API 的 tag 兜底
@@ -102,12 +127,33 @@ export default function ImageDetailView({
     return w && h ? `${w} / ${h}` : '3 / 4';
   })();
   const pageRatios = ratioCacheRef.current[image?.illustId] || {};
+
+  // 宽图 → 上下布局（见 WIDE_LAYOUT_RATIO）。比例优先取本页：实测缓存 > 接口尺寸 > 列表尺寸；
+  // 都拿不到时沿用 defaultRatio 的占位兜底（3:4），那种情况保持原来的左右分栏最安全。
+  const wideLayout = (() => {
+    const page = image?._pageIndex ?? 0;
+    const src = pageRatios[page]
+      || ratioOfSize(illustData?.illust?.images?.[page]?.width, illustData?.illust?.images?.[page]?.height)
+      || ratioOfSize(image?.width, image?.height)
+      || defaultRatio;
+    const [w, h] = String(src).split('/').map(v => parseFloat(v));
+    return !!w && !!h && w / h > WIDE_LAYOUT_RATIO;
+  })();
+
   const rememberPageRatio = useCallback((page, nextRatio) => {
     if (!image?.illustId || !nextRatio) return;
     const prev = ratioCacheRef.current[image.illustId] || {};
     if (prev[page] === nextRatio) return;
     ratioCacheRef.current[image.illustId] = { ...prev, [page]: nextRatio };
   }, [image?.illustId]);
+
+  // 桌面端详情流的高清源：本地已保存的原图优先，其次详情接口给的原图直链
+  // （取的是灯箱候选链的前两级，两边保持一致）。
+  // booru 不参与 —— previewUrl 本身就是原图（见下面的档位注释），手机端也不加载。
+  const hdUrlForPage = useCallback((p) => {
+    if (!useLargePreview || isBooru) return '';
+    return localSrcs[p] || illustData?.illust?.images?.[p]?.originalUrl || '';
+  }, [useLargePreview, isBooru, localSrcs, illustData]);
 
   const markUserInteracted = useCallback(() => {
     userInteractedAfterRestoreRef.current = true;
@@ -354,6 +400,43 @@ export default function ImageDetailView({
     }
   }, [image, buildSaveItem, pixivCache, setPixivCache, illustData, isBooru]);
 
+  // ── 桌面操作条：下载 / 复制链接 ──
+  const [actionBusy, setActionBusy] = useState(false);
+  // 图标钮没有文字，这个文案走 title / aria-label（窄栏下也能看清下载范围）
+  const downloadLabel = actionBusy ? '下载中…' : (pageCount > 1 ? `下载全部 ${pageCount} 页` : '下载');
+
+  const handleDownloadAction = useCallback(async () => {
+    if (!image?.illustId || actionBusy) return;
+    setActionBusy(true);
+    try {
+      if (pageCount > 1) {
+        showToast(`开始下载全部 ${pageCount} 页…`, { type: 'info' });
+        await saveAllPages(image, {
+          pixivCache,
+          setPixivCache,
+          images: illustData?.illust?.images,
+          totalPages: pageCount,
+        });
+      } else {
+        await downloadPage(0);
+      }
+    } finally {
+      setActionBusy(false);
+    }
+  }, [image, actionBusy, pageCount, downloadPage, pixivCache, setPixivCache, illustData, saveAllPages]);
+
+  const handleCopyLink = useCallback(async () => {
+    const url = image?.originalUrl || image?.mediumUrl || '';
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast('图片链接已复制', { type: 'success' });
+    } catch (e) {
+      log.warn('复制链接失败:', e?.message || e);
+      showToast('复制失败');
+    }
+  }, [image]);
+
   // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
   // useMemo：仅依赖详情/本地URL/作品变化，避免相关推荐追加、缓存更新等无关渲染
   // 反复重建数组引用，触发 MediaLightbox 相邻预加载 effect 重复 new Image() 预热。
@@ -495,9 +578,9 @@ export default function ImageDetailView({
     const syncInitial = () => {
       const top = el.scrollTop || 0;
       if (top >= 24) {
-        try { StatusBar.hide().catch(() => { }); } catch (_) { }
+        try { StatusBar.hide().catch(() => { }); } catch { }
       } else {
-        try { StatusBar.show().catch(() => { }); } catch (_) { }
+        try { StatusBar.show().catch(() => { }); } catch { }
       }
     };
     // 等下一帧，确保滚动容器已完成布局
@@ -512,12 +595,12 @@ export default function ImageDetailView({
         const top = el.scrollTop || 0;
         const delta = top - lastTop;
         if (top < 24) {
-          try { StatusBar.show().catch(() => { }); } catch (_) { }
+          try { StatusBar.show().catch(() => { }); } catch { }
         } else if (Math.abs(delta) > 6) {
           if (delta > 0) {
-            try { StatusBar.hide().catch(() => { }); } catch (_) { }
+            try { StatusBar.hide().catch(() => { }); } catch { }
           } else {
-            try { StatusBar.show().catch(() => { }); } catch (_) { }
+            try { StatusBar.show().catch(() => { }); } catch { }
           }
         }
         lastTop = top;
@@ -536,7 +619,7 @@ export default function ImageDetailView({
   return (
     <div className={`char-state-bar${className ? ` ${className}` : ''}`}>
       <div
-        className="char-state-content"
+        className={`char-state-content${wideLayout ? ' char-state-content--wide' : ''}`}
         ref={contentRef}
         onTouchStartCapture={markUserInteracted}
         onPointerDownCapture={markUserInteracted}
@@ -550,6 +633,9 @@ export default function ImageDetailView({
                 key={image?.illustId}
                 illustId={image?.illustId}
                 thumbnailUrl={image?.thumbnailUrl}
+                source={source}
+                width={image?.width || illustData?.illust?.width || 0}
+                height={image?.height || illustData?.illust?.height || 0}
                 hideInfo
                 _lazy
                 autoLoad={false}
@@ -562,20 +648,54 @@ export default function ImageDetailView({
               <div className="detail-page-stack">
                 {Array.from({ length: pageCount }, (_, p) => {
                   const imgs = illustData?.illust?.images || [];
-                  // 详情流只显示 540px 等比预览；每页都必须用「本页」的预览图。
-                  // 优先用当页缩略图底座生成 540 等比预览（同步可得，不用等详情接口），
-                  // 接口就绪后回落到当页 small 档。绝不能复用第 0 页的方形裁剪图，
+                  // 每页都必须用「本页」的预览图。绝不能复用第 0 页的方形裁剪图，
                   // 否则多图作品的非首页会保持方形、比例错误。
-                  const placeholderUrl = masonryThumbUrl(image?.thumbnailUrl || image?.mediumUrl || '', p, source)
+                  const thumbBase = image?.thumbnailUrl || image?.mediumUrl || '';
+                  // 占位图固定 540 档：由缩略图底座同步生成，不用等详情接口，秒开
+                  const placeholderUrl = masonryThumbUrl(thumbBase, p, source)
                     || imgs[p]?.previewUrl
                     || '';
+                  // 主图档位：
+                  // · pixiv 走 1200 档等比预览（master1200），原图另由 hdUrl 叠上去；
+                  // · booru 直接用原图 —— 它们的缩略图/中图是 16:9 裁剪（Wallhaven 的
+                  //   small 300×200、lg 432×243 都裁过），铺在详情页既糊又是错的比例。
+                  //   一条 post 就一张图，也不存在多页放大后的内存问题。
+                  const hd = hdUrlForPage(p);
+                  // 原图已经在手（本会话加载过 / 已保存到本地）时，master1200 那一档纯属浪费：
+                  // 原图命中缓存的读取是免费的，再拉一张 1200 只是白下一份。直接拿原图当预览，
+                  // 并把它从 hdUrl 让出去，免得同一张图渲染两层。
+                  //
+                  // 判定只在「本次挂载首次拿到该页高清源」时做一次，之后不再翻：
+                  // 原图加载完成会让 isImageLoaded 翻成 true，若跟着变，主图 src 会在眼前
+                  // 换一次（img 的 key 变化 → 重挂载 → 闪一帧 540 占位）。本次挂载内保持不变
+                  // —— 原图那一层本来就已经在显示它了。
+                  if (hd && reuseHdRef.current[p] === undefined) {
+                    reuseHdRef.current[p] = (localSrcs[p] || isImageLoaded(hd)) ? hd : '';
+                  }
+                  const reuseHd = !!reuseHdRef.current[p];
+                  // booru 的等比档：localSrcs → 中图 → 接口 previewUrl → 原图 → 缩略图底座。
+                  // 关键是别退回 thumbnailUrl 当主图 —— Wallhaven 的缩略图是固定比例裁剪
+                  // （实测每张都恒为 300×200），铺在详情页上比例直接是错的。
+                  // 手机端也用这一档（一条 post 就一张图，中图/原图的流量可接受），
+                  // pixiv 手机端仍走 540 档：那个前缀是「限制在 540×540 内」的等比缩放，不是裁剪。
+                  const booruPreview = localSrcs[p] || image?.mediumUrl
+                    || imgs[p]?.previewUrl || imgs[p]?.originalUrl || thumbBase;
+                  const previewUrl = (isBooru
+                    ? (useLargePreview
+                      ? (localSrcs[p] || image?.originalUrl || imgs[p]?.originalUrl || booruPreview)
+                      : booruPreview)
+                    : (useLargePreview
+                      ? (reuseHd ? hd : masonryThumbUrl(thumbBase, p, source, 1200))
+                      : placeholderUrl)
+                  ) || imgs[p]?.previewUrl || placeholderUrl;
                   return (
                     <DetailPageBlock
                       key={`${image.illustId}-${p}`}
                       page={p}
                       totalPages={pageCount}
                       image={image}
-                      previewUrl={placeholderUrl}
+                      previewUrl={previewUrl}
+                      hdUrl={reuseHd ? '' : hd}
                       placeholderUrl={placeholderUrl}
                       defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
                       cachedRatio={pageRatios[p]}
@@ -630,6 +750,51 @@ export default function ImageDetailView({
                 {getSource(source).label}
               </a>
             </div>
+          </div>
+
+          {/* 桌面操作条：纯图标方块钮（手机端仍用图片上的悬浮爱心 + 长按下载，这里 ≥900px 才显示）。
+              没有文字标签，语义全靠 title/aria-label；title 顺带承担「下载 3 页」这类提示 */}
+          <div className="detail-actions">
+            <LikeButton
+              cur={image}
+              onLikeSaveAll={saveAllPages}
+              totalPages={pageCount}
+              className="detail-action detail-action--fill"
+            />
+            <button
+              className="detail-action detail-action--fill"
+              onClick={handleDownloadAction}
+              disabled={actionBusy}
+              title={downloadLabel}
+              aria-label={downloadLabel}
+            >
+              {actionBusy ? <span className="detail-action-spinner" /> : (
+                <svg {...actionIconProps}>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              )}
+            </button>
+            <button className="detail-action" onClick={handleCopyLink} title="复制链接" aria-label="复制链接">
+              <svg {...actionIconProps}>
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+              </svg>
+            </button>
+            <button
+              className="detail-action"
+              onClick={() => setLightboxIndex(0)}
+              title="查看原图"
+              aria-label="查看原图"
+            >
+              <svg {...actionIconProps}>
+                <path d="M15 3h6v6" />
+                <path d="M9 21H3v-6" />
+                <path d="M21 3l-7 7" />
+                <path d="M3 21l7-7" />
+              </svg>
+            </button>
           </div>
 
           {/* Tag 展示栏：点击跳搜索 */}

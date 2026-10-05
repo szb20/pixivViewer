@@ -2,7 +2,7 @@
  * 多来源接入的自检：身份层不依赖 DOM / IndexedDB，可直接跑。
  * 用法：node scripts/check-sources.mjs
  */
-import { parseCacheFileName, getCompositeKey, qualifyId, sourceOfId, rawIdOf } from '../src/pixiv-assistant/core/utils.js';
+import { parseCacheFileName, getCompositeKey, qualifyId, sourceOfId, rawIdOf, KNOWN_SOURCES } from '../src/pixiv-assistant/core/utils.js';
 import { SOURCE_LIST, getSource, capsOf } from '../src/sources/registry.js';
 
 let failed = 0;
@@ -53,6 +53,26 @@ const hosts = SOURCE_LIST.flatMap(s => Object.keys(s.net.imgHosts));
 ok(new Set(hosts).size === hosts.length, 'imgHosts 域名互不冲突', hosts.join(','));
 ok(getSource('nope').id === 'pixiv', '未知来源兜底 pixiv');
 ok(capsOf('yande').multiPage === false && capsOf('pixiv').multiPage === true, 'caps 分流依据正确');
+
+// 5) KNOWN_SOURCES 与注册表必须严格一致。
+// 这条挡的是最阴的一类回归：注册表加了来源、词表忘了加 → sourceOfId/parseCacheFileName
+// 把该来源的 id 判回 pixiv，下载文件名、缓存恢复、点赞 key 全部错位，且不抛任何错。
+const registryIds = SOURCE_LIST.map(s => s.id).sort();
+ok(
+  JSON.stringify([...KNOWN_SOURCES].sort()) === JSON.stringify(registryIds),
+  'KNOWN_SOURCES 与 SOURCE_LIST 一致',
+  `known=[${[...KNOWN_SOURCES].sort()}] registry=[${registryIds}]`,
+);
+for (const s of SOURCE_LIST) {
+  // sourceOfId 按第一个下划线切分，来源 id 含下划线会让 rawIdOf 取到半截
+  ok(!s.id.includes('_'), `${s.id} 不得含下划线`, s.id);
+}
+// 顺带验证：每个非 pixiv 来源的 qualifier 都能原样解析回来
+for (const s of SOURCE_LIST) {
+  if (s.id === 'pixiv') continue;
+  const q = qualifyId(s.id, '42');
+  ok(sourceOfId(q) === s.id && rawIdOf(q) === '42', `${s.id} qualifier 往返`, q);
+}
 
 if (failed) { console.error(`\n${failed} 项失败`); process.exit(1); }
 console.log('OK — 身份层与来源注册表自检通过');

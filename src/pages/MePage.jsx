@@ -4,19 +4,11 @@ import FollowingPanel from '../components/panels/FollowingPanel.jsx';
 import FollowingAuthorsPanel from '../components/panels/FollowingAuthorsPanel.jsx';
 import LikedPanel from '../components/panels/LikedPanel.jsx';
 import BookmarksPanel from '../components/panels/BookmarksPanel.jsx';
-import { getSource } from '../sources/registry.js';
 import { useImageSourceId } from '../hooks/useImageSource.js';
 import { getMainScrollEl } from '../utils/scroll.js';
+import { getMeSubTabs } from '../utils/meTabs.js';
+import { useAppStore } from '../store/useAppStore.js';
 import '../styles/me.css';
-
-// caps.accountTabs 为 false 的来源（booru）没有账号态：关注/订阅/收藏都拉不到数据，
-// 只留本地数据源「喜欢」。
-const SUB_TABS = [
-  { key: 'following', label: '关注' },
-  { key: 'subscriptions', label: '订阅' },
-  { key: 'liked', label: '喜欢' },
-  { key: 'bookmarks', label: '收藏' },
-];
 
 /**
  * "我"页面：聚合 关注/喜欢/订阅 三个子面板。
@@ -25,13 +17,20 @@ const SUB_TABS = [
  * - 各子面板通过 onReportLoad 上报自己的 load（useTabFeed 返回，稳定引用）
  * - MePage 在 'me' 键上注册一个聚合刷新回调，转发给当前活跃子面板
  * - 不把 registerRefresh / refreshToken 透传给子面板，避免三面板互相覆盖或全量刷新
+ *
+ * 子页签的当前值放在 store（桌面侧边栏也要驱动它），本组件只保留
+ * 保活集合 visitedSubs 与切换动画 —— 两者都跟随 store 值派生。
  */
 export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
   const sourceId = useImageSourceId();
-  const hasAccountTabs = getSource(sourceId).caps.accountTabs !== false;
-  const tabs = hasAccountTabs ? SUB_TABS : SUB_TABS.filter(t => t.key === 'liked');
-  const [subTab, setSubTab] = useState('liked');
-  const [visitedSubs, setVisitedSubs] = useState(() => new Set(['liked']));
+  const tabs = getMeSubTabs(sourceId);
+  const rawSubTab = useAppStore(s => s.meSubTab);
+  const setMeSubTab = useAppStore(s => s.setMeSubTab);
+  // 切来源会按 key 重挂载本页，但 meSubTab 留在 store 里：booru 来源没有账号态，
+  // 若上次停在「关注」会渲染出拉不到数据的面板 —— 这里按当前来源的可用项兜底。
+  // 不把兜底值写回 store，切回 pixiv 时仍能恢复到原来的子页。
+  const subTab = tabs.some(t => t.key === rawSubTab) ? rawSubTab : tabs[0].key;
+  const [visitedSubs, setVisitedSubs] = useState(() => new Set([subTab]));
   // 子页签切换动画：旧面板淡出后再隐藏
   const [subAnim, setSubAnim] = useState(null);
   // 二级菜单显隐：下滑隐藏、上滑显示、回到顶部强制显示
@@ -39,6 +38,21 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
   const subTabRef = useRef(subTab);
   subTabRef.current = subTab;
   const panelLoadsRef = useRef({});
+
+  // 面板保活：切到过的子页签都留在 DOM 里（display:none），回来时不重新拉数据
+  useEffect(() => {
+    setVisitedSubs(v => (v.has(subTab) ? v : new Set(v).add(subTab)));
+  }, [subTab]);
+
+  // 切换动画改为监听 store 值变化 —— 这样侧边栏驱动和页内点选走的是同一条路径
+  const prevSubRef = useRef(subTab);
+  useEffect(() => {
+    if (prevSubRef.current === subTab) return;
+    setSubAnim({ from: prevSubRef.current });
+    prevSubRef.current = subTab;
+    const t = window.setTimeout(() => setSubAnim(null), 240);
+    return () => window.clearTimeout(t);
+  }, [subTab]);
 
   const reportLoad = useCallback((key, load) => {
     panelLoadsRef.current[key] = load;
@@ -92,14 +106,6 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
     };
   }, []);
 
-  const switchSubTab = (key) => {
-    if (key === subTab) return;
-    setSubAnim({ from: subTab });
-    setVisitedSubs(v => { const n = new Set(v); n.add(key); return n; });
-    setSubTab(key);
-    window.setTimeout(() => setSubAnim(null), 240);
-  };
-
   const subPaneVisible = (key) => key === subTab || (subAnim && key === subAnim.from);
   const subPaneCls = (key) => (
     subAnim && key === subAnim.from
@@ -109,7 +115,7 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
 
   return (
     <div className="page me-page">
-      <SubTabBar tabs={tabs} active={subTab} onChange={switchSubTab} hidden={!showBar} />
+      <SubTabBar tabs={tabs} active={subTab} onChange={setMeSubTab} hidden={!showBar} />
 
       <div className="me-panels">
         {visitedSubs.has('following') && (

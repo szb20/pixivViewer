@@ -1,0 +1,126 @@
+:root {
+  --bg: #0f1115;
+  --bg-panel: #16181d;
+  --bg-secondary: #1d2027;
+  --border: rgba(255, 255, 255, 0.08);
+  --text-primary: #f2f3f5;
+  --text-secondary: #a0a4ad;
+  /* 提亮灰字：#6b7080 在深底上仅 3.8:1，低于 WCAG AA；#8b91a0 约 5.6:1 */
+  --text-tertiary: #8b91a0;
+  /* 强调色（静态） */
+  --color-accent: #4f8cff;
+  --color-accent-rgb: 79, 140, 255;
+  --color-success: #4ade80;
+  --color-success-rgb: 74, 222, 128;
+  --color-danger: #ff6b6b;
+  --color-danger-rgb: 255, 107, 107;
+  --color-warning: #ffa502;
+  --color-warning-rgb: 255, 165, 2;
+  --color-info: #5b9cf5;
+  --color-info-rgb: 91, 156, 245;
+  --color-like: #ff4757;
+  --color-like-rgb: 255, 71, 87;
+  --color-r18: #e6a6fa;
+  --color-r18-rgb: 230, 166, 250;
+  /* 兼容旧引用 */
+  --accent: var(--color-accent);
+  --danger: var(--color-danger);
+  --ok: var(--color-success);
+}
+
+/* llm-chat 搬运组件的 CSS 变量别名（让 lightbox 等样式直接生效） */
+:root {
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-hover: #242833;
+  --color-bg-white: var(--bg-panel);
+  --color-border: var(--border);
+  --color-border-light: rgba(255, 255, 255, 0.1);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-primary: var(--accent);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --z-lightbox: 10000;
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-base: 13px;
+  --radius-sm: 8px;
+  /* 作品网格统一规格：间隙 / 侧边留白 / 卡片圆角（所有作品网格共用，勿在各处重复硬编码） */
+  --grid-gap: 2px;
+  --grid-pad-x: 2px;
+  --grid-radius: 8px;
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
+  /* 底部悬浮栏（TabBar）在内容区占据的高度：.app-content 的 padding-bottom、
+     .chips-bottom / .download-fab / .sub-tab-bar / .me-page 的偏移全部由它推导。
+     手机端要调整底栏几何时只改这里；桌面端把它置 0，上述位置一次性失效。 */
+  --bottom-chrome-h: calc(68px + env(safe-area-inset-bottom, 0px));
+  /* 桌面侧边栏宽度（<900px 不生效） */
+  --sidebar-w: 232px;
+  /* 灯箱媒体区高度：手机端留出底部悬浮栏的空间，桌面端没有底栏 → responsive.css 放到 100vh。
+     .lightbox-slide / .lightbox-img-wrap / .lightbox-img-full / .lightbox-img-underlay 共用。 */
+  --lightbox-media-h: 75vh;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+html,
+body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overflow: hidden;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* 消除双击缩放手势延迟，点击更跟手（灯箱内部按需覆盖为 touch-action: none） */
+button,
+.chip,
+.grid-item {
+  touch-action: manipulation;
+}
+
+/* 覆盖层靠 useOverlayFocus 用 js 聚焦（tabIndex=-1）来接住键盘焦点，
+   这不是用户主动 Tab 到的元素，不该显示聚焦环 */
+.settings-overlay:focus,
+.detail-overlay:focus,
+.author-works-overlay:focus,
+.dialog-overlay:focus {
+  outline: none;
+}
