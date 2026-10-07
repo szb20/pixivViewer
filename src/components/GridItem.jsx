@@ -41,6 +41,7 @@ export default memo(function GridItem({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [pressState, setPressState] = useState('idle');
+  const imgRef = useRef(null);
   const longPressTimerRef = useRef(null);
   const pressFeedbackTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
@@ -115,6 +116,20 @@ export default memo(function GridItem({
     setLoaded(false);
   }, [src]);
 
+  // 补挂载竞态：命中缓存的图可能在 React 收到 load 之前就已经 complete。
+  // 实测（瀑布流放大/缩小触发跨列重挂，60 项）：丢了 load 的条目能到 29 个，全部卡在
+  // opacity:0 —— 图早下完却看着永远加载不出来；而同样「先 src 后 onload」的原生
+  // new Image() 写法 150/150 都收得到，说明这是 React 托管 img 的挂载期问题。
+  // 这里在挂载/换 src 后查一次 DOM；真·未完成的图不在 complete 态，仍走 onLoad。
+  useEffect(() => {
+    const im = imgRef.current;
+    if (!im || !src) return;
+    if (!im.complete) return;
+    // complete 但拿不到尺寸 = 这张图已经失败了（缓存里的失败也走这里）
+    if (im.naturalWidth > 0) setLoaded(true);
+    else setError(true);
+  }, [src]);
+
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
   const stateCls = `${loaded ? ' is-loaded' : ''}${isLiked ? ' is-liked' : ''}${pressState === 'pressing' ? ' is-pressing' : ''}${pressState === 'confirmed' ? ' is-long-pressed' : ''}`;
@@ -149,6 +164,7 @@ export default memo(function GridItem({
     <>
       <img
         className={v.thumb}
+        ref={imgRef}
         src={src}
         alt={img.title || ''}
         loading="lazy"

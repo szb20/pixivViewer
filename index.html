@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- 所有子资源请求一律不带 Referer。
+         yande 的图床 files.yande.re 按 Referer 防盗链：异站 Referer 一律 307 跳到
+         https://yande.re/post/show?md5=... （HTML 作品页），<img> 拿到 text/html 就解码失败。
+         手机端 WebView 的源是 https://localhost（Capacitor 默认 https scheme，见
+         node_modules/@capacitor/android 的 CapConfig），于是每张跨域图都带
+         Referer: https://localhost/ —— 正好是被拒的那一类；桌面端源是 file://（不发 Referer），
+         所以同一个 URL 在桌面一直正常。
+         缩略图走 assets.yande.re，那个域不校验 Referer，所以只有详情页/灯箱的大图挂。
+         对应 electron/main.cjs 里给 i.pximg.net 补 Referer 的网络层兜底，这里是网页层的等价物。 -->
+    <meta name="referrer" content="no-referrer" />
     <title>PixivViewer</title>
   </head>
   <body>

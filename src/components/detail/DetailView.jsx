@@ -64,7 +64,7 @@ const captureScrollAnchor = () => {
  * 详情页包装 — 管理"当前作品"切换栈：
  * 相关推荐点图 → 压栈切换；返回键 → 弹栈，栈空则关闭详情页。
  */
-export default function DetailView({ image: initialImage, navContext, onClose, onExitToHome, onSearchTag, onAuthorWorks }) {
+export default function DetailView({ image: initialImage, navContext, onClose, onSearchTag, onAuthorWorks }) {
   const [image, setImage] = useState(initialImage);
   const [restoreState, setRestoreState] = useState({ top: 0, anchor: null });
   const [slideDirection, setSlideDirection] = useState(0);
@@ -336,7 +336,12 @@ export default function DetailView({ image: initialImage, navContext, onClose, o
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      <button className="glass-icon-btn detail-back-home" onClick={() => beginExit(onExitToHome)} aria-label="返回主页">
+      {/* 左上角返回钮与系统返回键共用 handleBack：相关推荐逐层弹栈，栈空后
+          从作者页来的回作者页、从列表来的回网格。这里曾单独走 exitToHome
+          （无条件清空作者页、一步回主页），于是「点箭头」和「按返回键」这两个
+          看起来一样的动作去往不同地方。
+          类名 detail-back-home 保持不变：它是 run-desktop/driver.mjs 的选择器。 */}
+      <button className="glass-icon-btn detail-back-home" onClick={handleBack} aria-label="返回">
         <BackIcon />
       </button>
       <ImageDetailView

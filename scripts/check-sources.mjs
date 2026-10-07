@@ -2,7 +2,7 @@
  * 多来源接入的自检：身份层不依赖 DOM / IndexedDB，可直接跑。
  * 用法：node scripts/check-sources.mjs
  */
-import { parseCacheFileName, getCompositeKey, qualifyId, sourceOfId, rawIdOf, KNOWN_SOURCES } from '../src/pixiv-assistant/core/utils.js';
+import { parseCacheFileName, buildCacheFileName, getCompositeKey, qualifyId, sourceOfId, rawIdOf, KNOWN_SOURCES } from '../src/pixiv-assistant/core/utils.js';
 import { SOURCE_LIST, getSource, capsOf } from '../src/sources/registry.js';
 
 let failed = 0;
@@ -27,6 +27,8 @@ const k = parseCacheFileName('konachan_42_g9_[a]_[t].gif');
 ok(k?.source === 'konachan' && k?.illustId === 'konachan_42' && k?.pageIndex === 9, 'konachan filename');
 // 标题里恰好含来源形状 → 不得误判（白名单 + 前缀必须是来源名）
 ok(parseCacheFileName('random_title_x_12_p0_[a]_[t].jpg') === null, 'title-looking name rejected');
+// 放宽 altSource 两段字符类后，白名单仍是硬门槛：来源名不在词表里一律拒绝
+ok(parseCacheFileName('notasource_216o5y_p0_[a]_[t].jpg') === null, 'unknown source prefix rejected');
 
 // 3) 撞号隔离：同号不同来源得到不同 uid，同来源得到同一 uid
 ok(getCompositeKey({ illustId: '100', _pageIndex: 0 }) === '100_0', 'pixiv composite key');
@@ -72,6 +74,36 @@ for (const s of SOURCE_LIST) {
   if (s.id === 'pixiv') continue;
   const q = qualifyId(s.id, '42');
   ok(sourceOfId(q) === s.id && rawIdOf(q) === '42', `${s.id} qualifier 往返`, q);
+}
+
+// 6) 文件名往返：全部来源走一遍 buildCacheFileName → parseCacheFileName。
+// 挡的是「解析正则只照顾了 yande/konachan 的纯数字 id」这类漂移 ——
+// konachan-net 的来源名带连字符、Wallhaven 的 id 是 6 位字母数字（216o5y），
+// 旧正则对这两类返回 null，reconcileGallery 的 `if (!parsed) continue` 会静默跳过，
+// 相册里的文件就永远回不了库（修复前线上就是这个行为）。
+const ALNUM_ID_SOURCES = { wallhaven: '216o5y' }; // 其余来源的站点 id 都是纯数字
+for (const s of SOURCE_LIST) {
+  const raw = ALNUM_ID_SOURCES[s.id] || '1269655';
+  const cases = [
+    { pageIndex: 3, authorName: 'moonian', title: 'Title', isGif: false },
+    { pageIndex: 0, authorName: '', title: '标题超长'.repeat(30), isGif: true }, // 空作者 + 触发字节截断
+  ];
+  for (const c of cases) {
+    const entity = { illustId: qualifyId(s.id, raw), source: s.id, ...c };
+    const name = buildCacheFileName(entity);
+    const back = parseCacheFileName(name);
+    ok(
+      back?.illustId === entity.illustId && back?.pageIndex === c.pageIndex && back?.isGif === c.isGif,
+      `${s.id} 文件名往返`,
+      `${name} → ${JSON.stringify(back)}`,
+    );
+    // pixiv 走老分支（无 source 键，与历史数据一致）；其余来源必须带回来源
+    ok(
+      s.id === 'pixiv' ? back?.source === undefined : back?.source === s.id,
+      `${s.id} 文件名往返带回来源`,
+      `${name} → ${JSON.stringify(back)}`,
+    );
+  }
 }
 
 if (failed) { console.error(`\n${failed} 项失败`); process.exit(1); }

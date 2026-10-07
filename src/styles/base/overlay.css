@@ -28,7 +28,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: var(--sp-5);
   animation: dialog-overlay-in 0.25s ease;
 }
 
@@ -52,7 +52,7 @@
 .dialog-panel {
   width: 100%;
   border: 1px solid rgba(var(--dialog-border, 255, 255, 255), var(--dialog-border-alpha, 0.12));
-  border-radius: var(--dialog-radius, 20px);
+  border-radius: var(--dialog-radius, var(--r-lg));
   max-width: var(--dialog-max-w, 560px);
   max-height: var(--dialog-max-h, none);
   overflow-y: var(--dialog-overflow, visible);
@@ -94,11 +94,11 @@
 }
 
 .dialog-overlay[data-variant="sheet"] .dialog-panel {
-  --dialog-radius: 16px 16px 0 0;
+  --dialog-radius: var(--r-lg) var(--r-lg) 0 0;
   --dialog-max-w: 560px;
   --dialog-max-h: none;
   --dialog-overflow: visible;
-  padding: 18px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
   animation-name: dialog-sheet-in;
 }
 
@@ -115,17 +115,17 @@
 }
 
 .dialog-overlay[data-variant="card"] .dialog-panel {
-  --dialog-radius: 20px;
+  --dialog-radius: var(--r-lg);
   --dialog-max-w: 360px;
-  padding: 32px 26px 24px;
+  padding: var(--sp-6) var(--sp-5) var(--sp-5);
   text-align: center;
 }
 
 .btn {
   flex: 1;
-  padding: 10px;
+  padding: var(--sp-2);
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
@@ -149,18 +149,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: var(--sp-4);
 }
 
 .preview-img {
   max-width: 100%;
   max-height: 78vh;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: var(--r-xs);
 }
 
 .preview-info {
-  margin-top: 12px;
+  margin-top: var(--sp-3);
   text-align: center;
 }
 
@@ -172,7 +172,7 @@
 .preview-author {
   font-size: 12px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin-top: var(--sp-1);
 }
 
 .preview-close {
@@ -197,7 +197,7 @@
   z-index: 300;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
   align-items: center;
   pointer-events: none;
 }
@@ -210,8 +210,8 @@
 }
 
 .toast {
-  padding: 9px 16px;
-  border-radius: 20px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-lg);
   color: var(--text-primary);
   font-size: 13px;
   animation: toast-in 0.2s ease;

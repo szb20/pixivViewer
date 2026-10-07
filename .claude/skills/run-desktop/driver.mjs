@@ -726,6 +726,117 @@ const SCENARIOS = {
     await shot(cdp, '50-lightbox');
   },
 
+  /**
+   * 网格加载中放大窗口 —— 复现「缩略图永远停在加载中」。
+   * 用法: driver.mjs gridResize [来源短名，默认 Wallhaven]
+   */
+  async gridResize(cdp) {
+    const want = (scenarioArg || 'Wallhaven').trim();
+    await sleep(4500);
+    say(`切来源「${want}」-> ${await evaluate(cdp, `(() => {
+      const el = [...document.querySelectorAll('.side-nav-item')].find(b => b.textContent.trim() === ${JSON.stringify(want)});
+      if (!el) return 'NOT_FOUND';
+      el.click(); return 'OK';
+    })()`)}`);
+
+    // 网格刚出来、图还在下的时候放大（这是触发条件）。
+    // 逐步放大而不是一步到位：真实「最大化」是连续的窗口动画，ResizeObserver 会连发多次，
+    // colCount 反复变化 → 条目反复跨列重挂 → 图片请求被反复取消/重发。
+    await sleep(700);
+    await shot(cdp, '59-grid-resize-before');
+    for (let w = 1240; w <= 1600; w += 60) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: 950, deviceScaleFactor: 1, mobile: false });
+      await sleep(90);
+    }
+    say('已逐步放大视口 1200x800 → 1600x950');
+
+    await sleep(9000);
+    say('放大 9s 后:', await evaluate(cdp, `JSON.stringify((() => {
+      const items = [...document.querySelectorAll('.grid-item')];
+      const imgs = [...items].map(it => ({ it, im: it.querySelector('img.grid-thumb') })).filter(x => x.im);
+      const rows = imgs.map(({ it, im }) => {
+        const r = im.getBoundingClientRect();
+        return {
+          src: im.src.replace(/^https?:\\/\\//, '').slice(0, 52),
+          done: im.complete, nat: im.naturalWidth,
+          opacity: getComputedStyle(im).opacity,
+          loadedCls: it.classList.contains('is-loaded'),
+          inView: r.bottom > 0 && r.top < window.innerHeight && r.width > 0,
+        };
+      });
+      const inView = rows.filter(r => r.inView);
+      return {
+        layout: document.querySelector('.grid--masonry') ? 'masonry' : 'grid',
+        cols: getComputedStyle(document.querySelector('.grid--masonry') || document.body).getPropertyValue('--masonry-cols'),
+        total: rows.length,
+        isLoadedCls: rows.filter(r => r.loadedCls).length,
+        // 关键指标：图已经下完（complete）但 is-loaded 没打上 → opacity:0，看起来永远没加载
+        invisibleButDone: rows.filter(r => r.done && r.nat > 0 && !r.loadedCls).length,
+        inView: inView.length,
+        inViewVisible: inView.filter(r => Number(r.opacity) > 0).length,
+        sample: rows.slice(0, 8),
+      };
+    })())`));
+    await shot(cdp, '60-grid-resize-big');
+
+    // 缩回后的健康度探针：invisibleButDone = 图已下完（complete）却没打上 is-loaded
+    // → .grid-thumb 停在 opacity:0，看起来「永远加载不出来」。inViewInvisible 是其中
+    // 已经落在视口内的那批，即用户真正能看见的症状。
+    const probeShrink = `(() => {
+      const items = [...document.querySelectorAll('.grid-item')];
+      const withImg = items.filter(it => it.querySelector('img.grid-thumb'));
+      const inView = withImg.filter(it => { const r = it.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight && r.width > 0; });
+      const done = it => { const im = it.querySelector('img.grid-thumb'); return im.complete && im.naturalWidth > 0; };
+      return JSON.stringify({
+        items: items.length,
+        isLoadedCls: withImg.filter(it => it.classList.contains('is-loaded')).length,
+        invisibleButDone: withImg.filter(it => done(it) && !it.classList.contains('is-loaded')).length,
+        inViewInvisible: inView.filter(it => done(it) && !it.classList.contains('is-loaded')).length,
+        pendingInView: inView.filter(it => !it.querySelector('img.grid-thumb').complete).length,
+        heapMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : -1,
+      });
+    })()`;
+
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 800, deviceScaleFactor: 1, mobile: false });
+    // 反复放大/缩回：每次 ResizeObserver → colCount 变化 → 条目跨列重挂，
+    // 每挂一次都是一次「缓存命中图撞上 onLoad」的抽签，单次循环太少会漏判。
+    let worst = { invisibleButDone: 0, inViewInvisible: 0 };
+    for (let round = 1; round <= 4; round++) {
+      for (let w = 1240; w <= 1600; w += 90) {
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: w, height: 950, deviceScaleFactor: 1, mobile: false });
+        await sleep(80);
+      }
+      await sleep(1200);
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1200, height: 800, deviceScaleFactor: 1, mobile: false });
+      await sleep(1200);
+      const st = JSON.parse(await evaluate(cdp, probeShrink));
+      if (st.invisibleButDone > worst.invisibleButDone || st.inViewInvisible > worst.inViewInvisible) worst = st;
+      say(`第 ${round} 轮: ${JSON.stringify(st)}`);
+    }
+    say('四轮最差:', JSON.stringify(worst));
+    // 判定根因：这些「下完了但没打 is-loaded」的条目，是不是根本没收到 load 事件？
+    // 做法：把 src 原样重设一次（会强制走一遍加载流程并重新派发 load）。
+    // 若重设后 is-loaded 立刻出现 → 图片本身没问题，是 React 的 onLoad 在挂载时被跳过了。
+    const srcReset = await evaluate(cdp, `(() => {
+      const it = [...document.querySelectorAll('.grid-item')].find(el => {
+        const im = el.querySelector('img.grid-thumb');
+        return im && im.complete && im.naturalWidth > 0 && !el.classList.contains('is-loaded');
+      });
+      if (!it) return 'NONE';
+      const im = it.querySelector('img.grid-thumb');
+      const before = { opacity: getComputedStyle(im).opacity, cls: it.classList.contains('is-loaded') };
+      im.src = im.src; // 同值重设也会重跑一次加载算法并重新派发 load（不用置空，避免误触发 onError）
+      return JSON.stringify(before);
+    })()`);
+    await sleep(1500);
+    say('src 重设诊断: 前 =', srcReset, '| 后 =', await evaluate(cdp, `(() => {
+      const it = [...document.querySelectorAll('.grid-item')].find(el => el.querySelector('img.grid-thumb'));
+      const done = [...document.querySelectorAll('.grid-item')].filter(el => { const im = el.querySelector('img.grid-thumb'); return im && im.complete && im.naturalWidth > 0; });
+      return JSON.stringify({ visibleDone: done.filter(el => el.classList.contains('is-loaded')).length, totalDone: done.length });
+    })()`));
+    await shot(cdp, '61-grid-resize-back');
+  },
+
   /** 在渲染进程求值（支持 async IIFE，会自动 await） */
   async eval(cdp) {
     if (!scenarioArg) throw new Error('用法: driver.mjs eval "<js 表达式>"');

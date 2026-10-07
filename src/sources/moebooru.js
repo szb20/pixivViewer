@@ -38,7 +38,11 @@ const POST_URL = {
   yande: (id) => `https://yande.re/post/show/${id}`,
   konachan: (id) => `https://konachan.com/post/show/${id}`,
   'konachan-net': (id) => `https://konachan.net/post/show/${id}`,
+  sakugabooru: (id) => `https://www.sakugabooru.com/post/show/${id}`,
 };
+
+/** 静态图片扩展名 —— sakugabooru 一类视频站混着 mp4/webm 条目，图片流里只保留静态图 */
+const STATIC_EXTS = /\.(jpe?g|png|gif|webp|avif)$/i;
 
 /**
  * 一条 Moebooru post → 应用统一条目。
@@ -49,6 +53,9 @@ const POST_URL = {
 function mapPost(post, sourceId) {
   const rawId = String(post?.id ?? '');
   if (!rawId) return null;
+  const fileUrl = post.file_url || '';
+  // sakugabooru 是作画截图站，一半条目是 mp4/webm（本应用按静态图渲染，点开必裂）——直接丢弃
+  if (fileUrl && !STATIC_EXTS.test(fileUrl.split('?')[0])) return null;
   const tags = String(post.tags || '').split(/\s+/).filter(Boolean);
   // 无标题字段：首个 tag 通常是角色/作品名，作标题比留空有用（文件名与详情页标题都用它）
   const title = tags[0] || '';
@@ -129,11 +136,12 @@ export function createMoebooruSource(def) {
 
     /**
      * 推荐流 — 近期高分：默认序（新→旧）+ score:>=N，**不用 order:score**（见 FEED_MIN_SCORE）。
+     * 阈值可按源覆盖（def.feedMinScore）：sakugabooru 的投票文化与壁纸站不同，20 会筛成空流。
      * @returns {Promise<{illusts: object[], message?: string}>}
      */
     async feed({ page = 1, limit = 20, safeOnly = false } = {}) {
       try {
-        let tags = `score:>=${FEED_MIN_SCORE}`;
+        let tags = `score:>=${def.feedMinScore ?? FEED_MIN_SCORE}`;
         if (safeOnly) tags += ' rating:safe';
         const posts = await listPosts(tags, { page, limit });
         return { illusts: posts.map(p => mapPost(p, sourceId)).filter(Boolean) };

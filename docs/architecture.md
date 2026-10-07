@@ -13,7 +13,7 @@
 ├─────────────────────────────────────────────────┤
 │                  API Layer                       │
 │   api/pixiv.js (传输适配)                         │
-│   api/gif.js (动图下载)                           │
+│   api/ugoira/ (动图下载模块群)                    │
 │   api/index.js (统一保存入口)                     │
 ├─────────────────────────────────────────────────┤
 │               Business Logic Layer                │
@@ -109,8 +109,16 @@ main.jsx ── <PixivCacheProvider>（2 个 context：pixivCache 读写层 / li
 ```
 api/
 ├── pixiv.js      ← 传输适配层（dev fetch / prod CapacitorHttp）
-├── gif.js        ← 动图下载链路（ZIP → 解帧 → GIF 编码）
-└── index.js      ← 统一保存入口（saveItem 动图/静图分发）
+├── transport.js  ← 三通道传输工厂（dev / desktop / prod）
+├── ugoira/       ← 动图加载模块群（只管「看」，保存链路在存储层）
+│   ├── index.js        ← fetchUgoiraFrames 编排（缓存→磁盘→网络）
+│   ├── framesCache.js  ← 帧内存 LRU（blob URL 回收）
+│   ├── meta.js         ← ugoira 元数据查询
+│   ├── zipDownload.js  ← ZIP 流式/缓冲下载
+│   ├── unzip.js        ← fflate 解帧（流式 + 整包）
+│   ├── zipDiskCache.js ← ZIP 磁盘缓存（LRU + 无损副本备份）
+│   └── gifEncoder.js   ← gifenc 编码
+└── index.js      ← 统一保存入口（saveItem → storageFacade 透传）
        │
        ▼
 pixiv-assistant/core/pixivApi.js  ← API 工厂（纯逻辑，无平台依赖）
@@ -136,20 +144,21 @@ pixiv-assistant/core/pixivApi.js  ← API 工厂（纯逻辑，无平台依赖�
 └──────────────────────────────────────────────┘
 ```
 
-#### 动图下载（gif.js）
+#### 动图下载（api/ugoira/）
 
 ```
-fetchUgoiraFrames(illustId, onProgress)
-  → /ajax/illust/{id}/ugoira_meta（取元数据）
-  → /pixiv-zip/（代理下载 ZIP）
-  → JSZip 解压 → 每帧生成 blob URL
+fetchUgoiraFrames(illustId, onProgress)          ← ugoira/index.js 编排
+  → 内存帧 LRU（framesCache） → 磁盘 ZIP 缓存（zipDiskCache）
+  → /ajax/illust/{id}/ugoira_meta（meta.js，自建 transport 实例防循环依赖）
+  → ZIP 下载（zipDownload：prod 流式边下边解 / dev·回退缓冲整包）
+  → fflate 解帧（unzip.js） → 每帧生成 blob URL
   → return { frames: [{ path, delay }], meta }
 
-saveGifToAlbum(item, onProgress)
+动图保存（storageService._saveGifFromNetwork / _doSaveGif）
   → fetchUgoiraFrames（取帧）
-  → Canvas 逐帧取像素数据
+  → Canvas 逐帧取像素数据（gifEncoder.js）
   → gifenc 编码（共享调色板）
-  → 写文件 + 元数据到 IndexedDB
+  → 导出系统相册 + 元数据落库（与静图同走 storageFacade 门面去重）
 ```
 
 ---
@@ -393,7 +402,7 @@ DetailPageBlock      → IntersectionObserver 进入视口
 | ~~**StorageFacade 混入 Toast**~~ | ✅ 已解耦：Toast 移至 `utils/storageFeedback.js`，UI 层按返回值提示；`toggleLike` 事件广播归 `LightboxActions` |
 | ~~**pixivCache 扁平状态**~~ | ✅ 已收敛：状态移入 `PixivCacheProvider`（读写层 / likedSet 两个 context），详情链路不再逐层穿透；Set 结构不变时复用引用 → 无关变化不触发网格重渲染 |
 | ~~**window.api 全局对象**~~ | ✅ 已收敛：所有消费方改为直接 import（`pixivApi` / `storageFacade` / `fetchUgoiraFrames` / `saveItem`），全局对象已删除 |
-| **动图/静图保存分流** | ⏳ 待办：`saveFromNetwork` 返回 `gif_not_supported`，调用方再转 `saveGifToAlbum`，流程不够内聚 |
+| ~~**动图/静图保存分流**~~ | ✅ 已收敛：823 行 `api/gif.js` 拆为 `api/ugoira/` 七模块（只管「看」），保存链路并入 `storageService`（`_saveGifFromNetwork`），动图/静图在 `saveFromNetwork` 入口分流、共用门面去重；重复的 getCookie/字节工具/文件名生成已收口，JSZip 依赖移除（fflate 整包喂入覆盖） |
 | **FileStore cached/saved 同目录** | ⏳ 待办：`_resolveDir` 对 cached 和 saved 返回同一路径，状态分离失去物理意义（涉及存量数据迁移） |
 | **Tab 页面重复模式** | ✅ 部分解决：Discover/Bookmarks/Search 已收敛到 `useTabFeed`；Ranking 因分档/竞态守卫保留原实现 |
 | **GifPlayer/UgoiraPlayer 重复** | ✅ 已合并：共享 `FrameAnimPlayer`，两组件为薄包装 |
@@ -449,5 +458,5 @@ App.jsx
 4. **StorageFacade** 作为 UI 门面隔离 UI 和存储层
 5. **TransitionEngine** 的 Saga 模式是亮点，保证数据一致性
 
-整体架构清晰，分层合理。Tab 页重复骨架与动图播放器已收敛，主要剩余优化空间在
-**FileStore 目录物理分离**与 **动图/静图保存分流**上。
+整体架构清晰，分层合理。Tab 页重复骨架、动图播放器与动图保存链路均已收敛，
+主要剩余优化空间在 **FileStore 目录物理分离**上。

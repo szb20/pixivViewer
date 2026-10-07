@@ -48,16 +48,28 @@
     --bottom-chrome-h: 0px;
     /* 灯箱媒体区同理：没有底栏要避让，直接铺满窗口高度（手机端是 75vh） */
     --lightbox-media-h: 100vh;
+    /* 网格缝与左右留白：手机的 2px 是给窄屏贴边瀑布流的，桌面瓦片大了之后
+       那个缝等于没缝，整屏图糊成一片。桌面给正常画廊留白。
+       网格规格只有 grid.css 顶部那三处引用，改这里即全站生效。 */
+    --grid-gap: 12px;
+    --grid-pad-x: 12px;
+    /* 详情页主图的尺寸上限（只在桌面定义 —— 1200 档预览只有桌面在用）。
+       高度按「一屏看全」收，和灯箱同一条规则，只是再让出媒体列自己的上下留白；
+       宽度最多窗口的 70%，且不超过 1200（master1200 的原生宽度，再宽就是放大）。
+       引用处见 detail.css 桌面块里的 .image-detail-hero / --flow.is-loaded。 */
+    --detail-media-h: calc(var(--lightbox-media-h) - var(--sp-4) * 2);
+    --detail-media-max-w: min(1200px, 70vw);
+    /* 桌面滚动条在内容区右侧占的宽度。**实测值**：Chromium 下 `scrollbar-width: thin`
+       （见下面的滚动条块）优先于 `::-webkit-scrollbar` 的声明宽度，1184px 宽的窗口下实占 11px。
+       搜索页顶部渐隐遮罩（search.css）按它让开这一段：遮罩压在内容之上，
+       若盖到滚动条上，滚动条顶端会被整段吃掉。 */
+    --scrollbar-w: 11px;
   }
 
   .app {
     max-width: none;
     /* 行布局：.side-nav | .app-content */
     flex-direction: row;
-  }
-
-  .app::before {
-    max-width: none;
   }
 
   .side-nav {
@@ -76,9 +88,8 @@
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 
-  /* 排行榜筛选条与来源切换都已移入侧边栏，桌面端不再需要这两条浮动栏 */
-  .chips-bottom,
-  .chips--top {
+  /* 排行榜筛选条已移入侧边栏，桌面端不再需要这条浮动栏 */
+  .chips-bottom {
     display: none;
   }
 }
@@ -100,8 +111,8 @@
 
   *::-webkit-scrollbar {
     display: block !important;
-    width: 10px !important;
-    height: 10px !important;
+    width: var(--scrollbar-w) !important;
+    height: var(--scrollbar-w) !important;
   }
 
   *::-webkit-scrollbar-track {
@@ -110,7 +121,7 @@
 
   *::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.14);
-    border-radius: 6px;
+    border-radius: var(--r-sm);
     border: 2px solid transparent;
     background-clip: padding-box;
   }
@@ -173,10 +184,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app::before {
-    animation: none;
-  }
-
   .tab-bar,
   .grid-item,
   .grid-thumb,

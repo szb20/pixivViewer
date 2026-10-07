@@ -8,12 +8,12 @@
   --dialog-bg: 22, 25, 32;
   --dialog-alpha: 0.44;
   --dialog-blur: 20px;
-  --dialog-radius: 28px;
+  --dialog-radius: var(--r-xl);
   --dialog-border-alpha: 0.12;
   --dialog-max-w: 480px;
   --dialog-max-h: 78vh;
   --dialog-overflow: auto;
-  padding: 16px 18px 20px;
+  padding: var(--sp-4) var(--sp-4) var(--sp-4);
   text-align: left;
 }
 
@@ -64,12 +64,13 @@
 }
 
 .download-fab-badge {
+  font-variant-numeric: tabular-nums;
   position: absolute;
   top: -4px;
   right: -4px;
   min-width: 18px;
   height: 18px;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
   border-radius: 999px;
   background: rgba(15, 17, 21, 0.66);
   backdrop-filter: blur(10px) saturate(160%);
@@ -88,15 +89,15 @@
 .download-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .download-empty {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
   text-align: center;
-  padding: 40px 0;
+  padding: var(--sp-6) 0;
   color: rgba(255, 255, 255, 0.4);
   font-size: 14px;
 }
@@ -110,25 +111,26 @@
 .download-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .download-group + .download-group {
-  margin-top: 10px;
+  margin-top: var(--sp-2);
 }
 
 .download-group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
+  gap: var(--sp-2);
+  padding: 2px var(--sp-1);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-tertiary);
 }
 
 .download-group-count {
-  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--sp-2);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   font-size: 11px;
@@ -141,10 +143,10 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   min-height: 44px;
-  padding: 0 12px;
-  border-radius: 24px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-xl);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -160,6 +162,7 @@
 }
 
 .download-row-status {
+  font-variant-numeric: tabular-nums;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -200,7 +203,7 @@
 
 .download-row-retry {
   flex: none;
-  padding: 4px 14px;
+  padding: var(--sp-1) var(--sp-3);
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.10);
@@ -208,7 +211,7 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: background var(--t-fast) ease, border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
 }
 
 .download-row-retry:hover {
@@ -241,8 +244,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
-  padding: 0 4px;
+  margin-bottom: var(--sp-2);
+  padding: 0 var(--sp-1);
 }
 
 .download-head-title {
@@ -259,18 +262,19 @@
 }
 
 .download-head-summary {
+  font-variant-numeric: tabular-nums;
   font-size: 12px;
   color: var(--text-tertiary);
 }
 
 .download-head-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
   flex-shrink: 0;
 }
 
 .download-head-btn {
-  padding: 3px 10px;
+  padding: 3px var(--sp-2);
   border: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -278,7 +282,7 @@
   font-family: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color var(--t-fast) ease, background var(--t-fast) ease;
 }
 
 .download-head-btn:hover {
@@ -315,11 +319,12 @@
 
 .download-ring-fill {
   stroke: #fff;
-  transition: stroke-dashoffset 0.25s ease;
+  transition: stroke-dashoffset var(--t-slow) ease;
   filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
 }
 
 .download-ring-pct {
+  font-variant-numeric: tabular-nums;
   position: absolute;
   font-size: 11px;
   font-weight: 700;

@@ -17,7 +17,7 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createLogger } from '../utils/logger.js';
-import { fetchUgoiraFrames, getCachedFrames, clearFrameCache } from '../api/gif.js';
+import { fetchUgoiraFrames, getCachedFrames, clearFrameCache } from '../api/ugoira/index.js';
 import { masonryThumbUrl } from '../utils/imageUrl.js';
 
 const log = createLogger('FrameAnimPlayer');
@@ -84,6 +84,10 @@ export default function FrameAnimPlayer({
   capWidthByCanvas = true,
   clearCacheOnError = true,
   cssPrefix = 'ugoira',
+  // 尺寸交给外层 CSS（详情页桌面端用）：JS 不再写死像素宽高，只留「撑满容器」，
+  // 由 CSS 的 max-width / max-height 收上限 —— canvas 是 replaced element，
+  // 两条上限一起收时按比例缩，盒子正好贴合画面，不会出现「框比图大」的留白。
+  cssSized = false,
 }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -412,6 +416,23 @@ export default function FrameAnimPlayer({
     displayHeight = maxH;
     displayWidth = Math.round(maxH / ratio);
   }
+  // cssSized：宽度撑满容器，上限交给 CSS（内联 max-width 会盖掉外层的上限规则，
+  // 所以这里不能写 maxWidth）；盒子尺寸交给 canvas 自身（见上面的说明）
+  const playerStyle = cssSized
+    ? { width: '100%', ...style }
+    : { width: displayWidth, maxWidth: '100%', ...style };
+  // margin auto：canvas-wrap 是 player 的块级子元素，默认靠左；player 容器常被调用方
+  // 的 style 覆盖成 100% 宽（灯箱），不加居中就会在宽容器里偏左、右侧留白。
+  // cssSized（详情页桌面端）时 boxStyle 为 undefined，居中交给 CSS 的 margin:0 auto。
+  const boxStyle = cssSized
+    ? undefined
+    : { width: displayWidth, height: displayHeight, margin: '0 auto' };
+  const frameStyle = cssSized ? undefined : { width: '100%', height: '100%', objectFit: 'contain' };
+  // 兜底图与 canvas 叠在同一格（默认两者都是 100% 高、由 wrap 的 overflow 裁掉下面那个）。
+  // cssSized 下 wrap 是 fit-content，不叠的话两个块会上下排、把盒子撑成两倍高。
+  const fallbackStyle = cssSized
+    ? { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }
+    : frameStyle;
 
   // 已有 blob URL（网格已加载）→ 直接用原生 <img> 播放，无需 Canvas 重载
   if (src && src.startsWith('blob:')) {
@@ -433,7 +454,7 @@ export default function FrameAnimPlayer({
     <div
       ref={containerRef}
       className={`${cssPrefix}-player ${playing ? 'playing' : ''} ${loaded ? 'loaded' : 'loading'} ${compact ? 'compact' : ''} ${className}`}
-      style={{ width: displayWidth, maxWidth: '100%', ...style }}
+      style={playerStyle}
       onClick={clickable ? (e) => {
         e.stopPropagation();
         if (loaded) togglePlay(e); else loadFrames();
@@ -450,7 +471,7 @@ export default function FrameAnimPlayer({
         }
       } : undefined}
     >
-      <div className={`${cssPrefix}-canvas-wrap`} style={{ width: displayWidth, height: displayHeight }}>
+      <div className={`${cssPrefix}-canvas-wrap`} style={boxStyle}>
         {/* 帧加载前的兜底图。两个前提缺一不可，否则宁可空着（用户明确要的行为）：
             ① 同比例 —— Pixiv 的 thumbnailUrl 是 250×250 方形裁剪图，直接铺上去会既裁又糊；
             ② 分辨率够 —— 桌面端这块区域能到 700px+，250px 的图拉上去就是一团糊。
@@ -461,7 +482,7 @@ export default function FrameAnimPlayer({
             src={thumbSrc}
             alt=""
             className={`${cssPrefix}-thumb-fallback`}
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            style={fallbackStyle}
             onLoad={(e) => {
               const el = e.currentTarget;
               const box = el.getBoundingClientRect();
@@ -487,7 +508,7 @@ export default function FrameAnimPlayer({
           ref={canvasRef}
           width={canvasSize.width || displayWidth}
           height={canvasSize.height || displayHeight}
-          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          style={frameStyle}
           className={`${cssPrefix}-canvas`}
         />
 

@@ -314,51 +314,65 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
-      {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
+      {!feed.loading && feed.appendError && (
+        <div className="hint hint--error" onClick={feed.retryAppend} role="button">
+          加载失败，点击重试
+        </div>
+      )}
+      {!feed.loading && !feed.appendError && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
 
       {portalTarget && createPortal(
-        <form
-          ref={barRef}
-          className={`search-bar search-bar--top${hideBar ? ' search-bar--hidden' : ''}`}
-          style={{ display: barVisible ? 'flex' : 'none' }}
-          onSubmit={submit}
-        >
-          {showBack && (
-            <button
-              type="button"
-              className="search-back"
-              aria-label="返回"
-              onClick={() => setActiveTab(searchReturnTab)}
-            >
-              <BackIcon className="search-back-icon" size={18} />
-            </button>
-          )}
-          <input
-            ref={inputRef}
-            className="search-input"
-            type="text"
-            value={query}
-            placeholder="标签 / 作品ID"
-            enterKeyHint="search"
-            onFocus={() => { setSearchFocused(true); setHideBar(false); }}
-            onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
-            onChange={e => setQuery(e.target.value)}
+        <>
+          {/* 顶部渐隐遮罩（仅桌面，样式见 search.css）：桌面胶囊是实底，
+              网格滚到视口顶会被视口边缘硬切出一条直线，用这层渐变把切口化开。
+              显隐跟随胶囊 —— 否则胶囊收起时，顶上会留一条没来由的暗带。 */}
+          <div
+            className={`search-fade${barVisible ? '' : ' search-fade--hidden'}`}
+            aria-hidden="true"
           />
-          <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
-            {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
-          </button>
-          {/* 最近搜索下拉：按下时不夺焦点，否则 120ms 的失焦延迟会先把面板收掉，慢点击点不中 */}
-          {showHistoryDropdown && (
-            <HistoryPanel
-              variant="dropdown"
-              onMouseDown={e => e.preventDefault()}
-              history={history}
-              onPick={performSearch}
-              onRemove={removeHistory}
-              onClear={clearHistory}
+          <form
+            ref={barRef}
+            className={`search-bar search-bar--top${hideBar ? ' search-bar--hidden' : ''}`}
+            style={{ display: barVisible ? 'flex' : 'none' }}
+            onSubmit={submit}
+          >
+            {showBack && (
+              <button
+                type="button"
+                className="search-back"
+                aria-label="返回"
+                onClick={() => setActiveTab(searchReturnTab)}
+              >
+                <BackIcon className="search-back-icon" size={18} />
+              </button>
+            )}
+            <input
+              ref={inputRef}
+              className="search-input"
+              type="text"
+              value={query}
+              placeholder="标签 / 作品ID"
+              enterKeyHint="search"
+              onFocus={() => { setSearchFocused(true); setHideBar(false); }}
+              onBlur={() => window.setTimeout(() => setSearchFocused(false), 120)}
+              onChange={e => setQuery(e.target.value)}
             />
-          )}
-        </form>,
+            <button className="search-submit" type="submit" disabled={feed.loading} aria-label="搜索">
+              {feed.loading ? <span className="search-submit-spinner" /> : <SearchIcon className="search-submit-icon" />}
+            </button>
+            {/* 最近搜索下拉：按下时不夺焦点，否则 120ms 的失焦延迟会先把面板收掉，慢点击点不中 */}
+            {showHistoryDropdown && (
+              <HistoryPanel
+                variant="dropdown"
+                onMouseDown={e => e.preventDefault()}
+                history={history}
+                onPick={performSearch}
+                onRemove={removeHistory}
+                onClear={clearHistory}
+              />
+            )}
+          </form>
+        </>,
         portalTarget
       )}
     </div>

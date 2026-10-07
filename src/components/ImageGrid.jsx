@@ -5,13 +5,13 @@ import { buildLikedIllustIdSet } from '../utils/worksState.js';
 import { hiddenWorks, useHiddenWorks } from '../utils/hiddenWorks.js';
 import { useGridLikeToggle } from '../hooks/useGridLikeToggle.js';
 import { useGridLayout } from '../hooks/useGridLayout.js';
+import { getSource } from '../sources/registry.js';
 import { showToast } from '../utils/toast.js';
 
 /* ===== 推荐页瀑布流：按真实宽高比排双列，无尺寸时用稳定的伪随机比例兜底 ===== */
 const MASONRY_RATIOS = [1, 4 / 5, 3 / 4, 1, 4 / 5, 3 / 4, 2 / 3, 1];
-// 高宽比 h/w >= 1：卡片只允许竖图/方图（w/h <= 1），横图一律钳成方图
-const RATIO_MIN = 0.5; // 最极端竖图：高 = 2×宽
-const RATIO_MAX = 1;   // 上限 1：不允许横图
+// 横图统一钳 1:1（放开横图后横向卡片过小，用户回退）；竖图范围由来源注册表的 ratioRange 决定：
+// pixiv 保持竖/方，图库/壁纸站允许更窄的竖幅。
 
 function clampRatio(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
@@ -28,8 +28,9 @@ function getCardRatio(img) {
   const w = Number(img?.width) || 0;
   const h = Number(img?.height) || 0;
   const r = w > 0 && h > 0 ? w / h : fallbackRatio(img?.illustId);
-  // 高宽比 h/w >= 1：只允许竖图/方图（w/h <= 1），横图一律钳成方图
-  return clampRatio(r, RATIO_MIN, RATIO_MAX);
+  // pixiv 条目没有 source 字段，getSource 兜底到 pixiv 的竖图范围
+  const { min, max } = getSource(img?.source).ratioRange || { min: 0.5, max: 1 };
+  return clampRatio(r, min, max);
 }
 
 const MIN_COL_WIDTH = 250;

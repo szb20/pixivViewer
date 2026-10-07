@@ -7,6 +7,7 @@ import { createMoebooruSource } from './moebooru.js';
 import { createDanbooruSource } from './danbooru.js';
 import { createGelbooruSource } from './gelbooru.js';
 import { createWallhavenSource } from './wallhaven.js';
+import { createZerochanSource } from './zerochan.js';
 
 /** kind → 适配器工厂。新增协议只需在这里补一行 + 在 registry 里写 kind */
 const FACTORIES = {
@@ -14,6 +15,7 @@ const FACTORIES = {
   danbooru: createDanbooruSource,
   gelbooru: createGelbooruSource,
   wallhaven: createWallhavenSource,
+  zerochan: createZerochanSource,
 };
 
 /** 单例缓存：每个来源一个适配器实例（跨渲染保持会话内状态，也避免重复建 transport） */

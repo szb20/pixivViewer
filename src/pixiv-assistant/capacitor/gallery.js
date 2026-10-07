@@ -3,7 +3,7 @@
  * 尽力而为：失败只记日志，不影响应用内保存主流程。
  *
  * 桌面（Electron 壳）：无 MediaStore，改由 window.desktopProxy.saveFile 弹系统
- * 保存对话框写文件（main 进程 IPC），保持 FileStore/gif.js 调用点不变。
+ * 保存对话框写文件（main 进程 IPC），保持 FileStore/ugoira 调用点不变。
  */
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';

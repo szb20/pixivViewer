@@ -27,8 +27,8 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: calc(env(safe-area-inset-top, 0px) + 5px) 12px 5px;
+  gap: var(--sp-2);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--sp-1)) var(--sp-3) var(--sp-1);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(12px);
@@ -42,7 +42,7 @@
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 var(--sp-2);
 }
 
 .author-works-title {
@@ -84,7 +84,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 24px;
+  padding-bottom: var(--sp-5);
   scrollbar-width: none;
 }
 
@@ -177,7 +177,7 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
-  padding: 12px 6px 4px;
+  padding: var(--sp-3) var(--sp-2) var(--sp-1);
   letter-spacing: 0.3px;
 }
 
@@ -226,9 +226,9 @@
 
 /* ---- 标题 & 作者 ---- */
 .image-detail-meta {
-  margin: 12px 10px 0;
-  padding: 14px 14px 12px;
-  border-radius: 18px;
+  margin: var(--sp-3) var(--sp-2) 0;
+  padding: var(--sp-3) var(--sp-3) var(--sp-3);
+  border-radius: var(--r-lg);
   background: rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(14px) saturate(145%);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -240,7 +240,7 @@
 .image-detail-title {
   font-size: 16px;
   font-weight: 600;
-  margin: 0 0 6px;
+  margin: 0 0 var(--sp-2);
   color: var(--text-primary);
   line-height: 1.35;
 }
@@ -248,7 +248,7 @@
 .image-detail-author-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
 }
 
 .image-detail-author {
@@ -258,7 +258,7 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   flex: 1;
   min-width: 0;
 }
@@ -277,7 +277,7 @@
 .image-detail-author-sub {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
   margin-top: 1px;
 }
 
@@ -310,7 +310,7 @@
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   cursor: pointer;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: opacity var(--t-fast) ease, background var(--t-fast) ease;
   z-index: 1;
 }
 
@@ -370,13 +370,13 @@
 .image-detail-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 10px 20px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-4);
 }
 
 .image-detail-tag {
-  padding: 3px 10px;
-  border-radius: 12px;
+  padding: 3px var(--sp-2);
+  border-radius: var(--r-md);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(10px) saturate(140%);
@@ -398,7 +398,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 6px 16px;
+  padding: var(--sp-2) var(--sp-4);
   border-bottom: 1px solid var(--border);
   background: var(--bg-panel);
   min-height: 44px;
@@ -471,6 +471,15 @@
 
 .image-detail-hero {
   width: 100%;
+  /* 占位框的像素宽上限：预览图自己有多宽就多宽（--hero-w 由 DetailPageBlock 按档位算）。
+     预览档位是「长边封顶」的等比图，竖图的实际宽度远小于上限（1200 档下的
+     810×1200 只有 810 宽）。不按它收，占位框会先铺到媒体列宽，图到了再缩回自身宽度
+     —— 就是打开作品时那一下「尺寸突变」。加载完成后由 :has() 收紧到贴合图片，
+     两边取的是同一个宽度，所以不再有第二段尺寸。 */
+  max-width: var(--hero-w, 100%);
+  /* 收窄后要和加载完成态一样居中（桌面块与 :has() 各有一次 auto，这里先给上，
+     免得窄图在加载前后左右横跳） */
+  margin: 0 auto;
   position: relative;
   cursor: pointer;
   background: rgba(255, 255, 255, 0.022);
@@ -562,7 +571,7 @@
   z-index: 2;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  transition: opacity var(--t-slow) ease;
 }
 
 .image-detail-hd.is-loaded {
@@ -602,7 +611,7 @@
   z-index: 100;
 }
 
-/* 详情页左上角"返回主页"按钮 — 复用 .glass-icon-btn（与 like 按钮同尺寸同风格），此处只管定位 */
+/* 详情页左上角返回按钮 — 复用 .glass-icon-btn（与 like 按钮同尺寸同风格），此处只管定位 */
 .detail-back-home {
   position: fixed;
   top: max(16px, env(safe-area-inset-top, 16px));
@@ -612,6 +621,7 @@
 
 /* 多图作品页数标注（标在本页图片右下角） */
 .detail-hero-pages {
+  font-variant-numeric: tabular-nums;
   position: absolute;
   right: 8px;
   bottom: 8px;
@@ -688,7 +698,7 @@
   .detail-gif-wrap {
     min-height: 100%;
     align-items: center;
-    padding: 12px;
+    padding: var(--sp-3);
   }
 
   .image-detail-hero {
@@ -697,19 +707,19 @@
   }
 
   .image-detail-meta {
-    margin: 8px 10px 0;
-    padding: 11px 12px 10px;
-    border-radius: 14px;
+    margin: var(--sp-2) var(--sp-2) 0;
+    padding: var(--sp-2) var(--sp-3) var(--sp-2);
+    border-radius: var(--r-md);
   }
 
   .image-detail-title {
     font-size: 14px;
     line-height: 1.3;
-    margin-bottom: 5px;
+    margin-bottom: var(--sp-1);
   }
 
   .image-detail-author-row {
-    gap: 8px;
+    gap: var(--sp-2);
   }
 
   .image-detail-author-avatar {
@@ -718,13 +728,13 @@
   }
 
   .image-detail-tags {
-    gap: 5px;
-    padding: 8px 10px 12px;
+    gap: var(--sp-1);
+    padding: var(--sp-2) var(--sp-2) var(--sp-3);
   }
 
   .image-detail-tag {
     font-size: 11px;
-    padding: 2px 8px;
+    padding: 2px var(--sp-2);
   }
 
   .detail-floating-like {
@@ -740,13 +750,25 @@
 
 /* ── 桌面端：三栏布局（图片 / 作者信息 / 相关推荐） ── */
 @media (min-width: 900px) {
-  /* 覆盖层让出左侧边栏 —— 侧边栏在详情/作者页之上常驻可点（z-index 见 index.css .side-nav） */
+  /* 覆盖层让出左侧边栏 —— 侧边栏在详情/作者页之上常驻可点（z-index 见 index.css .side-nav）。
+     底色：手机端这两层是纯黑（沉浸看图）；桌面端整页统一到 --bg-panel ——
+     侧边栏、信息栏、媒体区同一个灰。媒体区原先是 --bg（比信息栏的 --bg-panel 暗一档），
+     图片周围就留了一圈「比页面暗」的底色，看着就是「图片的背景色跟页面背景色不一致」。
+     层级改由分隔线（信息栏那条 0.5px 边框）承担，不靠这一档色差。 */
   .detail-overlay,
   .author-works-overlay {
     left: var(--sidebar-w);
+    background: var(--bg-panel);
   }
 
-  /* 左上角"返回主页"按钮：浮在图片左上角内部（媒体区留白 16/24 + 内缩 12），
+  /* 作者页顶栏在桌面同样实底：它盖着的是网格缩略图，blur(12px) 把图糊成
+     一片没有信息的色块，反而比实底更脏 */
+  .author-works-header {
+    background: var(--bg-panel);
+    backdrop-filter: none;
+  }
+
+  /* 左上角返回按钮（与手机端同一个）：浮在图片左上角内部（媒体区留白 16/24 + 内缩 12），
      平时不显示 —— 桌面端侧边栏常驻，不靠它导航，没必要一直挡着画面 */
   .detail-back-home {
     top: 28px;
@@ -754,11 +776,17 @@
     opacity: 0;
     transform: translateY(-4px);
     pointer-events: none;
-    transition: opacity 0.18s ease, transform 0.18s ease;
+    transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
   }
 
-  /* 鼠标移到图片上才浮出；键盘 Tab 到它时同样显示（:focus-visible） */
+  /* 鼠标移到图片上才浮出；键盘 Tab 到它时同样显示（:focus-visible）。
+     `.detail-back-home:hover` 这一条不可省：按钮是 .detail-media-stack 的**兄弟**而非后代，
+     光标一旦压到按钮上，.detail-media-stack:hover 立刻就为 false，按钮当场淡出
+     （实测 opacity 0），于是「看着出现了，手一伸过去就没了」，根本点不到。
+     按钮隐藏时 pointer-events: none，:hover 命中不了它，所以不会自己冒出来 —— 依然要靠
+     悬停图片才首次出现。 */
   .detail-overlay:has(.detail-media-stack:hover) .detail-back-home,
+  .detail-back-home:hover,
   .detail-back-home:focus-visible {
     opacity: 1;
     transform: none;
@@ -769,7 +797,9 @@
     max-width: none;
     /* 原 100vw：覆盖层已缩到侧边栏右侧，这里必须用百分比跟随父层 */
     width: 100%;
-    background: rgba(15, 17, 21, 0.14);
+    /* 与 .detail-overlay 同色：切换作品的位移动画会让这层整体平移 42px，
+       两层不同色时滑动中会露出一条色带 */
+    background: var(--bg-panel);
   }
 
   /* 两栏：图片 + 右侧信息栏（作者信息在上、相关推荐在下）。
@@ -802,7 +832,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 16px 24px 0;
+    padding: var(--sp-4) var(--sp-5) 0;
   }
 
   .detail-page-stack {
@@ -812,22 +842,80 @@
   .detail-gif-wrap {
     min-height: 100%;
     align-items: center;
-    padding: 12px;
+    padding: var(--sp-3);
     width: 100%;
+  }
+
+  /* 动图（Ugoira）与静态图用同一套上限（变量见 responsive.css 桌面 :root）。
+     播放器这边走 cssSized（见 FrameAnimPlayer）：JS 只给「撑满容器」，
+     盒子尺寸由 canvas 自身像素 + 这两条上限决定 —— canvas 是 replaced element，
+     max-width / max-height 一起收时按比例缩，外层再 fit-content 贴合，
+     所以不会出现「框比图大」的留白，也不会像改前那样按原始像素撑出媒体列。 */
+  .detail-gif-wrap .ugoira-player {
+    max-width: min(100%, var(--detail-media-max-w));
+  }
+
+  .detail-gif-wrap .ugoira-canvas-wrap {
+    width: fit-content;
+    height: fit-content;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .detail-gif-wrap .ugoira-canvas,
+  .detail-gif-wrap .ugoira-thumb-fallback {
+    display: block;
+    max-width: 100%;
+    max-height: var(--detail-media-h);
   }
 
   .image-detail-hero {
     width: 100%;
+    /* 占位/主图的宽度上限（变量见 responsive.css 桌面 :root）：
+       媒体列上限、「一屏高度 × 本页比例」，以及预览图自身的像素宽（--hero-w）——
+       后两条都是给未加载时的占位框用的，它那时只有 aspect-ratio 一个尺寸来源，
+       不收的话会先铺满整列、图到了再缩回去，那一下跳动看起来就是「预览比成品还大」。
+       --hero-ar / --hero-w 由 DetailPageBlock 按本页比例与档位传进来。 */
+    max-width: min(100%, var(--detail-media-max-w), calc(var(--detail-media-h) * var(--hero-ar, 1)), var(--hero-w, 100%));
     /* 不再限高：宽栏 + 限高会让长图被 overflow:hidden 裁掉下半截。
        详情流用的是 --flow 变体（height:auto），高度本来就由图片自身撑开，
        放开后由 .detail-media-stack 整体滚动。 */
     max-height: none;
     margin: 0 auto;
-    border-radius: 12px;
+    /* 不刷 base 里卡片那层 rgba(255,255,255,0.022)：图片没贴满卡片时
+       （透明 PNG、还没加载、比例估值偏大）它会露成一圈比页面亮的底色，
+       就是「图片的背景色跟页面背景色不一致」。桌面端一律透明，
+       卡片的存在感交给圆角 + 阴影。 */
+    background: transparent;
+    border-radius: var(--r-md);
     overflow: hidden;
     box-shadow:
       0 2px 0 rgba(255, 255, 255, 0.05),
       0 16px 48px rgba(0, 0, 0, 0.28);
+  }
+
+  /* 长图/条漫（比 1:2 还窄，data-fit=0）：一屏根本收不住，缩到几百像素宽没法读，
+     放行高度，只保留媒体列宽度上限。--hero-w 仍要留着 —— 条漫的预览同样长边封顶
+     （800×4000 的图，1200 档下发出来只有 240×1200），占位框不收会出现同样的缩回。 */
+  .image-detail-hero[data-fit='0'] {
+    max-width: min(100%, var(--detail-media-max-w), var(--hero-w, 100%));
+  }
+
+  /* 加载完成后卡片收紧到贴合图片，base 里那条 :has() 会把 max-width 设回 100%，
+     这里同特异性、靠后覆盖（桌面块在文件末尾）。 */
+  .image-detail-hero:has(> .image-detail-main--flow.is-loaded) {
+    max-width: min(100%, var(--detail-media-max-w));
+  }
+
+  /* 图片自身再压一道「一屏」：--hero-ar 是估值（接口尺寸/缓存），以真图为准。
+     max-height 落在 replaced element 上是等比缩小，不裁切；
+     长图同样放行（见上）。 */
+  .image-detail-main--flow.is-loaded {
+    max-height: var(--detail-media-h);
+  }
+
+  .image-detail-hero[data-fit='0'] .image-detail-main--flow.is-loaded {
+    max-height: none;
   }
 
   /* ── 右栏上：作者信息 ── */
@@ -840,21 +928,26 @@
     overscroll-behavior: contain;
     border-left: 0.5px solid rgba(255, 255, 255, 0.06);
     border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
-    background: rgba(15, 17, 21, 0.18);
-    backdrop-filter: blur(8px) saturate(120%);
+    /* 桌面骨架实底（详见 .side-nav 的注释）：作者栏与相关推荐同级，
+       必须是同一个色值 —— 原先一个 α0.18/8px、一个 α0.22/10px，
+       并排看就是一条说不清的接缝。 */
+    background: var(--bg-panel);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
-    padding-bottom: 8px;
+    padding-bottom: var(--sp-2);
   }
 
   .image-detail-meta {
-    margin: 4px 10px 0;
-    padding: 16px 16px 14px;
-    border-radius: 16px;
+    margin: var(--sp-1) var(--sp-2) 0;
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+    border-radius: var(--r-lg);
+    /* 面板里的卡片再上一阶，层级靠色阶而不是靠叠玻璃 */
+    background: var(--bg-secondary);
+    backdrop-filter: none;
   }
 
   .image-detail-title {
     font-size: 17px;
-    margin-bottom: 8px;
+    margin-bottom: var(--sp-2);
   }
 
   .image-detail-author-avatar {
@@ -864,18 +957,27 @@
 
   .image-detail-author {
     font-size: 14px;
-    gap: 10px;
+    gap: var(--sp-2);
   }
 
   .image-detail-tags {
-    gap: 6px;
-    padding: 12px 10px 16px;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-2) var(--sp-4);
   }
 
   .image-detail-tag {
     font-size: 12px;
-    padding: 4px 12px;
-    border-radius: 14px;
+    padding: var(--sp-1) var(--sp-3);
+    border-radius: var(--r-pill);
+    /* 药丸在卡片里，是第三阶：底比卡片亮一档即可，别再加 blur */
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: none;
+  }
+
+  /* 作者行里的关注按钮（--standalone）落在实底卡片上，跟着实底 */
+  .follow-btn--standalone {
+    background: var(--bg-secondary);
+    backdrop-filter: none;
   }
 
   /* ── 右栏下：相关推荐 ── */
@@ -887,8 +989,7 @@
     overflow-x: hidden;
     overscroll-behavior: contain;
     border-left: 0.5px solid rgba(255, 255, 255, 0.06);
-    background: rgba(15, 17, 21, 0.22);
-    backdrop-filter: blur(10px) saturate(130%);
+    background: var(--bg-panel);
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
 
@@ -896,7 +997,7 @@
     font-size: 15px;
     font-weight: 600;
     color: var(--text-secondary);
-    padding: 12px 14px 8px;
+    padding: var(--sp-3) var(--sp-3) var(--sp-2);
     letter-spacing: 0.3px;
   }
 
@@ -909,8 +1010,8 @@
   .detail-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 2px 10px 14px;
+    gap: var(--sp-2);
+    padding: 2px var(--sp-2) var(--sp-3);
   }
 
   .detail-action {
@@ -921,11 +1022,11 @@
     height: 40px;
     padding: 0;
     border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 12px;
+    border-radius: var(--r-md);
     background: rgba(255, 255, 255, 0.035);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease, transform 0.12s ease;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) ease;
   }
 
   /* 主操作（喜欢 / 下载）：底更实、图标更亮，和右边两个次要操作拉开层次 */

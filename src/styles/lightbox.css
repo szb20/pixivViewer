@@ -12,7 +12,7 @@
   overflow: hidden;
   opacity: 1;
   animation: lightboxIn 0.2s ease;
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity var(--t-slow) ease, transform var(--t-slow) ease;
   touch-action: none;
   /* 防止触摸手势穿透到背景页面 */
 }
@@ -27,7 +27,7 @@
 .lightbox-overlay .lightbox-close,
 .lightbox-overlay .lightbox-nav {
   opacity: 1;
-  transition: opacity 0.25s ease;
+  transition: opacity var(--t-slow) ease;
 }
 
 .lightbox-overlay.hide-ui .lightbox-close,
@@ -83,7 +83,7 @@
   border-radius: 50%;
   backdrop-filter: blur(8px);
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, transform 0.15s;
+  transition: background var(--t-fast), transform var(--t-fast);
 }
 
 .lightbox-nav:active {
@@ -137,7 +137,7 @@
   color: rgba(255, 255, 255, 0.6);
   font-size: 14px;
   text-align: center;
-  padding: 0 24px;
+  padding: 0 var(--sp-5);
   cursor: pointer;
 }
 
@@ -231,8 +231,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 24px 16px calc(16px + env(safe-area-inset-bottom));
+  gap: var(--sp-1);
+  padding: var(--sp-5) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom));
   color: rgba(255, 255, 255, 0.6);
   font-size: 13px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.45));

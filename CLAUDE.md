@@ -6,6 +6,9 @@
   Vite 按 import 顺序拼 CSS，`src/index.css` 永远排在 `src/styles/*.css` 之前（后者由组件 import）。
   所以写在 `index.css` 的跨文件覆盖会被静默盖掉——改完看着生效了，其实没有。
   典型翻车现场：`.dialog-overlay[data-variant="download"]`、`.settings-overlay`、`.chips-bottom`。
+  同一文件内还有第二条：**`@media` 不加特异性，媒体块若写在它所覆盖的基础规则之前，整块会被静默盖掉。**
+  桌面块一律放文件末尾。（`settings.css` 踩过：桌面块原本在开头，于是桌面设置页一直在用手机端的
+  毛玻璃版，和文件里的注释、和本文档都相反，却没有任何报错。）
   判定方法：**在目标元素上限一下 computed style，别靠肉眼**。
 
 - **几何量走变量，不要新增魔法数字。**
@@ -19,19 +22,34 @@
 
 - **不要使用 `-webkit-backdrop-filter`**：在某些安卓 WebView 上会导致 `backdrop-filter` 失效，只写标准属性 `backdrop-filter` 即可。
 
-- **毛玻璃通用样式**（定义在 `src/index.css`）：
+- **毛玻璃通用样式**（定义在 `src/styles/base/shell.css`）：
   - `.frosted` — 深色玻璃底 `rgba(15,17,21,0.55)` + `blur(12px)`
   - `.frosted-light` — 浅色玻璃底 `rgba(255,255,255,0.12)` + `blur(8px)`
   - `.glass-icon-btn` — 圆形玻璃图标按钮
-  - 桌面端（≥900px）刻意**不用**毛玻璃：设置页、对话框一律实底，见各文件里的桌面块。
+  - **桌面端（≥900px）只有「压在图片上的控件」才用毛玻璃**：灯箱、图片角标（`.detail-hero-pages`、
+    `.grid-pages`）、`.glass-icon-btn`。结构性表面一律实底 —— 侧边栏、详情页右栏、搜索胶囊走
+    `--bg-panel` / `--bg-secondary` 色阶，设置页与对话框同理，见各文件里的桌面块。
+    理由：桌面端这些面板底下是纯色，blur 只会把同一块灰糊成「说不清为什么差一点」的另一块灰，
+    相邻面板还会各自调出一档 α 变成接缝。层级靠色阶，不靠叠玻璃。
+  - **搜索胶囊压在缩略图上却仍走实底，是上面那条的刻意例外。**
+    它底下穿过的就是作品图，blur 只会把图糊成灰浆；但实底又会在内容滚到视口顶时
+    切出一条硬边，所以硬切交给遮罩而不是模糊：`.search-fade`（`search.css` 桌面块）
+    从 `--bg` 渐隐到透明，由 `SearchPage` portal 到 `.app`，压在内容之上、胶囊之下。
+    改胶囊高度要同步改它的实底段（两边注释都写了算式）。
 
-- **CSS 变量**（定义在 `src/index.css`）：
+- **CSS 变量**（定义在 `src/styles/base/tokens.css`）：
   - `--bg`, `--bg-panel`, `--bg-secondary` — 背景色
   - `--border` — 边框色 `rgba(255,255,255,0.08)`
   - `--text-primary`, `--text-secondary`, `--text-tertiary` — 文字色
   - `--accent`, `--danger`, `--ok` — 强调色
   - `--bottom-chrome-h`, `--sidebar-w` — 布局几何
+  - `--r-xs/sm/md/lg/xl`（4/8/12/16/24）+ `--r-pill` / `--r-circle` — 圆角刻度
+  - `--sp-1..6`（4/8/12/16/24/32）— 间距刻度，只管 padding / margin / gap
+  - `--t-fast/base/slow`（0.16/0.2/0.25s）— **transition** 时长；`animation` 的时长是个体动效设计，不在刻度里
   - 别名变量（`--color-*`）映射到上述变量，供搬运组件使用
+  - 三套刻度是**闭集**：新 CSS 只从刻度取值，别再写字面值。例外（保留字面值）：1~3px 的
+    光学微调、宽高/缩进/限宽这类几何量、2px 贴边瀑布流的 `--grid-gap`。
+  - `--scrollbar-w` 定义在 `responsive.css` 的桌面块（和滚动条规则放一起），不在 tokens.css。
 
 ## 状态放哪
 

@@ -54,7 +54,12 @@ export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad })
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
       {feed.loadingMore && <div className="hint">加载中...</div>}
-      {!feed.loading && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
+      {!feed.loading && feed.appendError && (
+        <div className="hint hint--error" onClick={feed.retryAppend} role="button">
+          加载失败，点击重试
+        </div>
+      )}
+      {!feed.loading && !feed.appendError && !feed.hasMore && feed.items.length > 0 && <div className="hint">没有更多了</div>}
     </>
   );
 }

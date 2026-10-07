@@ -105,6 +105,11 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
       )}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
+      {!feed.loading && feed.appendError && (
+        <div className="hint hint--error" onClick={feed.retryAppend} role="button">
+          加载失败，点击重试
+        </div>
+      )}
     </>
   );
 }

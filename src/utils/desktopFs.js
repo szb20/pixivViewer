@@ -2,7 +2,7 @@
  * 桌面端文件系统适配器 —— 实现与 @capacitor/filesystem 相同的 plugin 接口，
  * 底层经 window.desktop.fs 桥落到 Electron 主进程的 Node fs。
  *
- * 这样 FileStore / gif.js 的 ZIP 分块缓存等所有调用 FS.plugin.xxx 的代码
+ * 这样 FileStore / ugoira 的 ZIP 分块缓存等所有调用 FS.plugin.xxx 的代码
  * 在桌面端无需任何改动（平台差异只在这一层，见 fileStore.js 的设计原则）。
  *
  * 目录映射（directory 参数，对齐 Capacitor Filesystem）：
@@ -106,7 +106,7 @@ export function createDesktopFilesystem() {
         },
 
         /**
-         * 分块读取（gif.js ZIP 流式解压用）。回调 (chunk, err)，空块表示结束。
+         * 分块读取（ugoira ZIP 流式解压用）。回调 (chunk, err)，空块表示结束。
          * 主进程一次性读入并按 chunkSize 切片回传（ZIP 已限 40MB，可接受）。
          */
         async readFileInChunks({ path, directory, chunkSize = 2 * 1024 * 1024 } = {}, onChunk) {

@@ -26,6 +26,38 @@
   --accent: var(--color-accent);
   --danger: var(--color-danger);
   --ok: var(--color-success);
+
+  /* ── 圆角刻度 ──
+     界面里只允许出现这五档 + 全圆。原先散着 4/6/8/9/12/14/16/18/20/24/26/999
+     十二个字面值，相邻档之间差 2px，肉眼说不清但能感觉到「不齐」。
+     4 是唯一的小例外（贴边图片/预览），留着免得它变成孤儿字面值。 */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+  --r-circle: 50%;
+
+  /* ── 间距刻度 ──
+     只覆盖 UI 间距：内边距、外边距、gap。
+     不是间距的东西别往里套 —— 侧边栏宽（--sidebar-w）、底栏高（--bottom-chrome-h）、
+     按钮/头像的宽高、二级项 39px 的缩进、正文 760px/900px 的限宽，都是几何量。
+     1~3px 的微调（光学对齐、描边内缩）也保持字面值：它们不是节奏，是像素级修正。
+     网格缝隙同理，它有自己的 --grid-gap（手机 8px / 桌面 12px）。 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* ── 动效时长 ──
+     只管 transition（UI 反馈的节奏）。animation 的时长是个体动效设计
+     （spinner 0.8s、骨架扫光、各面板的进场动画），不在这套刻度里。 */
+  --t-fast: 0.16s;  /* 悬停 / 按下等即时反馈 */
+  --t-base: 0.2s;   /* 颜色、背景、位移的常规过渡 */
+  --t-slow: 0.25s;  /* 跨状态过渡：展开、遮罩、面板 */
 }
 
 /* llm-chat 搬运组件的 CSS 变量别名（让 lightbox 等样式直接生效） */
@@ -49,9 +81,11 @@
   --font-md: 14px;
   --font-base: 13px;
   --radius-sm: 8px;
-  /* 作品网格统一规格：间隙 / 侧边留白 / 卡片圆角（所有作品网格共用，勿在各处重复硬编码） */
-  --grid-gap: 2px;
-  --grid-pad-x: 2px;
+  /* 作品网格统一规格：间隙 / 侧边留白 / 卡片圆角（所有作品网格共用，勿在各处重复硬编码）。
+     手机端缝隙与边缘留白均为 6px（介于旧的 2px 贴边与 8px/10px 之间）；
+     桌面 12px/12px 见 responsive.css 的 :root。 */
+  --grid-gap: 6px;
+  --grid-pad-x: 6px;
   --grid-radius: 8px;
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
   /* 底部悬浮栏（TabBar）在内容区占据的高度：.app-content 的 padding-bottom、

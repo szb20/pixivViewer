@@ -628,7 +628,8 @@ export default function ImageDetailView({
         {/* GIF 动图：用动图播放器 */}
         <div className="detail-media-stack">
           {isGif ? (
-            <div className="detail-gif-wrap" onClick={() => setLightboxIndex(0)}>
+            /* 与 DetailPageBlock 一致：连击的第二下不打开灯箱（双击缩略图时它会落在刚挂上来的动图上） */
+            <div className="detail-gif-wrap" onClick={(e) => { if (e.detail > 1) return; setLightboxIndex(0); }}>
               <UgoiraPlayer
                 key={image?.illustId}
                 illustId={image?.illustId}
@@ -640,6 +641,10 @@ export default function ImageDetailView({
                 _lazy
                 autoLoad={false}
                 clickable={false}
+                /* 桌面端主图有「媒体列 + 一屏」两条上限（--detail-media-*，见 detail.css），
+                   静态图一直在用；动图这边原本按首帧像素写死宽高，横图会撑出媒体列、
+                   纵图高过一屏。交回 CSS 收口，手机端（无这两条变量）保持原样。 */
+                cssSized={useLargePreview}
               />
             </div>
           ) : (
@@ -688,6 +693,20 @@ export default function ImageDetailView({
                       ? (reuseHd ? hd : masonryThumbUrl(thumbBase, p, source, 1200))
                       : placeholderUrl)
                   ) || imgs[p]?.previewUrl || placeholderUrl;
+                  // 占位框用的「预览图像素宽」：预览档位是长边封顶的等比图，竖图的实际宽度
+                  // 远小于档位上限（1200 档发出的 810×1200 只有 810 宽）。不告诉 CSS 这个宽度，
+                  // 大窗口下占位框会按媒体列铺满（1200），图到了再缩回自身宽度 —— 那一下就是
+                  // 「尺寸突变」。桌面 booru / 复用原图走的都是原图，没有这层封顶，交 0 兜底 100%；
+                  // 手机端 booru 用的是上游中图档，接口没给它的尺寸，也交 0 —— 宁可维持现状，
+                  // 也别猜一个上限，猜错就是反方向的跳变，不如不猜。
+                  const capPx = isBooru || reuseHd ? 0 : (useLargePreview ? 1200 : 540);
+                  const previewW = (() => {
+                    const w = Number(imgs[p]?.width || image?.width) || 0;
+                    const h = Number(imgs[p]?.height || image?.height) || 0;
+                    if (!capPx || !w || !h) return 0;
+                    // 上游只缩不放：原图小于档位时就是它自己的尺寸
+                    return Math.round(w * Math.min(1, capPx / Math.max(w, h)));
+                  })();
                   return (
                     <DetailPageBlock
                       key={`${image.illustId}-${p}`}
@@ -699,6 +718,7 @@ export default function ImageDetailView({
                       placeholderUrl={placeholderUrl}
                       defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
                       cachedRatio={pageRatios[p]}
+                      previewNaturalWidth={previewW}
                       registerRef={registerPageRef}
                       onOpenLightbox={(page) => setLightboxIndex(page)}
                       onLongPress={downloadPage}

@@ -192,6 +192,11 @@ function registerDownloadIpc() {
         res.on('end', () => resolve(Buffer.concat(chunks)));
         res.on('error', reject);
       });
+      // 停滞超时：服务器接受连接后不再吐数据时，流既不 end 也不 error，
+      // 任务会永远停在「下载中」且无法重试。socket 空闲 30s 即销毁，走 error 分支收尾。
+      req.setTimeout(30000, () => {
+        req.destroy(new Error('下载超时（30 秒无数据）'));
+      });
       req.on('error', reject);
       req.end();
     });

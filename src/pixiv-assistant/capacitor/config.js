@@ -87,6 +87,15 @@ export async function getSettings() {
   return defaultGetSettings();
 }
 
+/**
+ * 当前 PHPSESSID（容错用户把整串 `PHPSESSID=xxx` 粘进设置框的情况；空串=未配置）。
+ * api/pixiv.js（API 装配）与 api/ugoira/meta.js（动图元数据）共用。
+ */
+export async function getPixivCookie() {
+  const s = await getSettings();
+  return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
+}
+
 /** 保存 settings（localStorage）。 */
 export async function saveSettings(s) {
   appStorage.set('settings', s);

@@ -2,7 +2,7 @@
  * Pixiv API 适配层 — 通道选择与鉴权头逻辑已抽到 transport.js，
  * 这里只保留 Pixiv 专有的 Cookie 语义与 API 实例装配。
  */
-import { createPixivApi, getSettings } from '../pixiv-assistant/index.js';
+import { createPixivApi, getPixivCookie } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { createTransport } from './transport.js';
 
@@ -20,18 +20,9 @@ export const pixivTransport = createTransport({
   logName: 'pixivFetch',
 });
 
-export const browserFetch = pixivTransport.devFetch;
-export const prodFetch = pixivTransport.prodFetch;
-export const desktopFetch = pixivTransport.desktopFetch;
-
-async function getCookie() {
-  const s = await getSettings();
-  return String(s.pixivCookie || '').trim().replace(/^PHPSESSID=/i, '');
-}
-
 export const pixivApi = createPixivApi({
   fetch: pixivTransport,
-  getCookie,
+  getCookie: getPixivCookie,
   // logger 由外层注入（core 不反向依赖 utils/logger）
   log: createLogger('pixivApi'),
 });

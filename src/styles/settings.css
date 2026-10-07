@@ -13,61 +13,6 @@
   flex-direction: column;
 }
 
-/* ── 桌面：让出左侧边栏 + 改为不透明实底 ──
-   宽屏下毛玻璃既没有可模糊的内容（后面就是纯色 app 底），又会让文字对比度不稳，
-   所以桌面直接铺实色：overlay / 顶栏 / 卡片三层各自给实底，全部去掉 backdrop-filter。 */
-@media (min-width: 900px) {
-  .settings-overlay {
-    left: var(--sidebar-w);
-    background: var(--bg);
-    backdrop-filter: none;
-  }
-
-  .settings-header {
-    background: var(--bg);
-    backdrop-filter: none;
-    border-bottom: 1px solid var(--border);
-    /* 页头与内容对齐到同一条轴：内容限宽 760px 居中，页头若仍贴左边缘，
-       看上去就像两个页面拼在一起。这里用同样的居中留白把标题推到位。 */
-    padding-left: max(24px, calc((100% - 760px) / 2 + 24px));
-    padding-right: max(24px, calc((100% - 760px) / 2 + 24px));
-  }
-
-  /* 内容限宽居中：设置行横跨 950px+ 宽屏会很难读 */
-  .settings-content {
-    width: 100%;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 20px 24px 48px;
-  }
-
-  .settings-group {
-    background: var(--bg-panel);
-    backdrop-filter: none;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-
-  /* 分组标题移出卡片，做成分节小标题 */
-  .settings-group-label {
-    padding: 0 4px 8px;
-    margin-top: 8px;
-  }
-
-  .settings-row {
-    padding: 16px 18px;
-  }
-
-  /* 保存提示同样以内容区为基准居中，并改用实底 */
-  .settings-toast {
-    left: calc(var(--sidebar-w) + (100vw - var(--sidebar-w)) / 2);
-    background: var(--bg-secondary);
-    backdrop-filter: none;
-    border-color: var(--border);
-  }
-}
-
 /* ── 毛玻璃 sticky 顶栏 ── */
 .settings-header {
   position: sticky;
@@ -75,8 +20,8 @@
   z-index: 5;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+  gap: var(--sp-2);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--sp-2)) var(--sp-3) var(--sp-2);
   background: rgba(15, 17, 21, 0.24);
   backdrop-filter: blur(14px) saturate(145%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -90,7 +35,7 @@
   background: transparent;
   color: var(--text-primary);
   cursor: pointer;
-  padding: 0 6px;
+  padding: 0 var(--sp-2);
   flex: none;
 }
 
@@ -106,7 +51,7 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 8px 12px calc(24px + env(safe-area-inset-bottom, 0px));
+  padding: var(--sp-2) var(--sp-3) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
   scrollbar-width: none;
 }
 
@@ -116,8 +61,8 @@
 
 /* ── 卡片分组 ── */
 .settings-group {
-  margin-bottom: 16px;
-  border-radius: 12px;
+  margin-bottom: var(--sp-4);
+  border-radius: var(--r-md);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(14px) saturate(140%);
@@ -128,7 +73,7 @@
 }
 
 .settings-group-label {
-  padding: 10px 14px 4px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-1);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-tertiary);
@@ -141,7 +86,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: var(--sp-3) var(--sp-3);
   min-height: 44px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -184,8 +129,8 @@
 .settings-row-chevron {
   font-size: 14px;
   color: var(--text-tertiary);
-  margin-left: 6px;
-  transition: transform 0.2s;
+  margin-left: var(--sp-2);
+  transition: transform var(--t-base);
 }
 
 .settings-row-chevron--open {
@@ -193,14 +138,14 @@
 }
 
 .settings-expand-area {
-  padding: 0 14px 12px;
+  padding: 0 var(--sp-3) var(--sp-3);
 }
 
 .settings-expand-area textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 13px;
@@ -218,16 +163,16 @@
 .settings-expand-hint {
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-top: 6px;
+  margin-top: var(--sp-2);
   line-height: 1.5;
 }
 
 /* ── 输入框 ── */
 .settings-input {
   width: 100%;
-  padding: 9px 12px;
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 13px;
@@ -239,28 +184,28 @@
 }
 
 .settings-input-row {
-  padding: 10px 14px 12px;
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
 }
 
 /* ── Pill 按钮组（画质切换 / 来源切换） ── */
 .settings-pill-group {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
   /* 来源有 7 个时，手机端一行排不下会横向溢出；换行后仍靠右保持与单行一致的对齐 */
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .settings-pill {
-  padding: 5px 12px;
+  padding: var(--sp-1) var(--sp-3);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s;
+  transition: all var(--t-fast);
 }
 
 .settings-pill--active {
@@ -278,8 +223,8 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 80;
-  padding: 8px 18px;
-  border-radius: 20px;
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-lg);
   background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -299,5 +244,67 @@
   to {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ── 桌面：让出左侧边栏 + 改为不透明实底 ──
+   宽屏下毛玻璃既没有可模糊的内容（后面就是纯色 app 底），又会让文字对比度不稳，
+   所以桌面直接铺实色：overlay / 顶栏 / 卡片三层各自给实底，全部去掉 backdrop-filter。
+
+   ⚠ 这一块必须留在文件末尾。它覆盖的 .settings-header / .settings-content /
+   .settings-group / .settings-group-label / .settings-row / .settings-toast 六条规则
+   的基础版都在上面，且特异性相同 —— 媒体查询不加特异性，靠的纯粹是源码顺序。
+   曾经它在文件开头，于是整块被后面的基础版静默盖掉：桌面设置页看起来是毛玻璃，
+   和这里写的、和 CLAUDE.md 写的都相反，但没有任何报错。要加新的桌面规则，
+   请加到这一块里（末尾），不要另起一块。 */
+@media (min-width: 900px) {
+  .settings-overlay {
+    left: var(--sidebar-w);
+    background: var(--bg);
+    backdrop-filter: none;
+  }
+
+  .settings-header {
+    background: var(--bg);
+    backdrop-filter: none;
+    border-bottom: 1px solid var(--border);
+    /* 页头与内容对齐到同一条轴：内容限宽 760px 居中，页头若仍贴左边缘，
+       看上去就像两个页面拼在一起。这里用同样的居中留白把标题推到位。 */
+    padding-left: max(24px, calc((100% - 760px) / 2 + 24px));
+    padding-right: max(24px, calc((100% - 760px) / 2 + 24px));
+  }
+
+  /* 内容限宽居中：设置行横跨 950px+ 宽屏会很难读 */
+  .settings-content {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: var(--sp-4) var(--sp-5) 48px;
+  }
+
+  .settings-group {
+    background: var(--bg-panel);
+    backdrop-filter: none;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+
+  /* 分组标题移出卡片，做成分节小标题 */
+  .settings-group-label {
+    padding: 0 var(--sp-1) var(--sp-2);
+    margin-top: var(--sp-2);
+  }
+
+  .settings-row {
+    padding: var(--sp-4) var(--sp-4);
+  }
+
+  /* 保存提示同样以内容区为基准居中，并改用实底 */
+  .settings-toast {
+    left: calc(var(--sidebar-w) + (100vw - var(--sidebar-w)) / 2);
+    background: var(--bg-secondary);
+    backdrop-filter: none;
+    border-color: var(--border);
   }
 }

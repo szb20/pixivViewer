@@ -15,6 +15,8 @@ const log = createLogger('cacheDB');
 const DB_NAME = 'teyvat_pixiv_cache_v2';
 const DB_VERSION = 1;
 const STORE = 'metadata';
+/** 升级被旧连接阻塞时的宽限期：超过即放弃本次打开（缓存降级为直连），避免 promise 永远挂着 */
+const BLOCKED_GRACE_MS = 3000;
 
 let _db = null;
 let _dbPromise = null;
@@ -50,18 +52,31 @@ function openDB() {
       ensureIndex('stateCachedAt', ['state', 'cachedAt'], { unique: false });
       ensureIndex('likedAt', 'likedAt', { unique: false });
     };
+    let settled = false;
+    const settle = (fn, val) => { if (settled) return; settled = true; fn(val); };
     req.onsuccess = (e) => {
+      // 已过宽限期、按失败处理后才到达的迟到连接：关掉它，
+      // 别让它占着旧版本把下一次升级同样堵死
+      if (settled) { e.target.result.close(); return; }
       _db = e.target.result;
-      resolve(_db);
+      settle(resolve, _db);
     };
     req.onerror = () => {
       // open 失败会让后续所有读写静默返回空值（数据"凭空消失"），必须留下明确日志
       log.warn('IndexedDB 打开失败:', req.error?.message || req.error);
       _db = null;
-      reject(req.error);
+      settle(reject, req.error);
     };
+    // 被旧连接阻塞时 open 既不 success 也不 error，promise 会永远挂着：
+    // 水合 await 永不返回、首屏一直转圈。宽限几秒后按失败处理，让上层降级走网络。
     req.onblocked = () => {
-      log.warn('IndexedDB 升级被其他连接阻塞（可能有旧页面未关闭）');
+      log.warn('IndexedDB 升级被其他连接阻塞（可能有旧页面未关闭），3 秒后放弃');
+      setTimeout(() => {
+        if (settled) return;
+        log.warn('IndexedDB 仍被阻塞，本次打开按失败处理，读写走降级路径');
+        _db = null;
+        settle(reject, new Error('IndexedDB open blocked'));
+      }, BLOCKED_GRACE_MS);
     };
   }).finally(() => { _dbPromise = null; });
   return _dbPromise;

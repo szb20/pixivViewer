@@ -9,9 +9,11 @@
  *   server.middlewares.use('/yande-img', createImageProxy('https://files.yande.re'));
  */
 
+import http2 from 'node:http2';
 import https from 'node:https';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Socket } from 'node:net';
+import tls from 'node:tls';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 const DEFAULT_PROXY = 'http://127.0.0.1:7890';
 
@@ -290,6 +292,168 @@ export function createImageProxy(targetHost, opts = {}) {
         } catch (err2) {
           const msg = err2.message || String(err2);
           console.error(`[proxy] ${targetHost} 重试仍失败: ${msg}`);
+          if (!res.headersSent) {
+            res.writeHead(/timeout|ETIMEDOUT/i.test(msg) ? 504 : 502).end();
+          }
+        }
+      }
+    })();
+  };
+}
+
+/**
+ * 经 Clash 建立到目标站的 CONNECT 隧道，返回裸 TCP socket。
+ * （https-proxy-agent 只支持 HTTP/1.1，强制 HTTP/2 的站点握手后对 1.1 请求不响应，
+ *  需要手动建隧道再套 node:http2 —— 实测见 hypnohub/xbooru）
+ * @param {string} host — 目标站域名
+ * @returns {Promise<Socket>}
+ */
+function connectTunnel(host) {
+  const proxyUrl = getProxyUrl();
+  const parsed = new URL(proxyUrl);
+  const proxyHost = parsed.hostname;
+  const proxyPort = parseInt(parsed.port, 10) || 7890;
+  return new Promise((resolve, reject) => {
+    const s = new Socket();
+    const timer = setTimeout(() => {
+      s.destroy();
+      reject(new Error('CONNECT 隧道超时'));
+    }, 10000);
+    s.once('connect', () => {
+      s.write(`CONNECT ${host}:443 HTTP/1.1\r\nHost: ${host}:443\r\n\r\n`);
+    });
+    s.once('data', (d) => {
+      const head = d.toString().split('\r\n')[0];
+      clearTimeout(timer);
+      if (/ 200 /.test(` ${head} `)) resolve(s);
+      else {
+        s.destroy();
+        reject(new Error(`CONNECT 失败: ${head}`));
+      }
+    });
+    s.once('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+    s.connect(proxyPort, proxyHost);
+  });
+}
+
+/**
+ * 创建 HTTP/2 代理中间件 —— 给「应用层强制 HTTP/2」的站点用（hypnohub / xbooru）。
+ *
+ * 与 createApiProxy 的差异：不走 https-proxy-agent（HTTP/1.1），
+ * 而是 CONNECT 隧道 + tls(ALPN=h2) + node:http2 会话，逐请求转发。
+ * 会话不跨请求复用（隧道生命周期短，重开成本低，也避免半死连接）。
+ *
+ * @param {string} targetHost — 如 'https://hypnohub.net'
+ * @param {Object} [opts]
+ * @param {string} [opts.userAgent] — 覆盖默认 UA
+ * @param {string} [opts.referer]   — Referer 头（缺省同 targetHost，图床路由用）
+ * @param {string} [opts.cacheControl] — 覆盖响应 Cache-Control（图片长缓存）
+ * @param {number} [opts.timeout=15000] — 超时毫秒
+ * @returns {Function} Vite / Node 中间件
+ */
+export function createH2Proxy(targetHost, opts = {}) {
+  const userAgent = opts.userAgent || DEFAULT_UA;
+  const referer = opts.referer || targetHost;
+  const cacheControl = opts.cacheControl || null;
+  const timeout = opts.timeout || 15000;
+
+  return (req, res) => {
+    let parsed;
+    try {
+      parsed = new URL(`${targetHost}${req.url}`);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_target' }));
+      return;
+    }
+
+    const send = () => new Promise((resolve, reject) => {
+      let settled = false;
+      const fail = (e) => {
+        if (settled) return;
+        settled = true;
+        reject(e);
+      };
+      const ok = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      connectTunnel(parsed.hostname)
+        .then((sock) => {
+          const client = http2.connect(`https://${parsed.hostname}`, {
+            createConnection: () => tls.connect({
+              socket: sock,
+              servername: parsed.hostname,
+              ALPNProtocols: ['h2'],
+            }),
+          });
+          const cleanup = () => {
+            try { client.destroy(); } catch { /* ignore */ }
+            try { sock.destroy(); } catch { /* ignore */ }
+          };
+          client.once('error', (e) => { cleanup(); fail(e); });
+
+          client.once('connect', () => {
+            const h2req = client.request({
+              ':method': req.method,
+              ':path': parsed.pathname + parsed.search,
+              'user-agent': userAgent,
+              'accept': 'application/json, */*',
+              'referer': referer,
+            });
+            const timer = setTimeout(() => {
+              try { h2req.close(); } catch { /* ignore */ }
+              cleanup();
+              fail(new Error('ETIMEDOUT'));
+            }, timeout);
+
+            h2req.on('response', (headers) => {
+              if (res.headersSent) {
+                cleanup();
+                ok();
+                return;
+              }
+              const status = headers[':status'] || 502;
+              const out = {};
+              for (const [k, v] of Object.entries(headers)) {
+                if (k.startsWith(':')) continue;
+                out[k] = v;
+              }
+              if (cacheControl) out['Cache-Control'] = cacheControl;
+              res.writeHead(status, out);
+              h2req.pipe(res);
+              h2req.on('end', () => { clearTimeout(timer); cleanup(); ok(); });
+              h2req.on('error', () => {
+                clearTimeout(timer);
+                cleanup();
+                // 响应已开始后出错（半截流）无法重试：直接掐断客户端连接
+                res.destroy();
+                ok();
+              });
+            });
+            h2req.once('error', (e) => { clearTimeout(timer); cleanup(); fail(e); });
+            h2req.end();
+          });
+        })
+        .catch((e) => fail(e));
+    });
+
+    (async () => {
+      try {
+        await send();
+      } catch (err) {
+        const msg0 = err.message || String(err);
+        console.warn(`[proxy-h2] ${targetHost} 请求失败: ${msg0}，正在重试...`);
+        try {
+          await send();
+        } catch (err2) {
+          const msg = err2.message || String(err2);
+          console.error(`[proxy-h2] ${targetHost} 重试仍失败: ${msg}`);
           if (!res.headersSent) {
             res.writeHead(/timeout|ETIMEDOUT/i.test(msg) ? 504 : 502).end();
           }

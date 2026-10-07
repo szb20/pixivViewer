@@ -1,10 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import TabBar from './components/TabBar.jsx';
 import SideNav from './components/SideNav.jsx';
+import SourceDrawer from './components/SourceDrawer.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
-import ProxyCheckNotice from './components/ProxyCheckNotice.jsx';
 import PullToRefresh from './components/PullToRefresh.jsx';
 import DetailView from './components/detail/DetailView.jsx';
 import AuthorWorksPage from './components/AuthorWorksPage.jsx';
@@ -19,7 +19,6 @@ import { downloadMonitor } from './utils/downloadMonitor.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
 import { useIsDesktop } from './hooks/useIsDesktop.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
-import { useStartupProxyCheck } from './hooks/useStartupProxyCheck.js';
 import { useImageSourceId } from './hooks/useImageSource.js';
 import { restoreMainScrollOnColdStart } from './utils/scroll.js';
 import './index.css';
@@ -52,11 +51,12 @@ const TAB_PAGES = {
 
 export default function App() {
   const [chromeHidden] = useChromeAutoHide();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   useAndroidBackButton();
   const isDesktop = useIsDesktop();
-  // 全局来源：切换时 tab-pane 的 key 变化 → 整块重挂载，
+  // 全局来源：切换来源时 tab-pane 的 key 变化 → 整块重挂载，
   // 列表 / 翻页游标 / 滚动位置 / 内存缓存全部天然重置（否则会残留另一站的列表）。
-  const activeSource = useImageSourceId();
+  const sourceId = useImageSourceId();
   const {
     activeTab,
     visitedTabs,
@@ -66,21 +66,17 @@ export default function App() {
     authorWorks,
     searchSeed,
     settingsOpen,
-    showProxyError,
-    proxyCheckUrl,
     setActiveTab,
     registerRefresh,
     triggerPullRefresh,
     openDetail,
     closeDetail,
-    exitToHome,
     openAuthorWorks,
     closeAuthorWorks,
     openAuthorImage,
     searchByTag,
     openSettings,
     closeSettings,
-    setShowProxyError,
     openSearchComposer,
     closeSearchComposer,
   } = useAppStore();
@@ -101,9 +97,6 @@ export default function App() {
       default: return base;
     }
   };
-
-  // 启动时代理连通性检测（zustand action 引用稳定，可直接作为回调传入）
-  useStartupProxyCheck(setShowProxyError);
 
   // 桌面端侧边栏「搜索」：不跳页，先在当前页面上浮出搜索框，提交后才切到结果页。
   // 结果页已经开着时沿用「重点当前项 = 刷新列表」的既有语义；
@@ -147,7 +140,7 @@ export default function App() {
                 {/* 按来源 key 重挂载：切换来源时列表 / 游标 / 滚动 / 内存缓存一起重置。
                     桌面端搜索面板启动即挂载（保持隐藏）：它的 portal 搜索框要在任意页面都能被唤起 */}
                 {(visitedTabs.has(key) || (isDesktop && key === 'search')) && (
-                  <ErrorBoundary key={`${activeSource}:${key}`}>
+                  <ErrorBoundary key={`${sourceId}:${key}`}>
                     <Page {...tabProps(key)} />
                   </ErrorBoundary>
                 )}
@@ -162,6 +155,26 @@ export default function App() {
       <PullToRefresh onRefresh={triggerPullRefresh} />
 
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} hidden={chromeHidden} />
+
+      {/* 手机端左上角汉堡：打开侧边抽屉（图源切换 + 快捷入口）。桌面有常驻 SideNav，不渲染；
+          抽屉打开时也退场（backdrop / 返回键 / Esc 负责关闭），与齿轮按钮同款出入规则 */}
+      {!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks && (
+        <button
+          className={`glass-icon-btn drawer-trigger${chromeHidden ? ' drawer-trigger--hidden' : ''}`}
+          onClick={() => setDrawerOpen(true)}
+          aria-label="打开侧边栏"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
+
+      {drawerOpen && (
+        <SourceDrawer onClose={() => setDrawerOpen(false)} onOpenSettings={openSettings} />
+      )}
 
       {!settingsOpen && !detailImage && !authorWorks && (
         <button
@@ -178,21 +191,12 @@ export default function App() {
 
       {settingsOpen && <SettingsPage onClose={closeSettings} />}
 
-      {showProxyError && (
-        <ProxyCheckNotice
-          proxyUrl={proxyCheckUrl}
-          onOpenSettings={openSettings}
-          onDismiss={() => setShowProxyError(false)}
-        />
-      )}
-
       {detailImage && (
         <ErrorBoundary key="detail">
           <DetailView
             image={detailImage}
             navContext={detailContext}
             onClose={closeDetail}
-            onExitToHome={exitToHome}
             onSearchTag={searchByTag}
             onAuthorWorks={openAuthorWorks}
           />

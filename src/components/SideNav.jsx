@@ -8,10 +8,11 @@
 import { useRef } from 'react';
 import { useImageSourceId, setImageSource } from '../hooks/useImageSource.js';
 import { useDownloadJobs } from '../hooks/useDownloadJobs.js';
+import { useSourcesExpanded, setSourcesExpanded } from '../hooks/useSourcesExpanded.js';
 import { useAppStore } from '../store/useAppStore.js';
 import { getMeSubTabs } from '../utils/meTabs.js';
 import { getRankingModes, clampRankingCategory, canToggleR18 } from '../utils/rankingModes.js';
-import { SOURCE_LIST } from '../sources/registry.js';
+import { SOURCE_LIST, getSource } from '../sources/registry.js';
 
 // 图标与设置页齿轮同规格：24×24、stroke=currentColor、线宽 2
 const svgProps = {
@@ -26,6 +27,13 @@ const svgProps = {
 };
 
 const ICONS = {
+  source: (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </>
+  ),
   discover: (
     <>
       <circle cx="12" cy="12" r="10" />
@@ -81,7 +89,9 @@ function NavButton({ icon, label, active, onClick, sub = false, ...rest }) {
 }
 
 export default function SideNav({ tabs, active, onChange, onOpenSettings, onSearchNav }) {
-  const sourceId = useImageSourceId();
+  const sourceId = useImageSourceId(); // 排行/我的子项跟随当前来源
+  const sourcesExpanded = useSourcesExpanded();
+  const currentSource = getSource(sourceId);
   const meSubTabs = getMeSubTabs(sourceId);
   const meSubTab = useAppStore(s => s.meSubTab);
   const setMeSubTab = useAppStore(s => s.setMeSubTab);
@@ -168,20 +178,52 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
     <nav className="side-nav" aria-label="侧边栏导航" ref={navRef} onKeyDown={onKeyDown}>
       <div className="side-nav-brand">PixivViewer</div>
 
-      {/* 来源是全局开关（影响四个 tab），放导航之上单列一组 */}
+      {/* 来源单选：折叠样式同「排行」展开二级项 —— 标题行展开/收起，
+          列表里当前来源恒为激活副项（收起时只留一行显示当前来源名）。
+          点副项切换来源但不收起列表，方便连换几站对比 */}
       {SOURCE_LIST.length > 1 && (
         <div className="side-nav-group side-nav-group--source">
-          <div className="side-nav-group-label">来源</div>
-          {SOURCE_LIST.map(s => (
-            <NavButton
-              key={s.id}
-              label={s.shortLabel || s.label}
-              active={sourceId === s.id}
-              // 切来源换的是整份列表：覆盖层（详情/作者页/设置/搜索框）都得收起，
-              // 否则盖在上面的还是旧来源那一屏，看着像点了没反应
-              onClick={() => { closeOverlays(); setImageSource(s.id); }}
-            />
-          ))}
+          <button
+            className="side-nav-item side-nav-toggle"
+            onClick={() => setSourcesExpanded(!sourcesExpanded)}
+            aria-expanded={sourcesExpanded}
+            aria-label={`来源：${currentSource?.shortLabel || currentSource?.label || ''}`}
+          >
+            <span className="side-nav-icon" aria-hidden="true">
+              <svg {...svgProps}>{ICONS.source}</svg>
+            </span>
+            <span className="side-nav-label">来源</span>
+            {!sourcesExpanded && (
+              <span className="side-nav-value">{currentSource?.shortLabel || currentSource?.label || ''}</span>
+            )}
+            <svg
+              className={`side-nav-chevron${sourcesExpanded ? ' open' : ''}`}
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          {sourcesExpanded && (
+            <div className="side-nav-subs">
+              {SOURCE_LIST.map(s => (
+                <NavButton
+                  key={s.id}
+                  label={s.shortLabel || s.label}
+                  active={sourceId === s.id}
+                  onClick={() => { closeOverlays(); setImageSource(s.id); }}
+                  sub
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 

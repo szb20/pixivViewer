@@ -4,16 +4,16 @@
 
 .search-page .search-head {
   /* 顶部为固定悬浮搜索栏留位：safe-area + 12px 上边距 + 44px 栏高 + 8px 间隙 */
-  padding: calc(env(safe-area-inset-top, 0px) + 64px) 12px 0;
+  padding: calc(env(safe-area-inset-top, 0px) + 64px) var(--sp-3) 0;
 }
 
 /* ── 搜索栏：毛玻璃（通过 Portal 渲染到 .app）── */
 .search-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 26px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-pill);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(24px) saturate(180%);
@@ -21,7 +21,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     inset 0 -1px 0 rgba(0, 0, 0, 0.1),
     0 4px 20px rgba(0, 0, 0, 0.3);
-  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease, transform 0.25s ease;
+  transition: border-color var(--t-slow) ease, background var(--t-slow) ease, box-shadow var(--t-slow) ease, opacity var(--t-slow) ease, transform var(--t-slow) ease;
 }
 
 /* 收起时：搜索栏向上滑出 */
@@ -46,7 +46,7 @@
   flex: none;
   color: rgba(255, 255, 255, 0.9);
   filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.22));
-  transition: color 0.25s ease;
+  transition: color var(--t-slow) ease;
 }
 
 .search-bar:focus-within .search-icon {
@@ -57,7 +57,7 @@
 .search-input {
   flex: 1;
   min-width: 0;
-  padding: 7px 4px;
+  padding: var(--sp-2) var(--sp-1);
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -86,7 +86,7 @@
   cursor: pointer;
   box-shadow:
     0 0 8px rgba(255, 255, 255, 0.14);
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease, opacity 0.2s ease;
+  transition: background var(--t-base) ease, box-shadow var(--t-base) ease, transform var(--t-fast) ease, opacity var(--t-base) ease;
 }
 
 .search-submit:hover:not(:disabled) {
@@ -122,14 +122,14 @@
 
 /* ── 历史搜索 ── */
 .search-history {
-  margin-bottom: 6px;
+  margin-bottom: var(--sp-2);
 }
 
 .search-history-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 2px 2px 8px;
+  margin: 2px 2px var(--sp-2);
 }
 
 .search-history-label {
@@ -140,14 +140,14 @@
 }
 
 .search-history-clear {
-  padding: 2px 8px;
+  padding: 2px var(--sp-2);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-tertiary);
   font-size: 12px;
   cursor: pointer;
-  transition: color 0.2s ease, background 0.2s ease;
+  transition: color var(--t-base) ease, background var(--t-base) ease;
 }
 
 .search-history-clear:hover {
@@ -158,7 +158,7 @@
 .search-history-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 .search-history-chip {
@@ -169,13 +169,13 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.06);
   overflow: hidden;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, text-shadow 0.2s ease;
+  transition: border-color var(--t-base) ease, background var(--t-base) ease, box-shadow var(--t-base) ease, text-shadow var(--t-base) ease;
 }
 
 .search-history-tag {
   min-width: 0;
   max-width: min(220px, calc(100vw - 96px));
-  padding: 6px 9px 6px 14px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -235,7 +235,7 @@
      这里把栏缩短并右移，避免提交按钮被齿轮压住点不到 */
   width: min(560px, calc(100vw - 96px));
   max-width: 560px;
-  margin-left: 32px;
+  margin-left: var(--sp-6);
   z-index: 5;
 }
 
@@ -243,14 +243,49 @@
 @media (max-width: 559px) {
   .search-bar--top {
     width: calc(100vw - 96px);
-    margin-left: 34px;
+    margin-left: var(--sp-6);
   }
 }
 
+/* ── 顶部渐隐遮罩（仅桌面）──
+   手机端胶囊本身是毛玻璃，滚动内容从它后面透出来是软的，不需要遮罩；
+   桌面端胶囊是实底（见下面的桌面块），网格滚到视口顶会被视口边缘硬切一条直线。
+   元素由 SearchPage 通过 portal 挂进 .app，这里只管样子。 */
+.search-fade {
+  display: none;
+}
+
 /* ── 桌面（≥900px）：内容区顶部居中的悬浮胶囊 + 历史下拉 ──
-   手机那条「贴顶浮动 + 胶囊 + 毛玻璃」在这里保留，只把定位从视口居中换成内容区居中
-   （左边界让开侧边栏），并去掉手机上为齿轮按钮让位的右移。 */
+   定位从视口居中换成内容区居中（左边界让开侧边栏），去掉手机上为齿轮按钮让位的右移；
+   材质也从玻璃换成实底 —— 桌面端它压在网格缩略图上，blur(24px)/saturate(180%)
+   是全站最重的一档，糊出来的是没有信息的灰浆。「浮起」改由阴影和描边表达。 */
 @media (min-width: 900px) {
+  /* 压在内容之上（.app-content 是 z-index 1 的层叠上下文，里面的一切都被封在里面），
+     胶囊之下（桌面胶囊 z-index 30）—— 重叠处由胶囊的不透明实底盖住，不必挖洞。
+     右侧让开 --scrollbar-w：这一层盖得住滚动条，不然滚动条顶端会连同内容一起被吃掉。 */
+  .search-fade {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-w);
+    right: var(--scrollbar-w);
+    /* 实底段 68px = 胶囊上边距 16 + 胶囊高 52（8/12 padding + 1px 描边 + 34px 内容）；
+       之后 42px 渐隐到透明 */
+    height: 110px;
+    z-index: 2;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      var(--bg) 0,
+      var(--bg) 68px,
+      transparent 110px
+    );
+  }
+
+  .search-fade--hidden {
+    display: none;
+  }
+
   .search-bar--top {
     top: 16px;
     left: var(--sidebar-w);
@@ -262,6 +297,11 @@
     transform: none;
     /* 高于页面内容(1)，低于详情(50)/设置(70)/侧边栏(80)/对话框(100) */
     z-index: 30;
+    background: var(--bg-panel);
+    backdrop-filter: none;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
   /* 滚动隐藏是手机行为；桌面胶囊常驻，唤起与否另由 display 控制 */
@@ -276,18 +316,18 @@
     padding-top: 80px;
   }
 
-  /* 最近搜索下拉：挂在胶囊下方；底比胶囊实一点，压在图片上也读得清 */
+  /* 最近搜索下拉：挂在胶囊下方；压在图上要读得清，所以比胶囊再实一阶 */
   .search-history--dropdown {
     position: absolute;
     top: calc(100% + 8px);
     left: 0;
     right: 0;
     margin-bottom: 0;
-    padding: 10px 12px 12px;
-    border-radius: 16px;
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+    border-radius: var(--r-lg);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    background: rgba(15, 17, 21, 0.88);
-    backdrop-filter: blur(20px) saturate(160%);
+    background: var(--bg-secondary);
+    backdrop-filter: none;
     box-shadow:
       0 16px 40px rgba(0, 0, 0, 0.45),
       inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -313,7 +353,7 @@
   background: transparent;
   color: rgba(255, 255, 255, 0.78);
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: background var(--t-base) ease, color var(--t-base) ease;
 }
 
 .search-back:hover {
@@ -331,12 +371,12 @@
     top: calc(env(safe-area-inset-top, 0px) + 8px);
     width: calc(100vw - 120px);
     max-width: 1200px;
-    padding: 5px 10px;
+    padding: var(--sp-1) var(--sp-2);
   }
 
   .search-input {
     font-size: 14px;
-    padding: 5px 4px;
+    padding: var(--sp-1) var(--sp-1);
   }
 
   .search-submit {

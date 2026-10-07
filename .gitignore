@@ -29,6 +29,9 @@ scripts/tmp-*
 # Codex 项目级本地配置（可能含本地覆盖/密钥，不入库；模板保留 .example）
 .codex/
 
+# TRAE IDE 本地工作区文档（设计稿等，不入库）
+.trae/
+
 # Editor directories and files
 # .claude/ 下的 skills 是本项目的实际资产（启动/驱动脚本），要入库；
 # settings.local.json 含本机权限授予，不入库。

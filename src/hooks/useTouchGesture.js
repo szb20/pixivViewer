@@ -845,11 +845,8 @@ export function useTouchGesture({
     touchRef.current.y = e.clientY;
   }, [zoomDisabled, disableSwipe, getMaxPan, applyDrag, applyTransform, applyTrackSwipe]);
 
-  const handleMouseUp = useCallback((e) => {
-    e.stopPropagation();
-    if (!mouseActiveRef.current || !touchActiveRef.current) return;
-    mouseActiveRef.current = false;
-    touchActiveRef.current = false;
+  // 拖拽收尾：mouseup（元素上或 window 兜底）与 mousemove 的 buttons 检查共用；不读事件对象。
+  const endMouseGesture = useCallback(() => {
     if (zoomDisabled && disableSwipe) return;
 
     const totalDx = touchRef.current.x - touchRef.current.startX;
@@ -930,6 +927,37 @@ export function useTouchGesture({
 
     pinchRef.current.fingers = 0;
   }, [zoomDisabled, disableSwipe, nav, hardClamp, startInertia, animateNavSwipe, index, setPinchScale, setPinchPan, setZoomTrans]);
+
+  const handleMouseUp = useCallback((e) => {
+    e.stopPropagation();
+    if (!mouseActiveRef.current || !touchActiveRef.current) return;
+    mouseActiveRef.current = false;
+    touchActiveRef.current = false;
+    endMouseGesture();
+  }, [endMouseGesture]);
+
+  // 鼠标松开位置不受控时的兜底：绑在 stage 上的 mouseup 收不到「拖出去再松开」，
+  // 拖拽状态会一直挂着（之后不按键移动鼠标画面也跟着走）。
+  // window 上双保险：mouseup 覆盖窗口内其他元素上松开；mousemove 的 buttons 检查
+  // 覆盖「拖到窗口外松开再移回来」——那种情况根本不会有 mouseup。
+  useEffect(() => {
+    const onUp = () => {
+      if (!mouseActiveRef.current || !touchActiveRef.current) return;
+      mouseActiveRef.current = false;
+      touchActiveRef.current = false;
+      endMouseGesture();
+    };
+    const onMove = (e) => {
+      if (!mouseActiveRef.current) return;
+      if ((e.buttons & 1) === 0) onUp();
+    };
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('mousemove', onMove);
+    return () => {
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('mousemove', onMove);
+    };
+  }, [endMouseGesture]);
 
   // ── 滚轮缩放（以光标为锚点）─────────────────────────────
   const handleWheel = useCallback((e) => {

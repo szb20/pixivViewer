@@ -78,7 +78,7 @@ export function useTabFeed({
     loadingRef.current = true;
 
     if (append) setLoadingMore(true);
-    else { setLoading(true); setError(null); }
+    else { setLoading(true); setError(null); setAppendError(null); }
 
     try {
       // 第三个参数 isStale：让调用方在 await 之后判断本次请求是否已被取代。
@@ -174,7 +174,10 @@ export function useTabFeed({
 
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el || !hasMore || loading) return;
+    // appendError 时收起哨兵：抛异常的翻页失败不会把 hasMore 置 false，若不拦，
+    // observer 会随 loadingMore 的翻转重建、重建时的初始回调立即再触发 load，
+    // 形成与失败速度同频的重试风暴。失败后的唯一出口是页面渲染的「点击重试」。
+    if (!el || !hasMore || loading || appendError) return;
     const io = new IntersectionObserver(([e]) => {
       if (e.isIntersecting && hasMore && !loadingMore && !loadingRef.current) {
         log.debug('[sentinel] 触底，加载更多');
@@ -183,7 +186,7 @@ export function useTabFeed({
     }, { rootMargin: '200px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, loading, loadingMore, load]);
+  }, [hasMore, loading, loadingMore, load, appendError]);
 
   // 触底翻页失败后的重试：仍走 append（失败时游标未推进，重试即重拉同一页）
   const retryAppend = useCallback(() => load(true), [load]);

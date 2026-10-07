@@ -31,6 +31,12 @@ function variantUrl(post, type) {
   return variants.find(v => v?.type === type)?.url || '';
 }
 
+/** 各站的网页地址模板（safebooru.donmai.us 等 Danbooru v2 镜像通用 /posts/{id} 路径） */
+const POST_URL = {
+  danbooru: (id) => `https://danbooru.donmai.us/posts/${id}`,
+  'safebooru-donmai': (id) => `https://safebooru.donmai.us/posts/${id}`,
+};
+
 /**
  * 一条 Danbooru post → 应用统一条目。
  * @param {object} post
@@ -62,7 +68,7 @@ function mapPost(post, sourceId) {
     originalUrl: original,
     tags: allTags,
     pixivUrl: '',          // 非 Pixiv 来源不伪造 pixiv 链接，外链一律走 webUrl
-    webUrl: `https://danbooru.donmai.us/posts/${rawId}`,
+    webUrl: POST_URL[sourceId]?.(rawId) || '',
     pageCount: 1,
     type: 'image',         // Danbooru 的 ugoira 是独立字段（file_ext=zip），一律按静态图处理
     illustType: 0,

@@ -67,7 +67,7 @@ export const useAppStore = create((set, get) => ({
 
     // 排行榜当前档位与 R18 开关。同样是为了让桌面侧边栏能驱动（手机端是底部的筛选条）
     rankingCategory: 'daily',
-    rankingR18: true,
+    rankingR18: false, // 默认只看公开档，R18 需手动开启
 
     // 选档位时按耦合规则同步 R18（选 R18G 自动开、选无 R18 变体的档自动关）
     selectRankingCategory: (key) => set((s) => {
@@ -191,8 +191,6 @@ export const useAppStore = create((set, get) => ({
     returnToAuthor: null,
     searchSeed: null,
     settingsOpen: false,
-    showProxyError: false,
-    proxyCheckUrl: '',
 
     openDetail: (img, context = null) => {
         const { activeTab, scrollPositions } = get();
@@ -220,14 +218,6 @@ export const useAppStore = create((set, get) => ({
             set({ authorWorks: returnToAuthor });
             return;
         }
-        restoreMainScroll(scrollPositions[activeTab] || 0);
-    },
-
-    // 直接退出到主页（详情页左上角"‹"按钮）：清空详情/作者页，不返回作者页
-    exitToHome: () => {
-        const { activeTab, scrollPositions } = get();
-        set({ detailImage: null, detailContext: null, authorWorks: null, returnToAuthor: null });
-        // 恢复进入详情前的滚动位置，避免退出后网格停在顶部
         restoreMainScroll(scrollPositions[activeTab] || 0);
     },
 
@@ -281,6 +271,4 @@ export const useAppStore = create((set, get) => ({
     // 下载管理弹窗。放 store 是因为侧边栏也有一个常驻入口要能打开它
     downloadOpen: false,
     setDownloadOpen: (v) => set({ downloadOpen: v }),
-
-    setShowProxyError: (v, url = '') => set({ showProxyError: v, proxyCheckUrl: url }),
 }));

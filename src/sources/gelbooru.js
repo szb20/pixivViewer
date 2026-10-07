@@ -12,9 +12,10 @@
  *   - sort:updated:desc（＝不传 sort）—— 新 → 旧，但没有任何质量筛选，前面全是刚上传的零票图
  * 所以推荐流用「默认序（新→旧）+ score:>=N」取**近期上传里已经攒够票的那批**，见 FEED_MIN_SCORE。
  *
- * 已登记 safebooru.org（免 API key、实测大陆直连可达）。
- * gelbooru.com / rule34.xxx 的同构站点将来补一条 registry + 一条代理路由即可，
- * 但前者现已强制 api_key + user_id，接入前要先加凭据存储。
+ * 已登记 safebooru.org（免 API key、实测大陆直连可达）、tbib.org、hypnohub.net、xbooru.com。
+ * hypnohub / xbooru 在应用层强制 HTTP/2，代理走 createH2Proxy（见 scripts/booru-proxy.mjs）。
+ * gelbooru.com 将来要接的话现已强制 api_key + user_id，接入前要先加凭据存储；
+ * rule34.xxx 同样强制认证（匿名任何模式都返回 Missing authentication，实测 2026-10）。
  *
  * 文档：https://gelbooru.com/index.php?page=wiki&s=view&id=18780
  */
@@ -42,6 +43,22 @@ const FEED_MIN_SCORE = 10;
 /** 各站的网页地址模板 */
 const POST_URL = {
   safebooru: (id) => `https://safebooru.org/index.php?page=post&s=view&id=${id}`,
+  tbib: (id) => `https://tbib.org/index.php?page=post&s=view&id=${id}`,
+  hypnohub: (id) => `https://hypnohub.net/index.php?page=post&s=view&id=${id}`,
+  xbooru: (id) => `https://xbooru.com/index.php?page=post&s=view&id=${id}`,
+};
+
+/** 各站的图片地址拼接器 — 老 Gelbooru 0.2 实例（tbib 等）DAPI 只返回 directory/image 组件，不给完整 URL */
+const IMG_URL = {
+  tbib: {
+    // 实测规则（2026-10）：https://tbib.org/images/{directory}/{image}
+    full: (p) => p?.directory != null && p?.image
+      ? `https://tbib.org/images/${p.directory}/${p.image}` : '',
+    // 缩略图：同目录 + thumbnail_ 前缀 + 原文件名去扩展名后统一接 .jpg
+    // （png 原图的缩略图也是 .jpg，保留原扩展名会 404，实测见帖子页 saucenao 链接）
+    preview: (p) => p?.directory != null && p?.image
+      ? `https://tbib.org/thumbnails/${p.directory}/thumbnail_${String(p.image).replace(/\.[^.]+$/, '')}.jpg` : '',
+  },
 };
 
 /** 站点 tags 语法用 `+` 连接多个 tag（AND 语义） */
@@ -56,13 +73,14 @@ function encodeTags(tags) {
  */
 function mapPost(post, sourceId) {
   const rawId = String(post?.id ?? '');
-  const original = post?.file_url || '';
+  const builder = IMG_URL[sourceId];
+  const original = post?.file_url || builder?.full(post) || '';
   if (!rawId || !original) return null;
   const tags = String(post.tags || '').split(/\s+/).filter(Boolean);
   // 无标题字段（与 Moebooru 一样）：首个 tag 通常是 1girl 之类，聊胜于无
   const title = tags[0] || '';
-  // DAPI 的 post 结构里没有作者字段，作者名只能留空
-  const author = '';
+  // 新版 DAPI 实例（hypnohub / xbooru）带 owner 上传者；老实例（safebooru / tbib）没有
+  const author = post.owner || '';
   return {
     illustId: qualifyId(sourceId, rawId),
     source: sourceId,
@@ -72,7 +90,7 @@ function mapPost(post, sourceId) {
     authorAccount: '',
     authorId: '',          // 无作者 id：关注按钮与作者页点击自然隐藏（均以 authorId 为守卫）
     authorAvatar: '',
-    thumbnailUrl: post.preview_url || '',
+    thumbnailUrl: post.preview_url || builder?.preview(post) || '',
     // sample_url 偶尔指向不存在的样本图，回退到原图
     mediumUrl: post.sample_url || original,
     originalUrl: original,
@@ -155,11 +173,12 @@ export function createGelbooruSource(def) {
 
     /**
      * 推荐流 —— 近期高分：默认序（新→旧）+ score:>=N，**不传 sort:**。
+     * 阈值可按源覆盖（def.feedMinScore）：hypnohub/xbooru 投票少，10 会筛成空流。
      * @returns {Promise<{illusts: object[], message?: string}>}
      */
     async feed({ page = 1, limit = 20, safeOnly = false } = {}) {
       try {
-        const posts = await listPosts(buildTags(`score:>=${FEED_MIN_SCORE}`, { safeOnly }), { page, limit });
+        const posts = await listPosts(buildTags(`score:>=${def.feedMinScore ?? FEED_MIN_SCORE}`, { safeOnly }), { page, limit });
         return { illusts: posts.map(p => mapPost(p, sourceId)).filter(Boolean) };
       } catch (e) {
         log.error('[feed] 失败:', e?.message || e);

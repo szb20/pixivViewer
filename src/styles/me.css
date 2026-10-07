@@ -10,7 +10,7 @@
   z-index: 100;
   /* 只做位移：收起时整块随顶部一起上滑出屏，不做透明度渐隐，
      与顶部毛玻璃 .status-bar-frosted、底部 .tab-bar 的出入方式保持一致 */
-  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .me-settings-btn--hidden {
@@ -26,7 +26,7 @@
 /* 桌面：二级菜单已移入侧边栏、也没有底部悬浮栏，底部留白回落到与其它页面一致 */
 @media (min-width: 900px) {
   .me-page {
-    padding-bottom: 18px;
+    padding-bottom: var(--sp-4);
   }
 }
 
@@ -39,15 +39,15 @@
   margin: 0 auto;
   width: 100%;
   max-width: 560px;
-  padding: 4px 14px;
+  padding: var(--sp-1) var(--sp-3);
   display: flex;
   flex-wrap: nowrap;
   justify-content: center;
-  gap: 10px;
+  gap: var(--sp-2);
   z-index: 9;
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity var(--t-slow) ease, transform var(--t-slow) ease;
 }
 
 .sub-tab-bar--hidden {
@@ -74,7 +74,7 @@
   align-items: center;
   justify-content: center;
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
-  transition: text-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+  transition: text-shadow var(--t-base) ease, background var(--t-base) ease, color var(--t-base) ease;
 }
 
 .sub-tab-btn.active {
@@ -115,16 +115,16 @@
 }
 
 .author-card {
-  padding: 12px 16px 14px;
+  padding: var(--sp-3) var(--sp-4) var(--sp-3);
   border-bottom: 1px solid var(--border);
 }
 
 .author-card-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   width: 100%;
-  padding: 0 0 10px;
+  padding: 0 0 var(--sp-2);
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -184,7 +184,7 @@
 
 .author-card-works {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
   overflow-x: auto;
   padding-bottom: 2px;
   scroll-snap-type: x proximity;
@@ -198,7 +198,7 @@
   height: 72px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.045);
   backdrop-filter: blur(14px) saturate(145%);
@@ -218,7 +218,7 @@
   flex: 0 0 72px;
   width: 72px;
   height: 72px;
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
     rgba(15, 17, 21, 0.16);

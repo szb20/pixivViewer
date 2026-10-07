@@ -148,7 +148,7 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         cacheUsedRef.current = true;
         // 档位与 R18 来自同一条缓存记录，必须一次写入，避免被「选档位联动 R18」的规则改写
         setRankingSelection({ category: cache.category, r18: cache.r18 });
-        const hydratedR18 = typeof cache.r18 === 'boolean' ? cache.r18 : true;
+        const hydratedR18 = typeof cache.r18 === 'boolean' ? cache.r18 : false;
         loadedModeRef.current = cache.mode
           || ((hydratedR18 && R18_CATEGORIES.has(cache.category)) ? `${cache.category}_r18` : (cache.category || 'daily'));
         cacheRef.current.set(loadedModeRef.current, {

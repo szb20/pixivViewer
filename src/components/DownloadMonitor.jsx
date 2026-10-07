@@ -30,8 +30,15 @@ async function retryDownload(meta) {
     tags: meta.tags,
     _liked: meta._liked,
   });
-  return !!(r?.success || r?.cached);
+  return { ok: !!(r?.success || r?.cached), error: r?.error || '' };
 }
+
+/** 保存链路内部错误码 → 给用户看的文案；未知错误原样透传 */
+const ERR_TEXT = {
+  invalid_item: '条目信息不完整',
+  no_url: '没有可下载的地址',
+  download_failed: '下载失败',
+};
 
 /** 字节数格式化（下载行显示用） */
 function fmtBytes(n) {
@@ -121,28 +128,46 @@ export default function DownloadMonitorButton() {
     if (open && jobs.length > 0 && jobs.every(j => j.status === 'done')) setDownloadOpen(false);
   }, [jobs, open, setDownloadOpen]);
 
-  // 重试：调用下载管理的 retry(key)，随后重新走保存链路
-  const handleRetry = useCallback(async (job) => {
-    downloadMonitor.retry(job.key, async (meta) => {
+  // 重试：调用下载管理的 retry(key)，随后重新走保存链路。
+  // 返回 promise —— 「全部重试」靠 await 它才能真串行。
+  const handleRetry = useCallback((job) => {
+    return Promise.resolve(downloadMonitor.retry(job.key, async (meta) => {
       setRetryingKeys(prev => new Set(prev).add(job.key));
+      const failMsg = (err) => ERR_TEXT[err] || err || '重试失败';
+      // retry() 已把任务从列表移除；失败时要显式重建，
+      // 否则 saveItem 走的早退分支（无 URL / 条目不完整）不会调 start，这条会凭空消失
+      const recreateFailed = (msg) => {
+        // 保存链路自己也会 start/finish 同一个 key（`${illustId}_${page}`）：
+        // 它已经登记过就保留它写的文案，别覆盖成这里传进来的原始错误码。
+        // 只有链路根本没碰 monitor 时才补建 —— no_url / invalid_item 这类早退分支
+        // 不补建的话，这条失败记录会从列表里凭空消失（重试入口也一起没了）。
+        if (downloadMonitor.getSnapshot().jobs.some(j => j.key === job.key)) return;
+        // 用 start() 的句柄收尾：单例上没有 finish（历史上这里写成 downloadMonitor.finish，
+        // 重试失败时必抛 TypeError，任务被 retry() 先删掉又没能重建，行直接消失）
+        const h = downloadMonitor.start(job.key, {
+          illustId: meta.illustId,
+          page: meta.page,
+          title: meta.title,
+          kind: meta.kind,
+          message: '重试中',
+        });
+        h.recordFailure({ ...meta, error: msg });
+        h.finish(false, msg);
+      };
       try {
-        const ok = await retryDownload(meta);
-        if (ok) {
-          // 成功：任务本轮已由 retry 移除，这里显式清一下持久化（若 retry 未带 meta 时）
-          // 失败：重新登记为该任务（downloadMonitor.start 会新建并覆盖持久化）
-          downloadMonitor.clearFinished();
+        const r = await retryDownload(meta);
+        if (r.ok) {
+          // 成功：只清掉这一条 —— clearFinished 会把其他等待重试的失败记录一并抹掉
+          downloadMonitor.dismiss(job.key);
         } else {
-          // 再次失败 → 记录失败信息（保留在列表）
-          downloadMonitor.recordFailure(job.key, { ...meta, error: '重试失败' });
-          downloadMonitor.finish(job.key, false, '重试失败');
+          recreateFailed(failMsg(r.error));
         }
       } catch (e) {
-        downloadMonitor.recordFailure(job.key, { ...(job.retry || {}), error: e?.message || '重试失败' });
-        downloadMonitor.finish(job.key, false, e?.message || '重试失败');
+        recreateFailed(failMsg(e?.message));
       } finally {
         setRetryingKeys(prev => { const n = new Set(prev); n.delete(job.key); return n; });
       }
-    });
+    }));
   }, []);
 
   // 全部重试：串行，避免同时打一堆请求

@@ -9,11 +9,16 @@ import { PixivRepository } from './repository.js';
 import { FileStore } from './fileStore.js';
 import { NetworkStore } from './networkStore.js';
 import { galleryHasFile, exportToGallery, isGalleryAvailable } from './gallery.js';
-import { pixivReUrl } from '../core/utils.js';
+import { pixivReUrl, buildGifFileName } from '../core/utils.js';
 import { fetchableImageUrls } from '../../sources/imageUrl.js';
 import { createLogger } from '../../utils/logger.js';
 import { downloadMonitor } from '../../utils/downloadMonitor.js';
 import { scheduleMetaBackup } from './metaBackup.js';
+import { fetchUgoiraFrames } from '../../api/ugoira/index.js';
+import { fetchUgoiraMeta } from '../../api/ugoira/meta.js';
+import { loadImageToPixels, encodeFramesToGif } from '../../api/ugoira/gifEncoder.js';
+import { backupLosslessZip } from '../../api/ugoira/zipDiskCache.js';
+import { bytesToBase64 } from '../../utils/bytes.js';
 
 const log = createLogger('storageService');
 
@@ -171,7 +176,12 @@ export class PixivStorageService {
    */
   async saveFromNetwork(item) {
     if (!item?.illustId) return { success: false, error: 'invalid_item' };
-    // 动图统一由 api/index.js 的 saveItem 分发到 saveGifToAlbum，本层只处理静态图
+    // 动图（Ugoira）：只有 Pixiv 有此类型，走独立通道（ZIP 解帧 → GIF 编码 → 相册导出）；
+    // booru 条目恒为静态图，继续走下面的原图下载分支。
+    const isPixiv = !item.source || item.source === 'pixiv';
+    if (isPixiv && (item.type === 'gif' || Number(item.illustType) === 2)) {
+      return await this._saveGifFromNetwork(item);
+    }
 
     const id = PixivEntity.makeId(item.illustId, item._pageIndex ?? 0);
     const entity = await this._findEntity(item.illustId, item._pageIndex ?? 0);
@@ -320,6 +330,155 @@ export class PixivStorageService {
   async getAll() {
     return await this.repository.getAll();
   }
+
+  /**
+   * 动图保存编排：下载监控 + 失败登记（供下载管理一键重试），实际取帧/编码在 _doSaveGif。
+   * 并发去重由 storageFacade 完成（动图统一页 0，与静图共用 `${illustId}_0` 键）。
+   * @param {object} item — 动图条目
+   * @returns {Promise<{success?: boolean, error?: string, ...}>}
+   */
+  async _saveGifFromNetwork(item) {
+    const sid = String(item.illustId);
+    const mon = downloadMonitor.start(`${sid}_0`, {
+      illustId: sid,
+      page: 0,
+      title: item.title || sid,
+      kind: 'gif',
+      message: '下载动图',
+    });
+    // 失败时登记完整重试信息（供下载管理一键重试）
+    const failMeta = {
+      illustId: sid,
+      page: 0,
+      type: 'gif',
+      illustType: 2,
+      originalUrl: item.originalUrl,
+      mediumUrl: item.mediumUrl,
+      thumbnailUrl: item.thumbnailUrl,
+      title: item.title || sid,
+      author: item.authorName || item.author || '',
+      authorName: item.authorName || item.author || '',
+      authorId: item.authorId || '',
+      tags: item.tags,
+    };
+    const wrapped = (pct) => {
+      if (pct == null) return;
+      mon.setProgress(Math.round(pct));
+    };
+    try {
+      const r = await this._doSaveGif(item, wrapped);
+      if (r?.success) {
+        mon.finish(true);
+        // 无损 ZIP 副本尽力而为：磁盘缓存被 LRU 淘汰或读取失败就跳过
+        backupLosslessZip(sid).catch(() => { });
+      } else {
+        mon.recordFailure(failMeta);
+        mon.finish(false, r?.error || '动图保存失败');
+      }
+      return r;
+    } catch (e) {
+      mon.recordFailure(failMeta);
+      mon.finish(false, e?.message || '动图保存失败');
+      throw e;
+    }
+  }
+
+  /**
+   * 动图保存实现：幂等 → 相册同名跳过 → 取帧 → gifenc 编码 → 导出相册 + 落库。
+   * 只导出系统相册（MediaStore / Pictures/PixivViewer），不写私有副本（避免双写）。
+   */
+  async _doSaveGif(item, onProgress) {
+    const sid = String(item.illustId);
+    // booru 站没有 Ugoira：只有 Pixiv 作品的 meta 接口存在，误入这里必然一路 404
+    if (item.source && item.source !== 'pixiv') return { error: '该来源不支持动图' };
+    const existing = await this.repository.find(PixivEntity.makeId(sid, 0));
+    if (existing?.fileName && existing.isSaved) {
+      return { success: true, idempotent: true, cached: true, fileName: existing.fileName };
+    }
+    // 若已有轻记录（toggleLike 创建、无文件），重建时保留其 likedAt，避免喜欢标记被抹掉
+    const preserveLikedAt = existing?.likedAt || 0;
+
+    // 目标文件名由 illustId/作者/标题决定，先算出来：
+    // 系统相册已有同名文件 → 跳过 ZIP 下载与 GIF 编码，直接补元数据
+    const finalAuthor = item.authorName || item.author || sid;
+    const finalTitle = item.title || sid;
+    const gifFileName = buildGifFileName(sid, finalAuthor, finalTitle);
+
+    if (!existing?.fileName && await galleryHasFile(gifFileName)) {
+      let meta = null;
+      try { meta = await fetchUgoiraMeta(sid); } catch { /* 元数据拿不到也不阻塞 */ }
+      const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, 0, preserveLikedAt);
+      await this.repository.save(entity);
+      scheduleMetaBackup();
+      onProgress?.(100);
+      return { success: true, idempotent: true, cached: true, fileName: gifFileName, skipped: true, entity };
+    }
+
+    try {
+      onProgress?.(5);
+      const { frames } = await fetchUgoiraFrames(sid, onProgress);
+      if (!frames?.length) return { error: '无帧数据' };
+
+      // 逐帧流水：第 0 帧先量化出共享调色板，其余帧按需加载并立即释放
+      const first = await loadImageToPixels(frames[0].path);
+      const w = first.w;
+      const h = first.h;
+      const getFrame = async (i) => {
+        const pixels = await loadImageToPixels(frames[i].path);
+        if ((i + 1) % 10 === 0) onProgress?.(Math.min(55, 35 + i + 1));
+        return pixels;
+      };
+
+      const bytes = await encodeFramesToGif(first, getFrame, frames.map(f => f.delay), w, h, onProgress);
+      const base64 = bytesToBase64(bytes);
+
+      await exportToGallery(base64, gifFileName, 'image/gif');
+
+      // 写元数据（动图统一存 page 0）
+      const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, { frames }, bytes.length, preserveLikedAt);
+      await this.repository.save(entity);
+      scheduleMetaBackup();
+
+      onProgress?.(100);
+      return { success: true, cached: true, fileName: gifFileName, entity };
+    } catch (e) {
+      log.error('[_doSaveGif] 失败:', e.message);
+      return { error: `GIF 保存失败: ${e.message}` };
+    }
+  }
+}
+
+/**
+ * 动图保存实体（动图统一存 page 0）。
+ * @param {string} sid
+ * @param {object} item — 原始条目（authorId / pixivUrl 等展示元数据）
+ * @param {string} gifFileName
+ * @param {string} finalAuthor
+ * @param {string} finalTitle
+ * @param {{frames?: Array}} [meta] — ugoira 元数据（相册同名跳过时可能拿不到 → frameCount 落 0）
+ * @param {number} [size] — GIF 字节数
+ * @param {number} [likedAt] — 重建轻记录时保留的喜欢时间戳
+ * @returns {PixivEntity}
+ */
+function buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, meta, size = 0, likedAt = 0) {
+  return new PixivEntity({
+    id: PixivEntity.makeId(sid, 0),
+    illustId: sid,
+    pageIndex: 0,
+    type: 'gif',
+    state: 'saved',
+    fileName: gifFileName,
+    title: finalTitle,
+    author: finalAuthor,
+    authorName: finalAuthor,
+    authorId: item.authorId || '',
+    pixivUrl: item.pixivUrl || `https://www.pixiv.net/artworks/${sid}`,
+    frameCount: meta?.frames?.length || 0,
+    frames: (meta?.frames || []).map((f, i) => ({ file: `frame_${i}`, delay: f.delay || 80 })),
+    cachedAt: Date.now(),
+    size,
+    likedAt,
+  });
 }
 
 /**

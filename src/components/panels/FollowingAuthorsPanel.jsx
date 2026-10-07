@@ -135,6 +135,11 @@ export default function FollowingAuthorsPanel({ onOpen, onOpenAuthor, onOpenSett
         ))}
       </div>
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
+      {!feed.loading && feed.appendError && (
+        <div className="hint hint--error" onClick={feed.retryAppend} role="button">
+          加载失败，点击重试
+        </div>
+      )}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getCompositeKey } from '../pixiv-assistant/core/utils.js';
 import { storageFacade } from '../pixiv-assistant/index.js';
 import { usePixivCache } from '../context/pixivCacheContext.js';
@@ -25,6 +25,10 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
   const multiPage = (Number(totalPages) || Number(cur?._totalPages) || Number(cur?.pageCount) || 1) > 1;
   const longPressTimerRef = useRef(null);
   const longPressTriggeredRef = useRef(false);
+
+  // 卸载时丢掉未触发的长按：500ms 窗口内切换作品/关灯箱，
+  // 不该在别的界面上弹出「保存全部」的下载与提示。
+  useEffect(() => () => clearTimeout(longPressTimerRef.current), []);
 
   const notifyLikedChanged = useCallback(() => {
     window.dispatchEvent(new CustomEvent('pixiv:liked-changed'));

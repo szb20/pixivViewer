@@ -9,38 +9,10 @@
   background: var(--bg);
 }
 
-/* 毛玻璃氛围背景：固定渐变色块，让玻璃面板有可模糊的光源 */
-.app::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  max-width: 560px;
-  margin: 0 auto;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(46% 36% at 16% 10%, rgba(var(--color-accent-rgb), 0.24), transparent 70%),
-    radial-gradient(40% 32% at 90% 18%, rgba(var(--color-r18-rgb), 0.15), transparent 70%),
-    radial-gradient(48% 40% at 82% 88%, rgba(var(--color-success-rgb), 0.11), transparent 70%),
-    radial-gradient(42% 34% at 10% 86%, rgba(var(--color-warning-rgb), 0.11), transparent 70%);
-  animation: ambient-breathe 24s ease-in-out infinite alternate;
-}
-
-/* 极慢呼吸：让玻璃面板有"活"的光源 */
-@keyframes ambient-breathe {
-  from {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1.07);
-  }
-}
+/* 氛围光晕（.app::before 四角径向渐变 + 24s 呼吸动画）已删除：
+   它是给毛玻璃面板提供「可模糊的光源」用的，但代价是一层常驻的 fixed 合成层
+   加一个永不停止的 animation，笔记本上白烧电；而实际效果只是把纯色底
+   染出一层说不清是什么的色偏。背景回到单一 --bg，层次交给色阶。 */
 
 .app-content {
   flex: 1;
@@ -160,7 +132,7 @@
   line-height: 0;
   color: #fff;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background var(--t-fast), border-color var(--t-fast);
 }
 
 .glass-icon-btn:active {
@@ -205,7 +177,7 @@
   /* 隐藏时整块毛玻璃随系统状态栏一起上滑收走（不做透明度渐隐），
      缓动/时长与底部 .tab-bar 保持一致，上下 chrome 出入同步 */
   transform: translateY(0);
-  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* 向下滚动隐藏 chrome：毛玻璃底整体上滑出屏（-1px 连底部那条 1px 分隔线一起收走） */
@@ -225,7 +197,7 @@
   display: flex;
   z-index: 10;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 26px;
+  border-radius: var(--r-pill);
   background: rgba(22, 25, 32, 0.52);
   backdrop-filter: blur(20px) saturate(160%);
   box-shadow:
@@ -234,8 +206,8 @@
   transform: translateY(0);
   opacity: 1;
   transition:
-    transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity 0.2s ease;
+    transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity var(--t-base) ease;
 }
 
 .tab-bar--hidden {
@@ -256,7 +228,7 @@
   align-items: center;
   justify-content: center;
   text-shadow: 0 0 8px rgba(107, 112, 128, 0.3);
-  transition: color 0.2s ease, text-shadow 0.2s ease;
+  transition: color var(--t-base) ease, text-shadow var(--t-base) ease;
 }
 
 .tab-btn.active {
@@ -273,19 +245,21 @@
   flex-direction: column;
   flex-shrink: 0;
   width: var(--sidebar-w);
-  padding: 18px 12px 14px;
+  padding: var(--sp-4) var(--sp-3) var(--sp-3);
   /* 窗口矮时底部「设置」不能被裁掉且无处可滚 */
   overflow-y: auto;
   /* 高于详情(50)/作者页(60)/设置(70) —— 覆盖层让出侧边栏后它仍可点；
      低于模态对话框(100)与灯箱(10000)，那两者仍应盖住一切 */
   z-index: 80;
   border-right: 1px solid var(--border);
-  background: rgba(15, 17, 21, 0.55);
-  backdrop-filter: blur(12px) saturate(150%);
+  /* 桌面常驻骨架一律实底（同设置页/对话框的政策）：侧边栏是常驻的，
+     底下永远是纯色，毛玻璃只会把它糊成「另一块随手调的灰」，
+     与右侧内容区永远差一点点、又说不清为什么。实底靠色阶表达层次。 */
+  background: var(--bg-panel);
 }
 
 .side-nav-brand {
-  padding: 2px 10px 18px;
+  padding: 2px var(--sp-2) var(--sp-4);
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.4px;
@@ -300,46 +274,43 @@
 
 /* 来源组：与主导航之间用一条分隔线断开 */
 .side-nav-group--source {
-  padding-bottom: 12px;
-  margin-bottom: 10px;
+  padding-bottom: var(--sp-3);
+  margin-bottom: var(--sp-2);
   border-bottom: 1px solid var(--border);
-}
-
-.side-nav-group-label {
-  padding: 0 10px 6px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.6px;
-  color: var(--text-tertiary);
 }
 
 .side-nav-footer {
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: var(--sp-2);
   border-top: 1px solid var(--border);
 }
 
 .side-nav-item {
   width: 100%;
-  padding: 9px 10px;
+  padding: var(--sp-2) var(--sp-2);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-2);
   border: none;
-  border-radius: 9px;
+  border-radius: var(--r-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
   font-size: 14px;
   text-align: left;
   cursor: pointer;
-  transition: background 0.16s ease, color 0.16s ease;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
 }
 
 .side-nav-item.active {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.side-nav-item:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .side-nav-icon {
@@ -356,10 +327,11 @@
 
 /* 下载入口的任务数角标 */
 .side-nav-badge {
+  font-variant-numeric: tabular-nums;
   margin-left: auto;
   flex-shrink: 0;
   min-width: 18px;
-  padding: 0 6px;
+  padding: 0 var(--sp-2);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
   color: var(--text-primary);
@@ -374,16 +346,45 @@
   color: var(--color-danger);
 }
 
+/* 可折叠组标题行（目前只有「来源」组在用）：标签靠左，收起时附当前值，箭头靠右 */
+.side-nav-toggle {
+  justify-content: space-between;
+}
+
+.side-nav-value {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-nav-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--t-fast) ease;
+}
+
+.side-nav-chevron.open {
+  transform: rotate(90deg);
+}
+
+/* 来源副项列表：去掉 .side-nav-subs 的顶部留白（标题行自带间距） */
+.side-nav-group--source .side-nav-subs {
+  padding-top: 0;
+}
+
 /* 「我」的二级页签：缩进对齐主项的文字（10 padding + 19 图标 + 10 gap） */
 .side-nav-subs {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 2px 0 6px;
+  padding: 2px 0 var(--sp-2);
 }
 
 .side-nav-item--sub {
-  padding: 6px 10px 6px 39px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 39px;
   font-size: 13px;
 }
 
@@ -395,7 +396,7 @@
 /* 带状态值的二级项（R18 开关）：标签靠左、状态胶囊靠右 */
 .side-nav-item--switch {
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-2);
 }
 
 /* 当前档位没有 R18 变体（R18G / 月榜 / 新人 / 原创）时整行置灰 */
@@ -406,14 +407,14 @@
 
 .side-nav-state {
   flex-shrink: 0;
-  padding: 1px 8px;
+  padding: 1px var(--sp-2);
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 400;
-  transition: background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
 }
 
 .side-nav-state.on {

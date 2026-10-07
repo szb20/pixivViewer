@@ -15,6 +15,9 @@
  *     retry?: { illustId, page, title, kind, type, ... } // 失败重试重建信息 }
  */
 import { appStorage } from './appStorage.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('downloadMonitor');
 
 const listeners = new Set();
 const jobs = new Map();
@@ -70,7 +73,12 @@ function emit() {
  */
 function recordFailureFor(key, retryMeta = {}) {
   const j = jobs.get(key);
-  if (!j) return;
+  if (!j) {
+    // 任务已被移除（如 retry 先删除、保存链路却没能用 start 重建）：
+    // 这次失败不会体现在任何 UI 上，留个排查线索
+    log.debug('recordFailure 找不到任务:', key);
+    return;
+  }
   j.retry = { ...(j.retry || {}), ...retryMeta, key, illustId: retryMeta.illustId || j.illustId, page: retryMeta.page ?? j.page, title: retryMeta.title || j.title, kind: retryMeta.kind || j.kind };
   persistFailed();
   emit();
@@ -149,7 +157,10 @@ export const downloadMonitor = {
       },
       finish(ok, error = '') {
         const j = jobs.get(key);
-        if (!j) return;
+        if (!j) {
+          log.debug('finish 找不到任务:', key, ok ? '(done)' : '(error)');
+          return;
+        }
         j.status = ok ? 'done' : 'error';
         j.error = ok ? '' : error;
         // 完成/失败后速度没有意义，留着会让列表显示一个不断变小的“速度”
@@ -194,6 +205,18 @@ export const downloadMonitor = {
     emit();
   },
 
+  /**
+   * 移除单个任务（成功或失败均可）。
+   * 重试成功时用它收尾 —— clearFinished 会把其他等待重试的失败记录一并抹掉。
+   */
+  dismiss(key) {
+    if (!jobs.has(key)) return;
+    jobs.delete(key);
+    if (jobs.size === 0) queueTotal = 0;
+    persistFailed();
+    emit();
+  },
+
   /** 重试失败任务：重置状态、触发外部传入的 onRetry 回调（重新走保存链路） */
   retry(key, onRetry) {
     const j = jobs.get(key);
@@ -208,7 +231,8 @@ export const downloadMonitor = {
     jobs.delete(key);
     persistFailed();
     emit();
-    onRetry?.(meta);
+    // 返回外部保存的 promise：调用方需要 await 它才能保证「全部重试」真串行
+    return onRetry?.(meta);
   },
 
   subscribe(fn) {

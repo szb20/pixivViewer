@@ -10,7 +10,7 @@ export {
 export { CACHE_DIR } from './core/constants.js';
 export { createPixivApi } from './core/pixivApi.js';
 
-export { getSettings, getSettingsSync, saveSettings, getFS } from './capacitor/config.js';
+export { getSettings, getSettingsSync, saveSettings, getFS, getPixivCookie } from './capacitor/config.js';
 export { PixivEntity } from './capacitor/entity.js';
 export { PixivRepository } from './capacitor/repository.js';
 export { storageFacade } from './capacitor/storageFacade.js';

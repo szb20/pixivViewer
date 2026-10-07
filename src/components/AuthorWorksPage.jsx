@@ -27,6 +27,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [hasMore, setHasMore] = useState(false);
+  const [appendError, setAppendError] = useState(null);
   const pendingIdsRef = useRef([]);
   const sentinelRef = useRef(null);
 
@@ -72,20 +73,25 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
     return () => { cancelled = true; };
   }, [authorId]);
 
-  // 加载下一页：从剩余 ID 中取一批，并发拉详情
+  // 加载下一页：从剩余 ID 中取一批，并发拉详情；失败的放回队列等「点击重试」。
+  // 哨兵在 appendError 期间收起：否则 observer 会随 loadingMore 翻转重建并立即再触发 load，
+  // 把一次瞬时失败放大成不断重试的循环请求（同 useTabFeed 的处理）。
   const loadMore = useCallback(async () => {
     if (loadingMore) return;
     const ids = pendingIdsRef.current;
     if (!ids.length) { setHasMore(false); return; }
     const batch = ids.splice(0, BATCH_SIZE);
     setLoadingMore(true);
+    setAppendError(null);
     try {
       const results = await Promise.allSettled(batch.map(id => pixivApi.fetchIllust(id)));
       const newItems = [];
-      for (const r of results) {
-        if (r.status !== 'fulfilled') continue;
+      const failedIds = [];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status !== 'fulfilled') { failedIds.push(batch[i]); continue; }
         const illust = r.value?.illust;
-        if (!illust?.illustId) continue;
+        if (!illust?.illustId) continue; // 接口有响应但没这条作品，重试也不会变好，丢弃
         const p0 = illust.images?.[0] || {};
         newItems.push({
           illustId: String(illust.illustId),
@@ -104,10 +110,14 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
           pixivUrl: illust.pixivUrl || '',
         });
       }
+      // 失败的 id 放回队头：直接丢弃会让这批作品在瞬时断网后永久消失（队列已消费、翻不回来）
+      if (failedIds.length) ids.unshift(...failedIds);
       setItems(prev => [...prev, ...newItems]);
       setHasMore(pendingIdsRef.current.length > 0);
+      if (failedIds.length) setAppendError(`有 ${failedIds.length} 项加载失败，点击重试`);
     } catch (e) {
       log.warn('加载更多失败:', e?.message || e);
+      setAppendError('加载失败，点击重试');
     } finally {
       setLoadingMore(false);
     }
@@ -116,13 +126,13 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
   // 哨兵触底自动加载
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el || !hasMore || loading) return;
+    if (!el || !hasMore || loading || appendError) return;
     const io = new IntersectionObserver(([e]) => {
       if (e.isIntersecting && hasMore && !loadingMore) loadMore();
     }, { rootMargin: '300px 0px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [hasMore, loading, loadingMore, loadMore]);
+  }, [hasMore, loading, loadingMore, loadMore, appendError]);
 
   const handleOpen = useCallback((it, index) => onOpenImage?.(it, { items, index }), [items, onOpenImage]);
 
@@ -153,7 +163,12 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
         )}
         {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
         {loadingMore && <div className="hint">加载中...</div>}
-        {!loading && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
+        {!loading && appendError && (
+          <div className="hint hint--error" onClick={loadMore} role="button">
+            {appendError}
+          </div>
+        )}
+        {!loading && !appendError && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
       </div>
     </div>
   );

@@ -11,6 +11,8 @@ const log = createLogger('tabCache');
 const DB_NAME = 'teyvat_pixiv_tabs';
 const DB_VERSION = 3;
 const STORE = 'tabs';
+/** 升级被旧连接阻塞时的宽限期：超过即放弃本次打开（缓存降级为直连），避免 promise 永远挂着 */
+const BLOCKED_GRACE_MS = 3000;
 
 /** 各 Tab 的 TTL（毫秒），统一 24 小时 */
 const TTL_MAP = {
@@ -43,11 +45,27 @@ function openDB() {
         e.target.transaction.objectStore(STORE).clear();
       }
     };
+    let settled = false;
+    const settle = (fn, val) => { if (settled) return; settled = true; fn(val); };
     req.onsuccess = () => {
+      // 已过宽限期、按失败处理后才到达的迟到连接：关掉它，
+      // 别让它占着旧版本把下一次升级同样堵死（同 cacheDB.js 的处理）
+      if (settled) { req.result.close(); return; }
       _db = req.result;
-      resolve(_db);
+      settle(resolve, _db);
     };
-    req.onerror = () => reject(req.error);
+    req.onerror = () => settle(reject, req.error);
+    // 被旧连接阻塞时 open 既不 success 也不 error，promise 会永远挂着：
+    // useTabFeed 的水合 await 永不返回 → hydrated 不置位 → 首拉不发、页面一直转圈。
+    // 宽限几秒后按失败处理，让上层 catch 后走网络。
+    req.onblocked = () => {
+      log.warn('tabCache 升级被其他连接阻塞（可能有旧页面未关闭），3 秒后放弃');
+      setTimeout(() => {
+        if (settled) return;
+        log.warn('tabCache 仍被阻塞，本次打开按失败处理（缓存降级为直连）');
+        settle(reject, new Error('IndexedDB open blocked'));
+      }, BLOCKED_GRACE_MS);
+    };
   }).finally(() => { _dbPromise = null; });
   return _dbPromise;
 }

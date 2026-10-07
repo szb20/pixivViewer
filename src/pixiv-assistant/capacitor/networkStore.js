@@ -6,7 +6,6 @@
  * 支持：
  * - 普通图片下载（fetch / CapacitorHttp 双通道）
  * - 动图 ZIP 下载
- * - 动图元数据查询（ugoira_meta）
  * - 下载进度回调
  */
 import { CapacitorHttp } from '@capacitor/core';
@@ -70,7 +69,11 @@ export class NetworkStore {
     }
     try {
       const referer = refererFor(abs);
-      const resp = await fetch(abs, { headers: referer ? { Referer: referer } : undefined });
+      // 停滞兜底：没有超时的话，卡住的连接会让下载任务永远停在「下载中」
+      const resp = await fetch(abs, {
+        headers: referer ? { Referer: referer } : undefined,
+        signal: AbortSignal.timeout(60000),
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       log.debug('fetch OK, size:', blob.size);
@@ -79,49 +82,6 @@ export class NetworkStore {
       log.info('fetch 失败，降级 CapacitorHttp:', e.message);
       return await this._downloadWithCapacitor(url);
     }
-  }
-
-  /**
-   * 获取动图元数据（ugoira_meta + illust 详情）。
-   * @param {string} illustId
-   * @param {string} [cookie]
-   * @returns {Promise<object|null>}
-   */
-  async fetchUgoiraMeta(illustId, cookie) {
-    const metaHeaders = {
-      'Accept': 'application/json',
-      'Referer': `https://www.pixiv.net/artworks/${illustId}`,
-    };
-    if (cookie) metaHeaders['X-Pixiv-Cookie'] = `PHPSESSID=${cookie}`;
-
-    const [ugoiraResp, illustResp] = await Promise.all([
-      fetch(`/pixiv-api/ajax/illust/${illustId}/ugoira_meta`, {
-        headers: metaHeaders, signal: AbortSignal.timeout(15000),
-      }),
-      fetch(`/pixiv-api/ajax/illust/${illustId}`, {
-        headers: metaHeaders, signal: AbortSignal.timeout(10000),
-      }).catch(() => null),
-    ]);
-
-    if (!ugoiraResp.ok) throw new Error(`ugoira_meta HTTP ${ugoiraResp.status}`);
-    const meta = (await ugoiraResp.json())?.body;
-    if (!meta?.frames?.length) return null;
-
-    // 合并 illust 详情元数据
-    if (illustResp?.ok) {
-      try {
-        const illustDetail = (await illustResp.json())?.body;
-        if (illustDetail) {
-          meta.userName = illustDetail.userName || meta.userName || '';
-          meta.title = illustDetail.illustTitle || illustDetail.title || meta.title || '';
-          meta.userAccount = illustDetail.userAccount || meta.userAccount || '';
-          meta.userId = illustDetail.userId || meta.userId;
-          meta.tags = illustDetail.tags || meta.tags || [];
-        }
-      } catch (e) { log.debug('illust 详情解析失败（不影响主流程）:', e?.message || e); }
-    }
-
-    return meta;
   }
 
   async _blobToBase64(blob) {

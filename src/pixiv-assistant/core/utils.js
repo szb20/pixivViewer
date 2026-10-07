@@ -263,6 +263,8 @@ export function safeFileName(s) {
  *   pixiv_{id}_g0_[Author]_[Title].gif — 新格式动图（{source}_{id}_g{page}_[{author}]_[{title}]）
  *   pixiv_{id}_p0_[Author]_[Title].jpg — 新格式图片
  *   yande_{id}_p0_[Author]_[Title].jpg — 非 Pixiv 来源（同上格式，前缀换成来源名）
+ *   konachan-net_{id}_p0_[Author]_[Title].jpg — 来源名可含连字符
+ *   wallhaven_{id}_p0_[Author]_[Title].jpg — 站点 id 不保证是纯数字（6 位字母数字）
  *   ugoira_12345.gif — Ugoira 动图（旧）
  *   ugoira_12345_Author_Title.gif — Ugoira 动图 + 作者 + 标题（旧）
  * @param {string} name
@@ -272,17 +274,23 @@ export function parseCacheFileName(name) {
   const extMatch = name.match(/\.(jpg|jpeg|png|gif|webp|zip)$/i);
   if (!extMatch) return null;
   const base = name.slice(0, -extMatch[0].length);
+  // 扩展名是「这条记录是不是动图」唯一可靠的信号：现役写入端（buildCacheFileName）
+  // 无论动图与否都写 `_p{page}`，只有 .gif 结尾能区分。历史 `_g{page}` 命名仍要认，
+  // 所以下面各分支的 isGif 是「`g` 标记 || gif 扩展名」，两者取或。
+  const isGifExt = /^gif$/i.test(extMatch[1]);
 
   // 非 Pixiv 来源：{source}_{rawId}_p|g{page}_[{author}]_[{title}]
   // 单独开一支（而非放宽下面 pixiv 分支的 `(\d+)`），这样 Pixiv 老文件的解析路径一字不动。
   // 用 KNOWN_SOURCES 白名单：否则标题里恰好含 `x_12_p0_[..]` 的第三方文件会被误认。
-  const altSource = base.match(/^([a-z][a-z0-9]*)_(\d+)_(p|g)(\d+)_\[(.*?)\]_\[(.*)\]$/);
+  // 来源名允许连字符（konachan-net）、rawId 允许字母（Wallhaven 是 6 位字母数字，如 216o5y）——
+  // 这两段放宽后误判面由白名单 + 锚定的 p|g 结构兜住。
+  const altSource = base.match(/^([a-z][a-z0-9-]*)_([A-Za-z0-9]+)_(p|g)(\d+)_\[(.*?)\]_\[(.*)\]$/);
   if (altSource && altSource[1] !== 'pixiv' && KNOWN_SOURCES.includes(altSource[1])) {
     return {
       source: altSource[1],
       illustId: qualifyId(altSource[1], altSource[2]),
       pageIndex: parseInt(altSource[4], 10),
-      isGif: altSource[3] === 'g',
+      isGif: altSource[3] === 'g' || isGifExt,
       authorName: altSource[5], author: altSource[5], title: altSource[6],
     };
   }
@@ -313,7 +321,7 @@ export function parseCacheFileName(name) {
   const doubleBracket = base.match(/^pixiv_(\d+)_p(\d+)_\[(.*?)\]_\[(.*)\]$/);
   if (doubleBracket) {
     return {
-      illustId: doubleBracket[1], pageIndex: parseInt(doubleBracket[2], 10), isGif: false,
+      illustId: doubleBracket[1], pageIndex: parseInt(doubleBracket[2], 10), isGif: isGifExt,
       authorName: doubleBracket[3], author: doubleBracket[3], title: doubleBracket[4]
     };
   }
@@ -322,7 +330,7 @@ export function parseCacheFileName(name) {
   const singleBracket = base.match(/^pixiv_(\d+)_p(\d+)_\[(.*)\]$/);
   if (singleBracket) {
     return {
-      illustId: singleBracket[1], pageIndex: parseInt(singleBracket[2], 10), isGif: false,
+      illustId: singleBracket[1], pageIndex: parseInt(singleBracket[2], 10), isGif: isGifExt,
       authorName: singleBracket[3], author: singleBracket[3]
     };
   }
@@ -338,8 +346,57 @@ export function parseCacheFileName(name) {
   if (pixivMatch) {
     const illustId = pixivMatch[1];
     const pageIndex = pixivMatch[2] ? parseInt(pixivMatch[2], 10) : 0;
-    return { illustId, pageIndex, isGif: false };
+    return { illustId, pageIndex, isGif: isGifExt };
   }
 
   return null;
+}
+
+/**
+ * 生成缓存 / 下载文件名 —— `parseCacheFileName` 的逆函数，两者必须往返一致。
+ * 格式：{source}_{rawId}_p{pageIndex}_[{author}]_[{title}].{ext}，动图扩展名用 .gif。
+ * 整体按 UTF-8 字节截断（MediaStore/ext4 单文件名上限 255 字节，中文日文很容易超）。
+ *
+ * 放在 parseCacheFileName 旁边而不是 FileStore 里：这对函数是同一份格式契约的两半，
+ * 分开就会各自漂移（konachan-net 的连字符、Wallhaven 的字母 id 解析不回就是漂移的代价）。
+ * 全来源往返一致性由 scripts/check-sources.mjs 断言。
+ *
+ * @param {{illustId: string, source?: string, pageIndex: number, authorName?: string, title?: string, isGif?: boolean}} entity
+ * @returns {string}
+ */
+export function buildCacheFileName(entity) {
+  const ext = entity.isGif ? 'gif' : 'jpg';
+  const safeAuthor = safeFileName(entity.authorName || '');
+  const safeTitle = safeFileName(entity.title || entity.illustId || '');
+  const authorPart = safeAuthor ? `[${safeAuthor}]` : '[]';
+  const titlePart = safeTitle ? `[${safeTitle}]` : '[]';
+  // 用站点原始 id（rawIdOf）拼名：非 pixiv 条目的 illustId 形如 `yande_1269655`，
+  // 虽然 `_` 在文件名里合法，但统一走 rawIdOf 才能让 parseCacheFileName 往返一致。
+  // pixiv 时 source='pixiv' 且 rawIdOf 就是 illustId → 与历史文件名逐字节相同。
+  const source = entity.source || sourceOfId(entity.illustId);
+  const siteId = rawIdOf(entity.illustId);
+  const head = `${source}_${siteId}_p${entity.pageIndex}_${authorPart}_`;
+  // 预留扩展名与结尾括号的字节，标题按剩余额度截断
+  const suffix = `_${titlePart}.${ext}`;
+  const budget = Math.max(16, 240 - utf8ByteLen(head) - utf8ByteLen(suffix));
+  return `${head}_${truncateUtf8Bytes(titlePart, budget)}.${ext}`.replace(/_+/g, '_');
+}
+
+/**
+ * 动图（Ugoira）保存文件名：pixiv_{id}_g0_[{author}]_[{title}].gif。
+ *
+ * 与 buildCacheFileName 的 `p{N}` 静图格式并存：`g0` 是动图的历史磁盘命名，
+ * 存量文件已按它落盘，改成 `p0` 会让「相册同名跳过」对已保存动图失效（幂等破坏），故保留。
+ * 文件名由 illustId/作者/标题决定（同名即同图），整体按 UTF-8 字节截断
+ * （MediaStore/ext4 单文件名上限 255 字节，日文标题按字符 slice 会把扩展名切掉）。
+ *
+ * @param {string} illustId
+ * @param {string} author
+ * @param {string} title
+ * @returns {string}
+ */
+export function buildGifFileName(illustId, author, title) {
+  const head = `pixiv_${illustId}_g0_[${safeFileName(author)}]_`;
+  const budget = Math.max(16, 240 - utf8ByteLen(head) - utf8ByteLen('.gif'));
+  return `${head}[${truncateUtf8Bytes(safeFileName(title), budget)}].gif`.replace(/_+/g, '_');
 }

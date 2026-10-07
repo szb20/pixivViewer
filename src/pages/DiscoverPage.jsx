@@ -6,15 +6,19 @@ import ImageGrid from '../components/ImageGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
-import { useImageSourceId, useBooruSafeOnly, setImageSource } from '../hooks/useImageSource.js';
+import { useImageSourceId, useBooruSafeOnly } from '../hooks/useImageSource.js';
 import { booruApiFor } from '../sources/api.js';
-import { SOURCE_LIST } from '../sources/registry.js';
 import { scopedTabKey } from '../pixiv-assistant/index.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
+const NEED_COOKIE_RE = /cookie|no_cookie|需要.*Cookie/i;
 const log = createLogger('Discover');
 
+/**
+ * DiscoverPage — 推荐页（单源）。
+ * useTabFeed + tabCache 水合：切来源时按 App.jsx 的 sourceId key 重挂载，缓存按源隔离。
+ */
 export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
   const { recommendationExcludedSet, cacheReady } = usePixivCache();
@@ -112,23 +116,10 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
 
   // 注意：已喜欢/已保存的作品保留在当前网格，仅在 fetchPage 中对后续新页过滤
 
-  const needCookie = !isBooru && !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
+  const needCookie = !isBooru && !!feed.error && NEED_COOKIE_RE.test(feed.error);
 
   return (
     <div className="page">
-      {/* 来源快捷切换：与设置页共用同一状态源（模块单例），切换即全局生效 */}
-      {SOURCE_LIST.length > 1 && (
-        <div className="chips chips--top">
-          {SOURCE_LIST.map(s => (
-            <button
-              key={s.id}
-              className={`chip${sourceId === s.id ? ' active' : ''}`}
-              onClick={() => setImageSource(s.id)}
-              aria-pressed={sourceId === s.id}
-            >{s.shortLabel || s.label}</button>
-          ))}
-        </div>
-      )}
       {needCookie
         ? <NeedCookieNotice onOpenSettings={onOpenSettings} />
         : (feed.error && (
