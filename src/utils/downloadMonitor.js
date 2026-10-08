@@ -21,10 +21,10 @@ const log = createLogger('downloadMonitor');
 
 const listeners = new Set();
 const jobs = new Map();
-// queueTotal：本次下载队列的文件总数（多图批量时=全部页数），由下载方在开始时上报；
-// 徽标据此显示"队列里还有多少文件"，而非当前正在下载的个数
-let queueTotal = 0;
-let snapshot = { jobs: [], queueTotal: 0 };
+// 徽标显示的是「队列里还有多少个任务」＝ jobs.size。
+// 曾经有个 queueTotal（由下载方上报「本批共几个文件」），但从来没有任何调用方上报过，
+// 于是它恒为 0、只让角标的语义在「文件数」和「任务数」之间含糊着 —— 已删除。
+let snapshot = { jobs: [] };
 
 const FAILED_KEY = 'downloadFailed';
 
@@ -49,6 +49,9 @@ function hydrateFailedJobs() {
     jobs.set(meta.key, job);
   }
   persistFailed();
+  // 必须 emit：snapshot 只在 emit 里重建，不 emit 的话这些恢复出来的失败任务
+  // 在 UI 上等于不存在（角标 0、弹窗「暂无下载任务」），一直要等别的动作触发一次 emit 才冒出来
+  emit();
 }
 hydrateFailedJobs();
 
@@ -62,7 +65,7 @@ function persistFailed() {
 }
 
 function emit() {
-  snapshot = { jobs: jobs.size ? [...jobs.values()] : [], queueTotal };
+  snapshot = { jobs: jobs.size ? [...jobs.values()] : [] };
   for (const fn of [...listeners]) fn();
 }
 
@@ -85,12 +88,6 @@ function recordFailureFor(key, retryMeta = {}) {
 }
 
 export const downloadMonitor = {
-  /** 上报本次下载队列的文件总数（徽标显示用） */
-  setQueueTotal(n) {
-    queueTotal = Math.max(0, Number(n) || 0);
-    emit();
-  },
-
   /** 登记一个下载任务，返回进度句柄 */
   start(key, meta) {
     const existing = jobs.get(key);
@@ -176,7 +173,6 @@ export const downloadMonitor = {
         setTimeout(() => {
           if (jobs.get(key)?.status === 'done') {
             jobs.delete(key);
-            if (jobs.size === 0) queueTotal = 0;
             emit();
           }
         }, 8000);
@@ -195,24 +191,28 @@ export const downloadMonitor = {
     recordFailureFor(key, retryMeta);
   },
 
-  /** 立即清除所有已完成/失败任务（含持久化的失败列表） */
-  clearFinished() {
+  /**
+   * 清除**已完成**任务（按钮文案就是「清除已完成」，别偷偷清别的）。
+   *
+   * 失败任务刻意不动：它们是唯一的重试入口，而且是一份持久化的待办清单
+   * （restart 后还在）。以前这里把 error 一并删掉并重写持久化列表，
+   * 用户点一个写着「清除已完成」的按钮，等待重试的失败记录就全没了。
+   * 单个失败记录用 dismiss(key) 移除，批量重试走 retry()。
+   */
+  clearDone() {
     for (const [k, j] of jobs) {
-      if (j.status === 'done' || j.status === 'error') jobs.delete(k);
+      if (j.status === 'done') jobs.delete(k);
     }
-    if (jobs.size === 0) queueTotal = 0;
-    persistFailed();
     emit();
   },
 
   /**
    * 移除单个任务（成功或失败均可）。
-   * 重试成功时用它收尾 —— clearFinished 会把其他等待重试的失败记录一并抹掉。
+   * 重试成功时用它收尾 —— 别用 clearDone 之外的方式批量删失败记录。
    */
   dismiss(key) {
     if (!jobs.has(key)) return;
     jobs.delete(key);
-    if (jobs.size === 0) queueTotal = 0;
     persistFailed();
     emit();
   },

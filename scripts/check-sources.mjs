@@ -29,6 +29,10 @@ ok(k?.source === 'konachan' && k?.illustId === 'konachan_42' && k?.pageIndex ===
 ok(parseCacheFileName('random_title_x_12_p0_[a]_[t].jpg') === null, 'title-looking name rejected');
 // 放宽 altSource 两段字符类后，白名单仍是硬门槛：来源名不在词表里一律拒绝
 ok(parseCacheFileName('notasource_216o5y_p0_[a]_[t].jpg') === null, 'unknown source prefix rejected');
+// 历史 bug 产出的「双前缀」文件名（KNOWN_SOURCES 漏登记的年代）：解析时要剥掉重复那段，
+// 否则相册里那些文件永远对不回元数据
+const dup = parseCacheFileName('zerochan_zerochan_12345_p0_[A]_[T].jpg');
+ok(dup?.source === 'zerochan' && dup?.illustId === 'zerochan_12345' && dup?.pageIndex === 0, 'double-prefix filename');
 
 // 3) 撞号隔离：同号不同来源得到不同 uid，同来源得到同一 uid
 ok(getCompositeKey({ illustId: '100', _pageIndex: 0 }) === '100_0', 'pixiv composite key');
@@ -49,10 +53,18 @@ for (const s of SOURCE_LIST) {
 // （pixiv 的 i.pixiv.re 与 pixiv.re 共用 /pixiv-img 是刻意的：两个域名同一个上游）
 const apiPrefixes = SOURCE_LIST.map(s => s.net.apiPrefix);
 ok(new Set(apiPrefixes).size === apiPrefixes.length, 'apiPrefix 互不冲突', apiPrefixes.join(','));
-// 图床域名必须全局唯一：同一域名被两个来源认领会让 URL 重写张冠李戴
-// （同一来源下多个域名共用一个代理前缀是允许的，如 pixiv 的 i.pixiv.re / pixiv.re）
-const hosts = SOURCE_LIST.flatMap(s => Object.keys(s.net.imgHosts));
-ok(new Set(hosts).size === hosts.length, 'imgHosts 域名互不冲突', hosts.join(','));
+// 图床域名归属必须一致：同一域名可以被多个来源认领，但**代理前缀必须相同**，
+// 否则 URL 重写会张冠李戴。（safebooru-donmai 复用 danbooru 的 cdn.donmai.us + /danbooru-img
+// 是刻意的：同构镜像站、同一图床；同一来源下多域名共用前缀也允许，如 pixiv 的 i.pixiv.re / pixiv.re）
+const hostPrefix = new Map();
+const hostConflicts = [];
+for (const s of SOURCE_LIST) {
+  for (const [host, prefix] of Object.entries(s.net.imgHosts)) {
+    if (!hostPrefix.has(host)) hostPrefix.set(host, prefix);
+    else if (hostPrefix.get(host) !== prefix) hostConflicts.push(`${host}: ${hostPrefix.get(host)} vs ${prefix}`);
+  }
+}
+ok(hostConflicts.length === 0, 'imgHosts 域名归属一致（同域名必须同前缀）', hostConflicts.join(', '));
 ok(getSource('nope').id === 'pixiv', '未知来源兜底 pixiv');
 ok(capsOf('yande').multiPage === false && capsOf('pixiv').multiPage === true, 'caps 分流依据正确');
 

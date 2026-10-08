@@ -213,6 +213,41 @@ async function shot(cdp, name) {
   return null;
 }
 
+/**
+ * 把 App 手里的 isDesktop 从旧值拽过来。
+ *
+ * 为什么需要：CDP 的 Emulation.setDeviceMetricsOverride 只改布局、**不派发 matchMedia 的 change
+ * 事件**（实测：覆盖后 matchMedia('(min-width: 900px)').matches 已是 false，监听器计数仍是 0；
+ * 手动 dispatch 也没用 —— 每次 matchMedia() 返回的是各自独立的 EventTarget）。
+ * 于是 useIsDesktop 停在旧值：窄屏下桌面的东西还在、手机专属的（汉堡）不出现。
+ * 真实窗口缩放/旋转走浏览器自己的派发路径，没有这个问题，所以这只是测试侧的补丁。
+ *
+ * 手法：点一下常驻侧栏的「我」—— 侧栏在窄屏是 display:none，但 JS 的 .click() 照样触发，
+ * store 一变 App 就重渲染，useIsDesktop 这才读到新宽度。（会顺带把当前 tab 切到「我」，
+ * 所以只在不再需要搜索页探针之后调用。）
+ */
+async function forceAppRerender(cdp) {
+  const r = await evaluate(cdp, `(() => {
+    const el = [...document.querySelectorAll('.side-nav:not(.side-nav--drawer) .side-nav-item')]
+      .find(b => b.textContent.trim() === '我');
+    if (!el) return 'NOT_FOUND';
+    el.click(); return 'OK';
+  })()`);
+  await sleep(500);
+  return r;
+}
+
+/** 在抽屉内部按文本点击（窄屏下必须限定在 .drawer-panel 里，见 responsive 场景注释） */
+async function clickInDrawer(cdp, label) {
+  return evaluate(cdp, `(() => {
+    const panel = document.querySelector('.drawer-panel');
+    if (!panel) return 'NO_DRAWER';
+    const el = [...panel.querySelectorAll('.side-nav-item')].find(b => b.textContent.trim() === ${JSON.stringify(label)});
+    if (!el) return 'NOT_FOUND';
+    el.click(); return 'OK';
+  })()`);
+}
+
 /** 按可见文本点击按钮/链接（用 DOM click，避免坐标命中错的层） */
 async function clickText(cdp, text) {
   return evaluate(cdp, `(() => {
@@ -425,8 +460,8 @@ const SCENARIOS = {
   async sidebar(cdp) {
     await sleep(4500);
     const probe = async () => JSON.parse(await evaluate(cdp, `JSON.stringify({
-      sideNav: getComputedStyle(document.querySelector('.side-nav')).display,
-      tabBar: getComputedStyle(document.querySelector('.tab-bar')).display,
+      sideNav: (() => { const el = document.querySelector('.side-nav'); return el ? getComputedStyle(el).display : null; })(),
+      drawerTrigger: !!document.querySelector('.drawer-trigger'),
       items: [...document.querySelectorAll('.side-nav-item')].map(b => b.textContent.trim()).join('/'),
       active: [...document.querySelectorAll('.side-nav-item.active')].map(b => b.textContent.trim()).join('/'),
       overlay: (() => {
@@ -526,6 +561,24 @@ const SCENARIOS = {
     say(`输入并回车 -> ${await searchFor(cdp, '初音ミク')}`);
     await sleep(3000);
 
+    // 本场景是手机端唯一的回归防线，所以逐档断言（不只是打印）
+    const problems = [];
+    const expect = (label, actual, want) => {
+      if (actual !== want) problems.push(`${label}: 期望 ${JSON.stringify(want)}，实际 ${JSON.stringify(actual)}`);
+    };
+    const drawerProbe = async () => JSON.parse(await evaluate(cdp, `JSON.stringify((() => {
+      const panel = document.querySelector('.drawer-panel');
+      return {
+        open: !!panel,
+        items: panel ? [...panel.querySelectorAll('.side-nav-item')].map(b => b.textContent.trim()).join('/') : null,
+        active: panel ? [...panel.querySelectorAll('.side-nav-item.active')].map(b => b.textContent.trim()).join('/') : null,
+      };
+    })())`));
+    const openDrawer = async () => {
+      await evaluate(cdp, `document.querySelector('.drawer-trigger')?.click()`);
+      await sleep(600);
+    };
+
     // 899/900 卡断点；1100x500 是"宽而矮"，用来确认横屏紧凑规则没有误命中桌面
     const cases = [[420, 820], [899, 820], [900, 820], [1100, 820], [1100, 500], [1600, 900]];
     for (const [w, h] of cases) {
@@ -533,9 +586,10 @@ const SCENARIOS = {
         width: w, height: h, deviceScaleFactor: 1, mobile: false,
       });
       await sleep(900);
-      const r = await evaluate(cdp, `JSON.stringify({
-        sideNav: getComputedStyle(document.querySelector('.side-nav')).display,
-        tabBar: getComputedStyle(document.querySelector('.tab-bar')).display,
+      const r = JSON.parse(await evaluate(cdp, `JSON.stringify({
+        sideNav: (() => { const el = document.querySelector('.side-nav'); return el ? getComputedStyle(el).display : null; })(),
+        drawerTrigger: (() => { const el = document.querySelector('.drawer-trigger'); return el ? getComputedStyle(el).display : null; })(),
+        bottomChrome: ['.tab-bar', '.chips-bottom', '.sub-tab-bar', '.download-fab'].filter(s => document.querySelector(s)),
         appDir: getComputedStyle(document.querySelector('.app')).flexDirection,
         appMaxW: getComputedStyle(document.querySelector('.app')).maxWidth,
         contentPadBottom: getComputedStyle(document.querySelector('.app-content')).paddingBottom,
@@ -552,11 +606,53 @@ const SCENARIOS = {
             glass: cs.backdropFilter && cs.backdropFilter !== 'none' ? 'yes' : 'no',
           };
         })(),
-      })`);
-      say(`${String(w).padStart(4)}x${h}: ${r}`);
+      })`));
+      say(`${String(w).padStart(4)}x${h}: ${JSON.stringify(r)}`);
+      const desktop = w >= 900;
+      // 形态切换是 CSS 决定的：常驻侧栏在 <900px 被 display:none 掉，手机端由抽屉顶上。
+      // 这里不探 .drawer-trigger —— 它是 !isDesktop 门控的 React 节点，而 CDP 改宽度不派发
+      // matchMedia 的 change，React 手里的 isDesktop 会停在旧值（见 forceAppRerender 注释）。
+      expect(`${w}x${h} .side-nav`, r.sideNav, desktop ? 'flex' : 'none');
+      expect(`${w}x${h} 底部 chrome 残留`, r.bottomChrome.join(','), '');
+      expect(`${w}x${h} .app flex-direction`, r.appDir, desktop ? 'row' : 'column');
+      expect(`${w}x${h} .app-content padding-bottom`, r.contentPadBottom, '0px');
       await shot(cdp, `30-${w}x${h}`);
     }
+
+    // 手机端的导航本体：抽屉里必须是完整导航，且点主项后自动关。
+    // 放在宽度循环之后 —— 点导航会离开搜索页，会毁掉上面每档都要用的 .search-bar--top 探针
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 420, height: 820, deviceScaleFactor: 1, mobile: false,
+    });
+    await sleep(700);
+    say(`拽一下 isDesktop -> ${await forceAppRerender(cdp)}`);
+    expect('窄屏下汉堡出现（isDesktop 已切换）', !!(await evaluate(cdp, `!!document.querySelector('.drawer-trigger')`)), true);
+    await openDrawer();
+    const opened = await drawerProbe();
+    say(`抽屉（420 宽）: ${JSON.stringify(opened)}`);
+    expect('抽屉能打开', opened.open, true);
+    expect('抽屉含四个主项', ['推荐', '排行', '我', '搜索'].every(k => (opened.items || '').includes(k)), true);
+
+    // 点抽屉里的项必须点在 .drawer-panel 内：窄屏下常驻侧栏仍在 DOM（display:none），
+    // 全局按文本找会命中那个隐藏实例 —— 它的 handler 不会关抽屉
+    say(`  点抽屉里的「排行」-> ${await clickInDrawer(cdp, '排行')}`);
+    await sleep(1800);
+    expect('点主项后抽屉自动关', (await drawerProbe()).open, false);
+
+    await openDrawer();
+    const reopened = await drawerProbe();
+    say(`  再开抽屉: ${JSON.stringify(reopened)}`);
+    expect('「排行」成为当前项', (reopened.active || '').includes('排行'), true);
+    expect('档位二级项已展开', (reopened.items || '').includes('日榜'), true);
+    // 收尾：关掉抽屉，别把打开状态留给后面的场景
+    await evaluate(cdp, `document.querySelector('.drawer-overlay')?.click()`);
+    await sleep(500);
+
+    // 这里不截图：抽屉背板是整屏 backdrop-filter，叠在图片网格上时 CDP 截图会卡到 45s 超时
+    // （smoke 里同样的超时也偶发，属于本机截图通道的老毛病）。断言全在 DOM 上，不依赖截图。
+
     await cdp.send('Emulation.clearDeviceMetricsOverride');
+    if (problems.length) throw new Error(`响应式断言失败:\n  ${problems.join('\n  ')}`);
   },
 
   /**
@@ -586,6 +682,10 @@ const SCENARIOS = {
       // 已完成（finish 后 8s 才会被自动移除）
       const c = dm.start('demo_done', { illustId: '555', page: 0, title: '已完成的作品', kind: 'image' });
       c.finish(true);
+      // 还活着的句柄留给收尾用：下载监视器只在 start() 返回的句柄上有 finish()，
+      // 单例本身没有 —— 收尾时调 dm.finish(...) 会抛 TypeError（被 evaluate 吞成 EVAL_ERROR 字符串），
+      // 于是这两条假任务永远停在「进行中」，角标不清、下次运行还带着
+      window.__demoJobs = [a, b];
       return 'OK statuses=' + dm.getSnapshot().jobs.map(j => j.key + ':' + j.status).join(',');
     })()`);
     say(`注入假任务 -> ${injected}`);
@@ -613,12 +713,13 @@ const SCENARIOS = {
     say('下载管理:', state);
     await shot(cdp, '40-downloads');
 
-    // 收尾：把假任务清掉，别留到下次运行
+    // 收尾：把假任务清掉，别留到下次运行（用 start() 的句柄收，单例没有 finish，见上面注释）
     await evaluate(cdp, `(() => {
       const dm = window.__pixivViewer?.downloadMonitor;
       if (!dm) return;
-      for (const j of dm.getSnapshot().jobs) dm.finish(j.key, true);
-      dm.clearFinished();
+      for (const h of window.__demoJobs || []) { try { h.finish(true); } catch { /* 已结束的句柄 */ } }
+      delete window.__demoJobs;
+      dm.clearDone();
     })()`);
   },
 

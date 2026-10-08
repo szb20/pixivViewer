@@ -62,7 +62,8 @@ main.jsx ── <PixivCacheProvider>（2 个 context：pixivCache 读写层 / li
 │  ├─ [ranking]  RankingPage
 │  ├─ [search]   SearchPage
 │  └─ [me]       MePage（本地相册 / 关注 / 喜欢）
-├─ TabBar               (底部导航)
+├─ SideNav              (侧边栏：≥900px 常驻；<900px 由 NavDrawer 装进抽屉 —— 同一组件两种形态)
+├─ NavDrawer            (手机导航抽屉 + 左上角汉堡 DrawerTrigger)
 ├─ SettingsModal        (设置弹窗)
 ├─ DetailView           (详情页)
 │  └─ ImageDetailView   (大图+信息+推荐)

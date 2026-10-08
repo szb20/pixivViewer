@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import SubTabBar from '../components/SubTabBar.jsx';
 import FollowingPanel from '../components/panels/FollowingPanel.jsx';
 import FollowingAuthorsPanel from '../components/panels/FollowingAuthorsPanel.jsx';
 import LikedPanel from '../components/panels/LikedPanel.jsx';
 import BookmarksPanel from '../components/panels/BookmarksPanel.jsx';
 import { useImageSourceId } from '../hooks/useImageSource.js';
-import { getMainScrollEl } from '../utils/scroll.js';
 import { getMeSubTabs } from '../utils/meTabs.js';
 import { useAppStore } from '../store/useAppStore.js';
 import '../styles/me.css';
@@ -18,14 +16,13 @@ import '../styles/me.css';
  * - MePage 在 'me' 键上注册一个聚合刷新回调，转发给当前活跃子面板
  * - 不把 registerRefresh / refreshToken 透传给子面板，避免三面板互相覆盖或全量刷新
  *
- * 子页签的当前值放在 store（桌面侧边栏也要驱动它），本组件只保留
+ * 子页签的当前值放在 store（侧边栏 / 抽屉也要驱动它），本组件只保留
  * 保活集合 visitedSubs 与切换动画 —— 两者都跟随 store 值派生。
  */
-export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
+export default function MePage({ onOpen, onOpenSettings, onAuthorWorks, registerRefresh, refreshToken }) {
   const sourceId = useImageSourceId();
   const tabs = getMeSubTabs(sourceId);
   const rawSubTab = useAppStore(s => s.meSubTab);
-  const setMeSubTab = useAppStore(s => s.setMeSubTab);
   // 切来源会按 key 重挂载本页，但 meSubTab 留在 store 里：booru 来源没有账号态，
   // 若上次停在「关注」会渲染出拉不到数据的面板 —— 这里按当前来源的可用项兜底。
   // 不把兜底值写回 store，切回 pixiv 时仍能恢复到原来的子页。
@@ -33,8 +30,6 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
   const [visitedSubs, setVisitedSubs] = useState(() => new Set([subTab]));
   // 子页签切换动画：旧面板淡出后再隐藏
   const [subAnim, setSubAnim] = useState(null);
-  // 二级菜单显隐：下滑隐藏、上滑显示、回到顶部强制显示
-  const [showBar, setShowBar] = useState(true);
   const subTabRef = useRef(subTab);
   subTabRef.current = subTab;
   const panelLoadsRef = useRef({});
@@ -58,11 +53,6 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
     panelLoadsRef.current[key] = load;
   }, []);
 
-  // 每次切回"我" tab 都默认弹出二级菜单
-  useEffect(() => {
-    if (active) setShowBar(true);
-  }, [active]);
-
   // 在 'me' 键上注册聚合刷新：下拉刷新只触发当前活跃子面板
   useEffect(() => {
     if (!registerRefresh) return;
@@ -79,33 +69,6 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
     }
   }, [refreshToken]);
 
-  // 二级菜单显隐与主 TabBar 一致：下滑隐藏、上滑显示、回到顶部强制显示。
-  // 用 touchmove/wheel 判定，切 tab 时恢复滚动位置是程序化的（不产生 touchmove/wheel），不会误触发。
-  useEffect(() => {
-    const el = getMainScrollEl();
-    if (!el) return;
-    let gestureStart = el.scrollTop;
-    const onTouchStart = () => { gestureStart = el.scrollTop; };
-    const onTouchMove = () => {
-      const top = el.scrollTop;
-      if (top < 24) setShowBar(true);
-      else if (top > gestureStart + 20) setShowBar(false);
-      else if (top < gestureStart - 20) setShowBar(true);
-    };
-    const onWheel = (e) => {
-      if (e.deltaY > 0) setShowBar(false);
-      else if (e.deltaY < 0) setShowBar(true);
-    };
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: true });
-    el.addEventListener('wheel', onWheel, { passive: true });
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('wheel', onWheel);
-    };
-  }, []);
-
   const subPaneVisible = (key) => key === subTab || (subAnim && key === subAnim.from);
   const subPaneCls = (key) => (
     subAnim && key === subAnim.from
@@ -114,9 +77,7 @@ export default function MePage({ active, onOpen, onOpenSettings, onAuthorWorks, 
   );
 
   return (
-    <div className="page me-page">
-      <SubTabBar tabs={tabs} active={subTab} onChange={setMeSubTab} hidden={!showBar} />
-
+    <div className="page">
       <div className="me-panels">
         {visitedSubs.has('following') && (
           <div className={subPaneCls('following')} style={{ display: subPaneVisible('following') ? undefined : 'none' }}>

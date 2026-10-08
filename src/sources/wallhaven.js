@@ -68,10 +68,14 @@ function mapPost(post, sourceId) {
     authorAccount: '',
     authorId: '',          // 无作者 id：关注按钮与作者页点击自然隐藏（均以 authorId 为守卫）
     authorAvatar: '',
-    thumbnailUrl: post.thumbs?.small || '',
-    // Wallhaven 的缩略图是固定比例的裁剪：small 恒为 300×200（3:2）、lg 实测也是
-    // 裁过的（432×243），thumbs.original 只有 300px 宽——三者都没法当详情页的等比中图。
-    // 所以中图直接给原图：宁可多下点流量，也不能拿一张裁剪图冒充等比图。
+    thumbnailUrl: post.thumbs?.original || post.thumbs?.small || '',
+    // 缩放档位实测（2026-10，4 张不同比例的原图）：
+    //   small  恒为 300×200（3:2 裁剪）
+    //   lg     恒为 432×243（16:9 裁剪）
+    //   orig   等比，长边封顶 300（3224×5374 → 180×300，2944×5232 → 169×300）
+    // 所以网格缩略图必须用 orig —— 用 small 就是在展示原图中间挖出来的一块，
+    // 竖图更是只剩中间一条。orig 只有 300px，铺满手机两列网格够用，当详情页主图不够。
+    // 详情页主图：没有更好的等比档，中图直接给原图（宁可多下流量，也不拿裁剪图冒充等比图）。
     mediumUrl: original,
     originalUrl: original,
     tags: [],

@@ -8,7 +8,7 @@
  * 状态：cached / saved（无 deleted 状态）
  * 类型：image / gif（通过 type 字段区分，不靠 key 后缀）
  */
-import { sourceOfId, DEFAULT_SOURCE } from '../core/utils.js';
+import { sourceOfId, entityKeyOf, DEFAULT_SOURCE } from '../core/utils.js';
 
 export class PixivEntity {
   /**
@@ -90,7 +90,7 @@ export class PixivEntity {
    * pixiv 的 illustId 是裸数字，输出与历史格式 `pixiv:{id}:{page}` 逐字节一致。
    */
   static makeId(illustId, pageIndex = 0) {
-    return `${sourceOfId(illustId)}:${illustId}:${pageIndex}`;
+    return entityKeyOf(illustId, pageIndex);
   }
 
   /** 解析 entity key（makeId 的逆运算）。畸形输入按 pixiv 兜底，不抛错。 */

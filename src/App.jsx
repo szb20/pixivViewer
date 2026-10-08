@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import TabBar from './components/TabBar.jsx';
+import { useCallback, useEffect, useState } from 'react';
 import SideNav from './components/SideNav.jsx';
-import SourceDrawer from './components/SourceDrawer.jsx';
+import NavDrawer, { DrawerTrigger } from './components/NavDrawer.jsx';
 import ToastHost from './components/ToastHost.jsx';
 import DownloadMonitorButton from './components/DownloadMonitor.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
@@ -99,8 +98,8 @@ export default function App() {
   };
 
   // 桌面端侧边栏「搜索」：不跳页，先在当前页面上浮出搜索框，提交后才切到结果页。
-  // 结果页已经开着时沿用「重点当前项 = 刷新列表」的既有语义；
-  // !isDesktop 分支是给「侧边栏在手机宽度下 display:none 但仍在 DOM」的兜底。
+  // 结果页已经开着时沿用「重点当前项 = 刷新列表」的既有语义。
+  // 手机端（抽屉里的「搜索」）没有常驻侧栏可依托，走下面那条直接切页。
   const handleSearchNav = () => {
     if (!isDesktop || activeTab === 'search') {
       setActiveTab('search');
@@ -109,9 +108,14 @@ export default function App() {
     openSearchComposer();
   };
 
-  // 窗口跨到手机宽度：桌面专属的搜索唤起态要收掉，免得切回来时残留
+  // 抽屉关闭：稳定引用 —— NavDrawer 的返回键注册依赖它，每次渲染换函数会让 handler 反复重注册
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
+  // 窗口跨到手机宽度：桌面专属的搜索唤起态要收掉，免得切回来时残留；
+  // 跨到桌面宽度则相反 —— 抽屉是手机形态，收掉（否则会和常驻侧边栏同时在场）
   useEffect(() => {
     if (!isDesktop) closeSearchComposer();
+    else setDrawerOpen(false);
   }, [isDesktop, closeSearchComposer]);
 
   // 冷启动恢复上次离开时的滚动位置（页面快照）
@@ -120,16 +124,21 @@ export default function App() {
     restoreMainScrollOnColdStart(scrollPositions?.[tab] || 0);
   }, []);
 
+  // 侧边栏 / 抽屉共用同一份导航 props —— 两者是同一个 SideNav 的两种形态
+  const navProps = {
+    tabs: TABS,
+    active: activeTab,
+    onChange: setActiveTab,
+    onOpenSettings: openSettings,
+    onSearchNav: handleSearchNav,
+  };
+
   return (
     <div className={`app${chromeHidden ? ' chrome-hidden' : ''}`}>
-      {/* 桌面左侧边栏；手机端由 CSS 隐藏，走下面的底部 TabBar */}
-      <SideNav
-        tabs={TABS}
-        active={activeTab}
-        onChange={setActiveTab}
-        onOpenSettings={openSettings}
-        onSearchNav={handleSearchNav}
-      />
+      {/* 侧边栏：≥900px 常驻显示；<900px 由 CSS 隐藏（手机端的同一份导航在下面的抽屉里）。
+          形态切换交给 CSS 而不是 JS —— matchMedia 的 change 事件在个别环境里不派发（CDP 改宽度实测为 0 次），
+          靠 JS 门控会让窄屏下留着桌面侧栏、却没有汉堡，两条路都不通 */}
+      <SideNav {...navProps} />
 
       <ErrorBoundary>
         <main className="app-content">
@@ -154,29 +163,22 @@ export default function App() {
 
       <PullToRefresh onRefresh={triggerPullRefresh} />
 
-      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} hidden={chromeHidden} />
-
-      {/* 手机端左上角汉堡：打开侧边抽屉（图源切换 + 快捷入口）。桌面有常驻 SideNav，不渲染；
-          抽屉打开时也退场（backdrop / 返回键 / Esc 负责关闭），与齿轮按钮同款出入规则 */}
-      {!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks && (
-        <button
-          className={`glass-icon-btn drawer-trigger${chromeHidden ? ' drawer-trigger--hidden' : ''}`}
-          onClick={() => setDrawerOpen(true)}
-          aria-label="打开侧边栏"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
+      {/* 手机端左上角汉堡：打开导航抽屉。桌面有常驻 SideNav，不渲染。
+          抽屉打开期间它只滑出屏、不卸载 —— 关闭时 useOverlayFocus 要把焦点还给它，
+          卸载了焦点就只能掉到 body */}
+      {!isDesktop && !settingsOpen && !detailImage && !authorWorks && (
+        <DrawerTrigger offscreen={chromeHidden || drawerOpen} onClick={() => setDrawerOpen(true)} />
       )}
 
       {drawerOpen && (
-        <SourceDrawer onClose={() => setDrawerOpen(false)} onOpenSettings={openSettings} />
+        <NavDrawer onClose={closeDrawer}>
+          <SideNav {...navProps} variant="drawer" onClose={closeDrawer} />
+        </NavDrawer>
       )}
 
-      {!settingsOpen && !detailImage && !authorWorks && (
+      {/* 抽屉里已有「设置」，所以抽屉开着时齿轮退场 —— 否则点它会被抽屉盖住（z 90 > 设置页 70），
+          看着像个死键 */}
+      {!settingsOpen && !detailImage && !authorWorks && !drawerOpen && (
         <button
           className={`glass-icon-btn me-settings-btn${chromeHidden ? ' me-settings-btn--hidden' : ''}`}
           onClick={openSettings}

@@ -10,7 +10,6 @@ import { downloadMonitor } from '../utils/downloadMonitor.js';
 export function useDownloadJobs() {
   const snap = useSyncExternalStore(downloadMonitor.subscribe, downloadMonitor.getSnapshot);
   const jobs = snap.jobs;
-  const queueTotal = snap.queueTotal;
 
   const activeCount = jobs.filter(j => j.status === 'downloading' || j.status === 'writing').length;
   const failCount = jobs.filter(j => j.status === 'error').length;
@@ -18,8 +17,9 @@ export function useDownloadJobs() {
 
   return {
     jobs,
-    // 角标优先用下载方上报的队列文件总数（多图作品的页数），无上报时退化为任务数
-    total: queueTotal > 0 ? queueTotal : jobs.length,
+    // 队列里的任务条数。以前这里是「下载方上报的文件总数，没有就退化成任务数」，
+    // 但没有任何调用方上报过 —— 现在就是任务数，和弹窗里列出的行数一致
+    total: jobs.length,
     activeCount,
     failCount,
     doneCount,

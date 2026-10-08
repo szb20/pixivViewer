@@ -34,6 +34,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadTabCache, saveTabCache } from '../pixiv-assistant/index.js';
 import { useStableCallback } from './useStableCallback.js';
 import { createLogger } from '../utils/logger.js';
+import { showToast } from '../utils/toast.js';
 
 const log = createLogger('useTabFeed');
 
@@ -57,6 +58,8 @@ export function useTabFeed({
   const [hydrated, setHydrated] = useState(false);
   const sentinelRef = useRef(null);
   const itemsRef = useRef([]);
+  // itemsRef 里这批数据属于哪个 cacheKey —— 判断「这次失败是刷新失败还是换了内容」的依据
+  const loadedKeyRef = useRef(null);
   const cacheUsedRef = useRef(false);
   const firstFetchDoneRef = useRef(false);
   const loadingRef = useRef(false);
@@ -66,7 +69,7 @@ export function useTabFeed({
   const hydrateStable = useStableCallback(hydrate);
   const skipFirstFetchStable = useStableCallback(shouldSkipFirstFetch);
 
-  const load = useCallback(async (append) => {
+  const load = useCallback(async (append, { keepOnFail = false } = {}) => {
     if (!enabled) return;
     // 追加加载（触底翻页）仍做并发去重，避免 sentinel 重复触发；
     // 全新加载（切换关键词/刷新）允许取代在途请求，避免新请求被静默丢弃。
@@ -80,6 +83,15 @@ export function useTabFeed({
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); setAppendError(null); }
 
+    // 刷新失败但手里已有内容：保留列表 + 轻提示，不把用户正在看的东西换成错误框。
+    // 只对「刷新」（keepOnFail）生效 —— 换关键词/换档位失败时必须清空，
+    // 否则会把上一次查询的结果留在新查询下面。
+    const refreshFailed = (msg) => {
+      if (!keepOnFail || !itemsRef.current.length || loadedKeyRef.current !== cacheKey) return false;
+      showToast(msg || '刷新失败，请检查网络', { type: 'error' });
+      return true;
+    };
+
     try {
       // 第三个参数 isStale：让调用方在 await 之后判断本次请求是否已被取代。
       // 页面把翻页游标推进放在 await 之后，若不判断，被丢弃的响应仍会推进游标 → 跳页。
@@ -89,15 +101,19 @@ export function useTabFeed({
         log.debug('[load] fetchPage 返回 null，跳过');
         return;
       }
-      const nextItems = append ? [...itemsRef.current, ...(r.list || [])] : (r.list || []);
-      itemsRef.current = nextItems;
-      setItems(nextItems);
       // 失败（服务端返回 error 且无数据）不能当成"没有更多了"：收起哨兵避免自动重试风暴，
       // 改由页面依据 appendError 渲染"点击重试"
       const failed = !(r.list || []).length && !!r.error;
+      if (failed && !append && refreshFailed(r.error)) return; // 旧列表原样留着，hasMore/游标都不动
+      const nextItems = append ? [...itemsRef.current, ...(r.list || [])] : (r.list || []);
+      itemsRef.current = nextItems;
+      setItems(nextItems);
+      if (!append) loadedKeyRef.current = cacheKey;
       setHasMore(failed && append ? false : !!r.hasMore);
       setAppendError(failed && append ? r.error : null);
-      if (r.cacheExtra) {
+      // 失败（error + 空 list）时不落盘：这次 nextItems 就是 []，写进去等于把 24h 缓存
+      // 覆写成空 —— 断网/换错 Cookie 抖一下，离线秒开的能力就没了，日志里也看不出原因
+      if (r.cacheExtra && !failed) {
         saveTabCache(cacheKey, { ...r.cacheExtra, items: nextItems, hasMore: !!r.hasMore })
           .catch(() => { });
       }
@@ -106,7 +122,7 @@ export function useTabFeed({
       if (seq !== loadSeqRef.current) return;
       log.warn('[load] 失败:', e?.message || e);
       if (append) setAppendError(e.message || '加载失败');
-      else setError(e.message || '加载失败');
+      else if (!refreshFailed(e.message || '加载失败')) setError(e.message || '加载失败');
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -121,7 +137,8 @@ export function useTabFeed({
 
   useEffect(() => {
     if (!registerRefresh) return;
-    return registerRefresh(refreshKey || cacheKey, () => loadRef.current?.(false));
+    // keepOnFail：下拉刷新失败时保留当前列表（见 load 里的说明）
+    return registerRefresh(refreshKey || cacheKey, () => loadRef.current?.(false, { keepOnFail: true }));
   }, [registerRefresh, cacheKey, refreshKey]);
 
   useEffect(() => {
@@ -135,6 +152,7 @@ export function useTabFeed({
         if (!applied) return;
         cacheUsedRef.current = !!skipFirstFetchStable(applied);
         itemsRef.current = applied.items || [];
+        loadedKeyRef.current = cacheKey; // 这批数据属于本 cacheKey（刷新失败时据此判断能否保留）
         setItems(applied.items || []);
         setHasMore(!!applied.hasMore);
         setLoading(false);
@@ -167,7 +185,7 @@ export function useTabFeed({
   useEffect(() => {
     if (refreshToken > 0 && refreshToken !== lastTokenRef.current) {
       log.debug('[refreshToken] 强制刷新, token:', refreshToken);
-      loadRef.current?.(false);
+      loadRef.current?.(false, { keepOnFail: true });
     }
     lastTokenRef.current = refreshToken;
   }, [refreshToken]);

@@ -2,7 +2,7 @@
  * 侧边栏「来源」组的展开/收起状态。
  *
  * 展开态持久化到 localStorage：收起偏好重启后保持，展开则是首次打开的合理默认。
- * 用 useSyncExternalStore 让桌面 SideNav 与手机 SourceDrawer 共享同一份状态。
+ * 用 useSyncExternalStore 让桌面侧边栏与手机抽屉里的同一份导航（SideNav）共享状态。
  */
 import { useSyncExternalStore } from 'react';
 

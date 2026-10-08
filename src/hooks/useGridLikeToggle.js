@@ -47,7 +47,8 @@ export function useGridLikeToggle() {
       }
       return;
     }
-    const { saved, exists } = await saveAllPages(img, { setPixivCache });
+    // pixivCache 要传下去：saveAllPages 靠它跳过已经保存过的页（不传就每页白跑一遍保存链路）
+    const { saved, exists } = await saveAllPages(img, { pixivCache, setPixivCache });
     if (saved > 0 && exists > 0) showToast(`已保存 ${saved} 页到相册，${exists} 页已存在`, { type: 'success' });
     else if (saved > 0) showToast(`已保存 ${saved} 页到相册`, { type: 'success' });
     else if (exists > 0) showToast('已在相册中', { type: 'info' });

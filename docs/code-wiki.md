@@ -178,9 +178,9 @@ pixivViewer/
 | **MediaLightbox** | 全屏灯箱（portal 到 body）：手势委托 useTouchGesture；只渲染当前 ±2 张 slide；图片候选链降级 + `?r=` 缓存穿透重试（上限 3 次）；托底小图；GIF → GifPlayer；视频四类降级（doujin/iwara/bilibili/直连） |
 | **FrameAnimPlayer** | 动图共享实现（原两个 ~400 行播放器合并），UgoiraPlayer / GifPlayer 是参数化薄包装（差异见 §10） |
 | **AuthorWorksPage** | 作者作品页：首屏 200 条 + 剩余 ID 触底分批（12 个并发）；失败 ID unshift 回队头；404 丢弃不重试 |
-| **DownloadMonitor** | 下载管理：悬浮按钮 + 全屏弹窗；分组（进行中/失败/已完成）；大小/速度只在真有字节数时显示；一键重试 |
+| **DownloadMonitor** | 下载管理：全屏弹窗（桌面端是右侧抽屉）；分组（进行中/失败/已完成）；大小/速度只在真有字节数时显示；一键重试 |
 | **PullToRefresh** | 下拉刷新：阈值 64px、阻尼 0.6、touchcancel 复位（来电/通知栏打断） |
-| **TabBar / SideNav** | 手机底部导航 / 桌面侧边栏（来源组、二级菜单、下载角标） |
+| **SideNav / NavDrawer** | 同一份导航的两种形态：≥900px 常驻侧边栏，<900px 装进抽屉（来源组、二级菜单、下载角标）；左上角汉堡在下载进行中/失败时带角标 |
 | **panels/** | Me 页四面板：FollowingPanel / FollowingAuthorsPanel（每作者 12 张近期作品，MAX_CONCURRENT=3 有限并发）/ LikedPanel（本地 IndexedDB 分页 + 老记录后台回填）/ BookmarksPanel |
 
 ---

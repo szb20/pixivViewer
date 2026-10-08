@@ -24,9 +24,8 @@
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  /* 避开底部 .tab-bar（几何由 --bottom-chrome-h 统一给出）；
-     各页面的额外留白交给 .page 处理 */
-  padding-bottom: var(--bottom-chrome-h);
+  /* 底部没有悬浮栏了，只留一条手势条安全边；页面自身的收尾留白交给 .page（--sp-4） */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .app-content::-webkit-scrollbar {
@@ -175,7 +174,7 @@
   background: rgba(15, 17, 21, 0.55);
   backdrop-filter: blur(8px);
   /* 隐藏时整块毛玻璃随系统状态栏一起上滑收走（不做透明度渐隐），
-     缓动/时长与底部 .tab-bar 保持一致，上下 chrome 出入同步 */
+     缓动/时长与顶部汉堡按钮保持一致 */
   transform: translateY(0);
   transition: transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -185,61 +184,7 @@
   transform: translateY(calc(-100% - 1px));
 }
 
-.tab-bar {
-  position: fixed;
-  left: 14px;
-  right: 14px;
-  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  margin: 0 auto;
-  width: auto;
-  max-width: 532px;
-  height: 52px;
-  display: flex;
-  z-index: 10;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--r-pill);
-  background: rgba(22, 25, 32, 0.52);
-  backdrop-filter: blur(20px) saturate(160%);
-  box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.10);
-  transform: translateY(0);
-  opacity: 1;
-  transition:
-    transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1),
-    opacity var(--t-base) ease;
-}
-
-.tab-bar--hidden {
-  transform: translateY(calc(100% + 30px));
-  opacity: 0.18;
-  pointer-events: none;
-}
-
-.tab-btn {
-  flex: 1;
-  padding: 0;
-  font-size: 15px;
-  border: none;
-  background: transparent;
-  color: #d9dce2;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-shadow: 0 0 8px rgba(107, 112, 128, 0.3);
-  transition: color var(--t-base) ease, text-shadow var(--t-base) ease;
-}
-
-.tab-btn.active {
-  color: var(--text-primary);
-  font-weight: 600;
-  text-shadow:
-    0 0 8px rgba(255, 255, 255, 0.85),
-    0 0 22px rgba(255, 255, 255, 0.5);
-}
-
-/* ===== 桌面左侧边栏（≥900px 显示；手机端 display:none，继续用底部 .tab-bar）===== */
+/* ===== 侧边栏导航（≥900px 常驻；<900px 装进抽屉 NavDrawer，同一份实现）===== */
 .side-nav {
   display: none;
   flex-direction: column;
@@ -263,6 +208,28 @@
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.4px;
+  color: var(--text-primary);
+}
+
+/* 抽屉形态的关闭按钮（桌面常驻栏没有「关闭」这个概念，只有 <900px 会渲染） */
+.side-nav-close-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  border: 0;
+  border-radius: var(--r-circle);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+
+.side-nav-close-btn:active {
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text-primary);
 }
 
@@ -325,6 +292,45 @@
   white-space: nowrap;
 }
 
+/* 可展开的行（「排行」「我」）：行 + 箭头是两个独立热区。
+   箭头绝对定位浮在行上，所以行要给文字留出让位的内边距 */
+.side-nav-row {
+  position: relative;
+}
+
+.side-nav-row .side-nav-item {
+  padding-right: 34px;
+}
+
+.side-nav-chevron-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  border: 0;
+  border-radius: var(--r-circle);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.side-nav-chevron-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 展开时箭头转 90°（与「来源」组的箭头一致），注意别把 translateY(-50%) 丢了 */
+.side-nav-chevron-btn.open {
+  transform: translateY(-50%) rotate(90deg);
+}
+
 /* 下载入口的任务数角标 */
 .side-nav-badge {
   font-variant-numeric: tabular-nums;
@@ -346,13 +352,20 @@
   color: var(--color-danger);
 }
 
-/* 可折叠组标题行（目前只有「来源」组在用）：标签靠左，收起时附当前值，箭头靠右 */
+/* 可折叠组标题行（目前只有「来源」组在用）：标签贴图标，收起时附当前值，箭头靠右。
+   靠 label 的 margin-right:auto 把后面的元素顶到右边，不能用 justify-content: space-between ——
+   展开态没有 value，只剩 [图标][标签][箭头] 三项，space-between 会把「来源」推到行中间
+   （收起态因为 value 参与分配才看着正常，所以这个错位只在展开时露出来）。 */
 .side-nav-toggle {
-  justify-content: space-between;
+  justify-content: flex-start;
+}
+
+.side-nav-toggle .side-nav-label {
+  margin-right: auto;
 }
 
 .side-nav-value {
-  margin-left: auto;
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--text-tertiary);
   overflow: hidden;
@@ -375,7 +388,7 @@
   padding-top: 0;
 }
 
-/* 「我」的二级页签：缩进对齐主项的文字（10 padding + 19 图标 + 10 gap） */
+/* 「我」的二级页签：缩进对齐主项的文字（8 padding + 19 图标 + 8 gap = 35） */
 .side-nav-subs {
   display: flex;
   flex-direction: column;
@@ -384,7 +397,7 @@
 }
 
 .side-nav-item--sub {
-  padding: var(--sp-2) var(--sp-2) var(--sp-2) 39px;
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) 35px;
   font-size: 13px;
 }
 

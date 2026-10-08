@@ -574,18 +574,11 @@ export default function ImageDetailView({
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
-    // 初始状态：根据当前滚动位置同步状态栏（继承自进入详情前的网格滚动状态）
-    const syncInitial = () => {
-      const top = el.scrollTop || 0;
-      if (top >= 24) {
-        try { StatusBar.hide().catch(() => { }); } catch { }
-      } else {
-        try { StatusBar.show().catch(() => { }); } catch { }
-      }
-    };
-    // 等下一帧，确保滚动容器已完成布局
-    requestAnimationFrame(syncInitial);
-
+    // 挂载时**不碰**状态栏：它这一刻的状态就是「进入详情前网格的状态」，本来就是要继承的东西。
+    // 以前这里按详情自己的 scrollTop 判断（新开一篇恒为 0）→ 必定发一次 show()，
+    // 而从滚过的网格点进来时状态栏本是隐藏的：Android 上切换状态栏会伴随一次 WebView
+    // 尺寸变化 → 整屏重排重绘（同一现象在下面的卸载注释和 DetailView 的离场处理里都记过），
+    // 表现就是「点进详情页，内容高度跳一下」。只保留滚动时的方向判断就够。
     let lastTop = el.scrollTop || 0;
     let ticking = false;
     const onScroll = () => {

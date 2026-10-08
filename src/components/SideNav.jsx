@@ -1,14 +1,21 @@
 /**
- * 桌面侧边栏导航 —— 仅在 ≥900px 显示（手机端由 CSS 隐藏，继续用底部 TabBar）。
+ * 侧边栏导航 —— 常驻形态在 ≥900px 显示，手机端（<900px）装进抽屉（NavDrawer）里同一份实现。
  *
  * 三段结构：主导航 / 当前章节的二级项 / 底部设置入口。
- * 二级项只在对应章节激活时展开：把「我」(4) 和「排行」(8) 常驻铺开会把侧边栏撑得很长。
+ * 三组可折叠，交互一致（行右侧箭头，状态持久化）：来源组点整行，主导航行上的箭头是独立热区 ——
+ * 那行还要负责切页签，不能让点一下就翻倍成「切页 + 折叠」。
+ * 二级项默认只在对应章节展开（把「我」4 项和「排行」8 项常驻铺开会把侧边栏撑得很长），
+ * 手动点过箭头的章节以用户的选择为准，见 useSectionExpanded。
  * 取值与过滤和 MePage / RankingPage 共用 getMeSubTabs / getRankingModes，避免两处逻辑漂移。
+ *
+ * variant='drawer' 时：根节点挂 .side-nav--drawer（样式在 styles/navDrawer.css），
+ * 品牌行多一个关闭按钮，除「来源」副项外的所有动作都先关抽屉再执行 —— 选完要能立刻看到结果。
  */
 import { useRef } from 'react';
 import { useImageSourceId, setImageSource } from '../hooks/useImageSource.js';
 import { useDownloadJobs } from '../hooks/useDownloadJobs.js';
 import { useSourcesExpanded, setSourcesExpanded } from '../hooks/useSourcesExpanded.js';
+import { useSectionExpanded, setSectionExpanded } from '../hooks/useSectionExpanded.js';
 import { useAppStore } from '../store/useAppStore.js';
 import { getMeSubTabs } from '../utils/meTabs.js';
 import { getRankingModes, clampRankingCategory, canToggleR18 } from '../utils/rankingModes.js';
@@ -88,9 +95,14 @@ function NavButton({ icon, label, active, onClick, sub = false, ...rest }) {
   );
 }
 
-export default function SideNav({ tabs, active, onChange, onOpenSettings, onSearchNav }) {
+export default function SideNav({
+  tabs, active, onChange, onOpenSettings, onSearchNav,
+  variant = 'rail', onClose,
+}) {
+  const isDrawer = variant === 'drawer';
   const sourceId = useImageSourceId(); // 排行/我的子项跟随当前来源
   const sourcesExpanded = useSourcesExpanded();
+  const sectionExpanded = useSectionExpanded();
   const currentSource = getSource(sourceId);
   const meSubTabs = getMeSubTabs(sourceId);
   const meSubTab = useAppStore(s => s.meSubTab);
@@ -112,7 +124,22 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
   // 否则四个主项会被二级项割断（手机端 TABS 顺序不受影响）
   const orderedTabs = [...tabs.filter(t => t.key !== 'me'), ...tabs.filter(t => t.key === 'me')];
 
-  // 只有在对应章节里才展开二级项：常驻铺开的话「我」4 项 + 「排行」8 项会把侧边栏撑满
+  // 抽屉里点任何一项都先关抽屉再执行 —— 抽屉盖着的正是要看的页面。
+  // 唯一例外是「来源」副项：连换几站对比时不希望每次都要重开抽屉（见下方注释）。
+  const act = (fn) => () => {
+    if (isDrawer) onClose?.();
+    fn();
+  };
+
+  // 哪些章节有二级项可展开（决定要不要给这一行加箭头）
+  const hasSubs = (key) =>
+    (key === 'me' && meSubTabs.length > 1) || (key === 'ranking' && rankingModes.length > 0);
+
+  // 二级项显隐 = 用户手动点过箭头就听他的，没点过沿用旧规则（只在当前章节展开）。
+  // 旧规则的意义见上面注释：常驻铺开的话「我」4 项 + 「排行」8 项会把侧边栏撑满。
+  const subsVisible = (key) => sectionExpanded[key] ?? (active === key);
+
+  // 二级项的内容渲染（显隐由上面的 subsVisible 决定）
   const renderSubs = (key) => {
     if (key === 'me' && meSubTabs.length > 1) {
       return meSubTabs.map(s => (
@@ -120,7 +147,7 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
           key={s.key}
           label={s.label}
           active={meSubTab === s.key}
-          onClick={() => setMeSubTab(s.key)}
+          onClick={act(() => setMeSubTab(s.key))}
           sub
         />
       ));
@@ -133,7 +160,7 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
               key={m.key}
               label={m.label}
               active={m.key === rankingCategory}
-              onClick={() => selectRankingCategory(m.key)}
+              onClick={act(() => selectRankingCategory(m.key))}
               sub
             />
           ))}
@@ -141,7 +168,7 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
           {!isBooru && (
             <button
               className="side-nav-item side-nav-item--sub side-nav-item--switch"
-              onClick={toggleRankingR18}
+              onClick={act(toggleRankingR18)}
               disabled={!canToggleR18(rankingCategory)}
               aria-pressed={rankingR18}
               aria-label={`R18 内容：${rankingR18 ? '已开启' : '已关闭'}`}
@@ -161,10 +188,11 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
   // 方向键在导航项之间移动焦点（Home/End 跳首尾）。
   // 按钮本身 Tab 就能到，这里补的是「进入侧边栏后用方向键连续浏览」的预期行为；
   // 焦点在子项上时会跨到下一个主项，因为选择器取的是全部 .side-nav-item。
+  // 展开箭头（.side-nav-chevron-btn）也算一站：它是独立热区，键盘不该只能 Tab 到它。
   const navRef = useRef(null);
   const onKeyDown = (e) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-    const items = [...(navRef.current?.querySelectorAll('.side-nav-item:not(:disabled)') || [])];
+    const items = [...(navRef.current?.querySelectorAll('.side-nav-item:not(:disabled), .side-nav-chevron-btn') || [])];
     const i = items.indexOf(document.activeElement);
     if (i < 0) return;
     e.preventDefault();
@@ -175,8 +203,24 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
   };
 
   return (
-    <nav className="side-nav" aria-label="侧边栏导航" ref={navRef} onKeyDown={onKeyDown}>
-      <div className="side-nav-brand">PixivViewer</div>
+    <nav
+      className={`side-nav${isDrawer ? ' side-nav--drawer' : ''}`}
+      aria-label="侧边栏导航"
+      ref={navRef}
+      onKeyDown={onKeyDown}
+    >
+      {/* 抽屉形态的品牌行右侧多一个关闭按钮（桌面常驻栏没有「关闭」这个概念） */}
+      <div className="side-nav-brand">
+        PixivViewer
+        {isDrawer && (
+          <button className="side-nav-close-btn" onClick={onClose} aria-label="关闭侧边栏">
+            <svg {...svgProps} width={18} height={18}>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       {/* 来源单选：折叠样式同「排行」展开二级项 —— 标题行展开/收起，
           列表里当前来源恒为激活副项（收起时只留一行显示当前来源名）。
@@ -231,17 +275,45 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
         {orderedTabs.map(t => {
           // 桌面端「搜索」点开的是悬浮搜索框（不跳页），所以唤起态也算选中
           const isActive = active === t.key || (t.key === 'search' && searchComposerOpen);
-          const subs = isActive ? renderSubs(t.key) : null;
+          const expandable = hasSubs(t.key);
+          const open = expandable && subsVisible(t.key);
+          const subs = open ? renderSubs(t.key) : null;
           return (
             <div key={t.key}>
-              <NavButton
-                icon={<svg {...svgProps}>{ICONS[t.key]}</svg>}
-                label={t.label}
-                active={isActive}
-                aria-current={active === t.key ? 'page' : undefined}
-                {...(t.key === 'search' ? { 'data-search-toggle': '' } : null)}
-                onClick={() => (t.key === 'search' && onSearchNav ? onSearchNav() : onChange(t.key))}
-              />
+              {/* 行 + 箭头两个独立热区：点文字切页签（现有语义不变），点箭头只管展开/收起。
+                  箭头不能塞进 .side-nav-item 里 —— button 套 button 是非法 HTML */}
+              <div className="side-nav-row">
+                <NavButton
+                  icon={<svg {...svgProps}>{ICONS[t.key]}</svg>}
+                  label={t.label}
+                  active={isActive}
+                  aria-current={active === t.key ? 'page' : undefined}
+                  {...(t.key === 'search' ? { 'data-search-toggle': '' } : null)}
+                  onClick={act(() => (t.key === 'search' && onSearchNav ? onSearchNav() : onChange(t.key)))}
+                />
+                {expandable && (
+                  <button
+                    className={`side-nav-chevron-btn${open ? ' open' : ''}`}
+                    onClick={() => setSectionExpanded(t.key, !open)}
+                    aria-expanded={open}
+                    aria-label={`${open ? '收起' : '展开'}${t.label}`}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                )}
+              </div>
               {subs && <div className="side-nav-subs">{subs}</div>}
             </div>
           );
@@ -249,7 +321,7 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
       </div>
 
       <div className="side-nav-footer">
-        <button className="side-nav-item" onClick={() => setDownloadOpen(true)}>
+        <button className="side-nav-item" onClick={act(() => setDownloadOpen(true))}>
           <span className="side-nav-icon"><svg {...svgProps}>{ICONS.download}</svg></span>
           <span className="side-nav-label">下载</span>
           {/* 有失败优先显示失败数（红色），否则显示队列文件数 */}
@@ -262,7 +334,7 @@ export default function SideNav({ tabs, active, onChange, onOpenSettings, onSear
           icon={<svg {...svgProps}>{ICONS.settings}</svg>}
           label="设置"
           active={settingsOpen}
-          onClick={onOpenSettings}
+          onClick={act(onOpenSettings)}
         />
       </div>
     </nav>

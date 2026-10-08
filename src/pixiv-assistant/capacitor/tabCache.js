@@ -9,7 +9,7 @@ import { createLogger } from '../../utils/logger.js';
 const log = createLogger('tabCache');
 
 const DB_NAME = 'teyvat_pixiv_tabs';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const STORE = 'tabs';
 /** 升级被旧连接阻塞时的宽限期：超过即放弃本次打开（缓存降级为直连），避免 promise 永远挂着 */
 const BLOCKED_GRACE_MS = 3000;
@@ -38,10 +38,13 @@ function openDB() {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) {
         db.createObjectStore(STORE, { keyPath: 'key' });
-      } else if (e.oldVersion < 3) {
+      } else if (e.oldVersion < 4) {
         // v1 → v2：清空旧缓存，强制重新拉取（旧条目缺少 authorAvatar 等新字段）
         // v2 → v3：同样清空 —— Wallhaven 条目里缓存的 mediumUrl 指向固定比例的裁剪缩略图
         //   （实测恒为 300×200），详情页会按错误比例显示；重拉一次即修正。
+        // v3 → v4：还是清空 —— Wallhaven 条目缓存的 thumbnailUrl 是 small（恒 300×200 的
+        //   裁剪），网格里等于只展示原图中间挖出来的一块；改用等比的 thumbs.original 后，
+        //   旧缓存不重拉就看不到修正。
         e.target.transaction.objectStore(STORE).clear();
       }
     };

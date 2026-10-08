@@ -41,7 +41,7 @@
 
   /* ── 间距刻度 ──
      只覆盖 UI 间距：内边距、外边距、gap。
-     不是间距的东西别往里套 —— 侧边栏宽（--sidebar-w）、底栏高（--bottom-chrome-h）、
+     不是间距的东西别往里套 —— 侧边栏宽（--sidebar-w）、
      按钮/头像的宽高、二级项 39px 的缩进、正文 760px/900px 的限宽，都是几何量。
      1~3px 的微调（光学对齐、描边内缩）也保持字面值：它们不是节奏，是像素级修正。
      网格缝隙同理，它有自己的 --grid-gap（手机 8px / 桌面 12px）。 */
@@ -82,19 +82,16 @@
   --font-base: 13px;
   --radius-sm: 8px;
   /* 作品网格统一规格：间隙 / 侧边留白 / 卡片圆角（所有作品网格共用，勿在各处重复硬编码）。
-     手机端缝隙与边缘留白均为 6px（介于旧的 2px 贴边与 8px/10px 之间）；
+     手机端缝隙与边缘留白均为 4px（= --sp-1；沿革：2px 贴边 → 6px → 4px）；
      桌面 12px/12px 见 responsive.css 的 :root。 */
-  --grid-gap: 6px;
-  --grid-pad-x: 6px;
+  --grid-gap: 4px;
+  --grid-pad-x: 4px;
   --grid-radius: 8px;
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
-  /* 底部悬浮栏（TabBar）在内容区占据的高度：.app-content 的 padding-bottom、
-     .chips-bottom / .download-fab / .sub-tab-bar / .me-page 的偏移全部由它推导。
-     手机端要调整底栏几何时只改这里；桌面端把它置 0，上述位置一次性失效。 */
-  --bottom-chrome-h: calc(68px + env(safe-area-inset-bottom, 0px));
-  /* 桌面侧边栏宽度（<900px 不生效） */
+  /* 桌面侧边栏宽度（<900px 不生效；手机端导航在抽屉里，宽度由抽屉给） */
   --sidebar-w: 232px;
-  /* 灯箱媒体区高度：手机端留出底部悬浮栏的空间，桌面端没有底栏 → responsive.css 放到 100vh。
+  /* 灯箱媒体区高度：手机端 75vh，下方留给 .lightbox-info；
+     桌面端没有下方信息条 → responsive.css 放到 100vh。
      .lightbox-slide / .lightbox-img-wrap / .lightbox-img-full / .lightbox-img-underlay 共用。 */
   --lightbox-media-h: 75vh;
 }
@@ -145,7 +142,6 @@ button {
 
 /* 消除双击缩放手势延迟，点击更跟手（灯箱内部按需覆盖为 touch-action: none） */
 button,
-.chip,
 .grid-item {
   touch-action: manipulation;
 }

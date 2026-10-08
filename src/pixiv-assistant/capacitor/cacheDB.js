@@ -9,17 +9,48 @@
  * 当前 schema：作品元数据集中存储，按 state / likedAt / tags 等索引查询。
  */
 import { createLogger } from '../../utils/logger.js';
+import { entityKeyOf, sourceOfId } from '../core/utils.js';
 
 const log = createLogger('cacheDB');
 
 const DB_NAME = 'teyvat_pixiv_cache_v2';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE = 'metadata';
 /** 升级被旧连接阻塞时的宽限期：超过即放弃本次打开（缓存降级为直连），避免 promise 永远挂着 */
 const BLOCKED_GRACE_MS = 3000;
 
 let _db = null;
 let _dbPromise = null;
+
+/**
+ * v1 → v2：把实体的 key 改回「从 illustId 派生的真来源」。
+ *
+ * v1 期间 KNOWN_SOURCES 漏登记了 6 个来源（tbib / sakugabooru / zerochan / hypnohub / xbooru /
+ * safebooru-donmai），sourceOfId 把它们判回 pixiv，于是这些来源的记录被写成
+ * `pixiv:zerochan_12345:0`。补全词表后 makeId 会算出 `zerochan:zerochan_12345:0`，
+ * 老记录就再也 find 不到了 —— 不迁移的话用户已有的喜欢/已保存会「消失」，
+ * 重新点一次还会在喜欢页出现同作品两条记录。
+ *
+ * 判据是「key ≠ 从 illustId 派生的 key」，已经正确的记录命中不了，重跑安全；
+ * 整个改写发生在 versionchange 事务里，要么全成要么全不成，不会留下半迁移状态。
+ */
+function migrateEntityKeys(store) {
+  const req = store.getAll();
+  req.onsuccess = () => {
+    const all = req.result || [];
+    let moved = 0;
+    for (const rec of all) {
+      // 备份用的标记记录（`_meta_*`）不是实体，没有 illustId
+      if (!rec?.illustId || typeof rec.cacheKey !== 'string' || rec.cacheKey.startsWith('_meta_')) continue;
+      const want = entityKeyOf(rec.illustId, rec.pageIndex ?? 0);
+      if (rec.cacheKey === want) continue;
+      store.put({ ...rec, cacheKey: want, source: sourceOfId(rec.illustId) });
+      store.delete(rec.cacheKey);
+      moved += 1;
+    }
+    if (moved) log.info(`实体 key 迁移（v1→v2）：改写 ${moved} 条 / 共 ${all.length} 条`);
+  };
+}
 
 function openDB() {
   // 缓存命中且版本匹配，直接复用。
@@ -33,7 +64,7 @@ function openDB() {
       return reject(new Error('IndexedDB not available'));
     }
     const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (e) => {
       const db = req.result;
       // 幂等建库：老库升级（DB_VERSION 变大）时该 store 已存在，
       // 无条件 createObjectStore 会抛 ConstraintError 导致整个 open 失败、
@@ -51,6 +82,9 @@ function openDB() {
       ensureIndex('state', 'state', { unique: false });
       ensureIndex('stateCachedAt', ['state', 'cachedAt'], { unique: false });
       ensureIndex('likedAt', 'likedAt', { unique: false });
+
+      // 只在「老库升到 v2」时跑；全新装库（oldVersion 0）里没有记录，跑不跑都一样
+      if (e.oldVersion > 0 && e.oldVersion < 2) migrateEntityKeys(store);
     };
     let settled = false;
     const settle = (fn, val) => { if (settled) return; settled = true; fn(val); };

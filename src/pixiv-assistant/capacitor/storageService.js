@@ -189,15 +189,17 @@ export class PixivStorageService {
     let preserveLikedAt = 0;
     if (entity) {
       // 已有记录 → 迁移到 saved（幂等时直接返回）
-      // 轻记录（无实际文件，如 toggleLike 创建的）→ 删掉重新下载
-      if (!entity.fileName) {
-        preserveLikedAt = entity.likedAt || 0;
-        await this.repository.delete(entity.id);
-      } else {
+      if (entity.fileName) {
         const result = await this._promoteToSaved(entity);
         if (result.success) scheduleMetaBackup();
         return result;
       }
+      // 轻记录（无实际文件，如 toggleLike 创建的）：只记下 likedAt，**别删记录**。
+      // 删了之后任何一步失败（no_url / download_failed / file_write_failed 都是直接 return）
+      // 都会把这条喜欢永久抹掉，而内存里的红心还亮着 —— 要重启后才发现喜欢没了。
+      // 保存成功时 repository.save 用同一个 key（makeId 指同一条）覆盖这条轻记录，
+      // likedAt 由下面的 preserveLikedAt 带回来。
+      preserveLikedAt = entity.likedAt || 0;
     }
 
     const cleanTitle = (item.title || '').replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
@@ -232,6 +234,7 @@ export class PixivStorageService {
         cachedAt: Date.now(),
         likedAt: preserveLikedAt || (item._liked ? Date.now() : 0),
         originalUrl: '',
+        webUrl: item.webUrl || item.pixivUrl || '',
       });
       await this.repository.save(newEntity);
       scheduleMetaBackup();
@@ -263,6 +266,7 @@ export class PixivStorageService {
       authorName: item.authorName || item.author || '',
       authorId: item.authorId || '',
       tags: item.tags,
+      webUrl: item.webUrl || item.pixivUrl || '',
       _liked: item._liked,
     };
     mon.setProgress(0);
@@ -302,6 +306,8 @@ export class PixivStorageService {
         tags: item.tags || [],
         cachedAt: Date.now(),
         originalUrl: usedUrl,
+        // 作品在原站的地址：booru 的详情页外链靠它，缺了就只能显示空白（喜欢轻记录是存了的）
+        webUrl: item.webUrl || item.pixivUrl || '',
         likedAt: preserveLikedAt || (item._liked ? Date.now() : 0),
       });
       newEntity.fileName = this.fileStore.buildFileName(newEntity);
@@ -393,7 +399,12 @@ export class PixivStorageService {
     if (item.source && item.source !== 'pixiv') return { error: '该来源不支持动图' };
     const existing = await this.repository.find(PixivEntity.makeId(sid, 0));
     if (existing?.fileName && existing.isSaved) {
-      return { success: true, idempotent: true, cached: true, fileName: existing.fileName };
+      // 和静态图 _promoteToSaved 同一条规矩：只信 state 位会让用户在系统相册里删掉图之后，
+      // 再点保存永远返回 idempotent，补不回来。没有相册通道（桌面/浏览器）时维持原语义。
+      if (!isGalleryAvailable() || await galleryHasFile(existing.fileName)) {
+        return { success: true, idempotent: true, cached: true, fileName: existing.fileName };
+      }
+      log.info('动图相册副本缺失，重新导出:', existing.fileName);
     }
     // 若已有轻记录（toggleLike 创建、无文件），重建时保留其 likedAt，避免喜欢标记被抹掉
     const preserveLikedAt = existing?.likedAt || 0;
@@ -432,7 +443,11 @@ export class PixivStorageService {
       const bytes = await encodeFramesToGif(first, getFrame, frames.map(f => f.delay), w, h, onProgress);
       const base64 = bytesToBase64(bytes);
 
-      await exportToGallery(base64, gifFileName, 'image/gif');
+      // 导出结果必须看：桌面端「每次询问」时用户在系统保存框点取消、安卓 MediaStore 写失败
+      // 都会返回 false。以前这里把返回值丢掉，于是磁盘上没有文件却记成 saved + 成功，
+      // 之后幂等分支又只看状态位 —— 再也补不回来（静态图那边是一直检查 written 的）
+      const exported = await exportToGallery(base64, gifFileName, 'image/gif');
+      if (!exported) return { error: '写入相册失败' };
 
       // 写元数据（动图统一存 page 0）
       const entity = buildGifEntity(sid, item, gifFileName, finalAuthor, finalTitle, { frames }, bytes.length, preserveLikedAt);

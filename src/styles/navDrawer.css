@@ -1,0 +1,135 @@
+/* ══════════════════════════════════════════════
+   手机端导航抽屉（整站导航，内容 = 桌面常驻 SideNav 的同一份实现）
+   桌面端不参与：≥900px 有常驻 SideNav，汉堡按钮也不渲染
+   ══════════════════════════════════════════════ */
+
+/* ── 左上角汉堡入口（玻璃圆钮，定位仿右上角 .me-settings-btn） ── */
+.drawer-trigger {
+  position: fixed;
+  top: max(16px, env(safe-area-inset-top, 16px));
+  left: max(16px, calc((100vw - 560px) / 2 + 16px));
+  z-index: 100;
+  /* 只做位移：收起时随顶部 chrome 一起上滑出屏，与 .me-settings-btn 保持一致。
+     抽屉打开期间它只是滑走、不卸载 —— 卸载会让关闭时的焦点归还无处可去 */
+  transition: transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.drawer-trigger--hidden {
+  transform: translateY(calc(-100% - max(16px, env(safe-area-inset-top, 16px)) - 8px));
+  pointer-events: none;
+}
+
+/* 下载进行中/失败时的角标（悬浮球已删，这是手机端唯一的常驻下载提示）。
+   按钮是 position:fixed，所以 absolute 的包含块就是按钮本身 */
+.drawer-trigger-badge {
+  font-variant-numeric: tabular-nums;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-pill);
+  background: rgba(15, 17, 21, 0.66);
+  backdrop-filter: blur(10px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* 有失败任务时整颗角标转红：失败比「还剩几个在跑」更需要被看见 */
+.drawer-trigger-badge--fail {
+  background: rgba(var(--color-danger-rgb), 0.72);
+  border-color: rgba(var(--color-danger-rgb), 0.9);
+}
+
+/* ── backdrop ── */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  /* 阶梯：status-bar 30 → detail 50 → settings 70 → side-nav 80 → 抽屉 90 → 按钮层 100 */
+  z-index: 90;
+  background: rgba(8, 10, 14, 0.26);
+  backdrop-filter: blur(10px) saturate(135%);
+  /* 防触摸滚动穿透到底层列表；panel 是独立子元素，自身滚动不受影响 */
+  touch-action: none;
+  animation: drawer-overlay-in 0.2s ease;
+}
+
+@keyframes drawer-overlay-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* ── 面板 ── */
+.drawer-panel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: min(78vw, 300px);
+  display: flex;
+  flex-direction: column;
+  /* 窗口矮时底部「设置」不被裁掉且可滚 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 深玻璃底：背后是真实内容列表，透出层次（同 .frosted 参数） */
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px) saturate(140%);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 16px 0 48px rgba(0, 0, 0, 0.45);
+  padding:
+    max(var(--sp-4), env(safe-area-inset-top, 0px))
+    var(--sp-3)
+    calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  animation: drawer-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  outline: none;
+}
+
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── 抽屉形态的 SideNav ──
+   覆盖 shell.css 的 .side-nav（display:none / 固定宽 / 实底 / 右边框）：
+   本文件由组件 import，在 bundle 里晚于 index.css 那一批（shell.css 在其中），
+   同特异性下后写的赢。改这里的 display 前先确认这条次序仍然成立。
+   flex: 1 0 auto 让内容不足时 footer 仍被 margin-top:auto 推到底部，
+   内容超出面板时由 .drawer-panel 滚动 */
+.side-nav--drawer {
+  display: flex;
+  flex: 1 0 auto;
+  width: 100%;
+  padding: 0;
+  border-right: 0;
+  background: transparent;
+  z-index: auto;
+}
+
+/* 品牌行：抽屉里右侧多一个关闭按钮，所以整行改成两端对齐 */
+.side-nav--drawer .side-nav-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--sp-2) var(--sp-3);
+}
+
+/* 触摸端没有 hover，用 :active 给按下反馈（桌面的 hover 规则在 responsive.css） */
+.side-nav--drawer .side-nav-item:active {
+  background: rgba(255, 255, 255, 0.08);
+}

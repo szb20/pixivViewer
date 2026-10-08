@@ -21,6 +21,11 @@ jobs:
       # lint 目前是 0 warning，加 --deny-warnings 防止回退
       - run: npm run lint -- --deny-warnings
 
+      # 多来源身份层自检：KNOWN_SOURCES 与来源注册表必须严格一致，文件名/id 往返不得错位。
+      # 漏登记一个来源时 sourceOfId 会把它判回 pixiv，下载文件名、缓存恢复、点赞 key
+      # 全部错位且**不抛任何错** —— 这条只能在 CI 里守（脚本失败时 exit 1）
+      - run: node scripts/check-sources.mjs
+
       - run: npm run build
 
 # 说明：桌面端的 run-desktop 驱动（.claude/skills/run-desktop）刻意不进 CI。

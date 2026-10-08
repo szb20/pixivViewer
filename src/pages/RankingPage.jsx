@@ -3,28 +3,26 @@ import { pixivApi } from '../api/pixiv.js';
 import { saveTabCache, loadTabCache, scopedTabKey } from '../pixiv-assistant/index.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
-import { getMainScrollEl } from '../utils/scroll.js';
 import { useImageSourceId } from '../hooks/useImageSource.js';
 import { booruApiFor } from '../sources/api.js';
 import { getRankingModes, clampRankingCategory, R18_CATEGORIES } from '../utils/rankingModes.js';
+import { showToast } from '../utils/toast.js';
 import { useAppStore } from '../store/useAppStore.js';
 
 const CACHE_KEY = 'ranking';
 /** booru 的 popular_recent 一次返回整批，不分页 */
 const BOORU_LIMIT = 60;
 
-export default function RankingPage({ active = true, onOpen, registerRefresh, refreshToken = 0 }) {
+export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 }) {
   const likedSet = useLikedSet();
   const sourceId = useImageSourceId();
   const booruApi = booruApiFor(sourceId);
   const isBooru = !!booruApi;
   const { modes } = getRankingModes(sourceId);
   const cacheKey = scopedTabKey(sourceId, CACHE_KEY);
-  // 档位与 R18 放在 store：桌面端由侧边栏驱动，手机端仍用底部的筛选条
+  // 档位与 R18 放在 store：侧边栏 / 抽屉的二级项驱动它
   const rawCategory = useAppStore(s => s.rankingCategory);
   const r18 = useAppStore(s => s.rankingR18);
-  const selectRankingCategory = useAppStore(s => s.selectRankingCategory);
-  const toggleRankingR18 = useAppStore(s => s.toggleRankingR18);
   const setRankingSelection = useAppStore(s => s.setRankingSelection);
   // 切来源会按 key 重挂载本页，但档位留在 store 里：booru 的档位 key 与 pixiv 不通用，
   // 这里按当前来源的可用档位兜底（不写回 store，切回 pixiv 仍记得原来的档）
@@ -35,7 +33,6 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
   const [error, setError] = useState(null);
   const [appendError, setAppendError] = useState(null); // 翻页失败：单独提示，不占用"没有更多了"
   const [hasMore, setHasMore] = useState(true);
-  const [showFilters, setShowFilters] = useState(true);
   const pageRef = useRef(1);
   const itemsRef = useRef([]);
   const sentinelRef = useRef(null);
@@ -51,13 +48,21 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
     ? category
     : (r18 && R18_CATEGORIES.has(category) ? `${category}_r18` : category);
 
-  const load = useCallback(async (append) => {
+  const load = useCallback(async (append, { keepOnFail = false } = {}) => {
     if (loadingRef.current && append) return;
     loadingRef.current = true;
     const page = append ? pageRef.current + 1 : 1;
     const seq = ++fetchSeqRef.current;
     if (append) setLoadingMore(true);
     else { setLoading(true); setError(null); }
+
+    // 刷新失败但手里已有内容：保留列表 + 轻提示，不把正在看的榜单换成错误框。
+    // 只对「刷新」生效（keepOnFail）—— 换档位失败必须清空，否则会把上一档的内容留在新档位下面
+    const refreshFailed = (msg) => {
+      if (!keepOnFail || !itemsRef.current.length || loadedModeRef.current !== mode) return false;
+      showToast(msg || '刷新失败，请检查网络', { type: 'error' });
+      return true;
+    };
 
     // 切换档位（非首次且 mode 变化）：先秒开内存缓存，或清空显示加载态，后台再拉新数据
     if (!append && loadedModeRef.current !== null && loadedModeRef.current !== mode) {
@@ -84,6 +89,7 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         if (seq !== fetchSeqRef.current) return;
         const list = r?.illusts || [];
         const failed = !list.length && !!r?.error;
+        if (failed && refreshFailed(r?.error)) return; // 刷新失败：旧列表原样留着
         itemsRef.current = list;
         setItems(list);
         setHasMore(false);
@@ -91,8 +97,10 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         loadedModeRef.current = mode;
         cacheRef.current.set(mode, { items: list, hasMore: false, page: 1 });
         if (!list.length) setError(r?.error || '排行榜为空');
-        saveTabCache(cacheKey, { category, mode, items: list, hasMore: false, page: 1 }).catch(() => { });
-        if (failed) setError(r.error);
+        // 失败时不落盘：写进去的是空列表，等于把可用缓存覆写成空
+        if (!failed) {
+          saveTabCache(cacheKey, { category, mode, items: list, hasMore: false, page: 1 }).catch(() => { });
+        }
         return;
       }
 
@@ -102,6 +110,7 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
       const filtered = rawList;
       // fetchRanking 内部 catch 后返回 { illusts: [], error }，失败不能当成"没有更多了"
       const failed = !rawList.length && !!(r?.error || r?.message);
+      if (failed && !append && refreshFailed(r?.error || r?.message)) return; // 刷新失败：旧列表原样留着
       if (!failed) pageRef.current = page; // 失败不推进游标，重试才会重拉同一页
       const nextItems = append ? [...itemsRef.current, ...filtered] : filtered;
       itemsRef.current = nextItems;
@@ -115,8 +124,12 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         cacheRef.current.set(mode, { items: nextItems, hasMore: nextHasMore, page: pageRef.current });
       }
       if (!append && !filtered.length) setError(r?.message || r?.error || '排行榜为空');
-      // 持久化缓存（24h TTL）：重启 App 后直接恢复
-      saveTabCache(cacheKey, { category, r18, items: nextItems, hasMore: nextHasMore, page: pageRef.current }).catch(() => { });
+      // 持久化缓存（24h TTL）：重启 App 后直接恢复。
+      // 失败时不写：这次 nextItems 是空的（或没变化），写进去等于把可用缓存覆写成空，
+      // 一次网络抖动就把离线秒开的能力删掉，而日志里什么都看不到
+      if (!failed) {
+        saveTabCache(cacheKey, { category, r18, items: nextItems, hasMore: nextHasMore, page: pageRef.current }).catch(() => { });
+      }
     } catch (e) {
       if (seq !== fetchSeqRef.current) return; // 已被切档取代，不写错误
       if (append) setAppendError(e.message || '加载失败');
@@ -135,7 +148,8 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
   // 注册下拉刷新入口（当前 tab 有效）
   useEffect(() => {
     if (!registerRefresh) return;
-    return registerRefresh('ranking', () => loadRef.current?.(false));
+    // keepOnFail：下拉刷新失败时保留当前列表（见 load 里的说明）
+    return registerRefresh('ranking', () => loadRef.current?.(false, { keepOnFail: true }));
   }, [registerRefresh]);
 
   // 挂载时先尝试恢复缓存；缓存命中则跳过首次请求
@@ -186,33 +200,10 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
   const lastTokenRef = useRef(refreshToken);
   useEffect(() => {
     if (refreshToken > 0 && refreshToken !== lastTokenRef.current) {
-      loadRef.current(false);
+      loadRef.current(false, { keepOnFail: true });
     }
     lastTokenRef.current = refreshToken;
   }, [refreshToken]);
-
-  // 与主 TabBar 保持一致：下滑收起、上滑显示、回到顶部强制显示
-  // active 守卫：四个 tab 共用 .app-content，隐藏页继续监听会被别的 tab 滚动带着收起筛选栏
-  useEffect(() => {
-    if (!active) return;
-    const el = getMainScrollEl();
-    if (!el) return;
-    let last = el.scrollTop;
-    const onScroll = () => {
-      const top = el.scrollTop;
-      if (top < 24) setShowFilters(true);
-      else if (top > last + 20) setShowFilters(false);
-      else if (top < last - 20) setShowFilters(true);
-      last = top;
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [active]);
-
-  // 回到本 tab 时恢复筛选栏（隐藏期间可能被其他 tab 的滚动收起）
-  useEffect(() => {
-    if (active) setShowFilters(true);
-  }, [active]);
 
   // 哨兵触底自动加载（仅 Pixiv 有翻页）
   useEffect(() => {
@@ -245,26 +236,6 @@ export default function RankingPage({ active = true, onOpen, registerRefresh, re
         </div>
       )}
       {!loading && !appendError && !hasMore && items.length > 0 && <div className="hint">没有更多了</div>}
-      {/* 手机端的档位筛选条；桌面端已移入侧边栏，这一行在 ≥900px 被隐藏 */}
-      <div className={`chips chips-bottom${showFilters ? '' : ' chips-hidden'}`}>
-        {modes.map(m => (
-          <button
-            key={m.key}
-            className={`chip${m.key === category ? ' active' : ''}${m.label.length > 2 && m.key !== 'r18g' ? ' chip--small' : ''}`}
-            onClick={() => selectRankingCategory(m.key)}
-            aria-pressed={m.key === category}
-          >{m.label}</button>
-        ))}
-        {!isBooru && (
-          <button
-            className={`chip r18-toggle${r18 ? ' on' : ''}`}
-            onClick={toggleRankingR18}
-            style={{ marginLeft: 'auto' }}
-            aria-pressed={r18}
-            aria-label={`R18 内容：${r18 ? '已开启' : '已关闭'}`}
-          >{r18 ? 'R18' : '公开'}</button>
-        )}
-      </div>
     </div>
   );
 }

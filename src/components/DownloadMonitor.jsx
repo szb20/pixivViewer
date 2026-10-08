@@ -1,9 +1,9 @@
 /**
- * DownloadMonitorButton — 下载进度悬浮按钮 + 毛玻璃全屏弹窗。
+ * DownloadMonitorButton — 下载管理弹窗（手机端底部卡片 / 桌面端右侧抽屉）。
  *
- * 订阅全局 downloadMonitor（见 utils/downloadMonitor.js），
- * 有进行中任务或失败任务时显示悬浮按钮（角标=下载队列文件总数 + 失败数），
- * 点击展开任务列表；失败任务常驻，可一键重试（也跨会话持久化在 localStorage）。
+ * 订阅全局 downloadMonitor（见 utils/downloadMonitor.js），点击导航里的「下载」展开任务列表；
+ * 失败任务常驻，可一键重试（也跨会话持久化在 localStorage）。
+ * 入口有两处：侧边栏 / 抽屉的「下载」（带任务数角标）、手机端汉堡上的下载角标。
  */
 import { useState, useEffect, useCallback } from 'react';
 import { downloadMonitor } from '../utils/downloadMonitor.js';
@@ -17,6 +17,9 @@ import '../styles/download.css';
 async function retryDownload(meta) {
   const r = await saveItem({
     illustId: meta.illustId,
+    // source 必须带上：缺了它 storageService 一律按 pixiv 处理（buildDownloadUrls 会丢掉
+    // 图床直链、退回 pixivReUrl 去猜），booru 的重试因此永远失败，最坏还会存下同号的 pixiv 作品
+    source: meta.source,
     _pageIndex: meta.page ?? 0,
     type: meta.type || meta.kind || 'image',
     illustType: meta.illustType,
@@ -28,6 +31,7 @@ async function retryDownload(meta) {
     authorName: meta.authorName,
     authorId: meta.authorId,
     tags: meta.tags,
+    webUrl: meta.webUrl,
     _liked: meta._liked,
   });
   return { ok: !!(r?.success || r?.cached), error: r?.error || '' };
@@ -116,7 +120,7 @@ function DownloadRow({ job, onRetry, retrying }) {
 }
 
 export default function DownloadMonitorButton() {
-  const { jobs, total, activeCount, failCount, doneCount } = useDownloadJobs();
+  const { jobs, activeCount, failCount, doneCount } = useDownloadJobs();
   const open = useAppStore(s => s.downloadOpen);
   const setDownloadOpen = useAppStore(s => s.setDownloadOpen);
   const [retryingKeys, setRetryingKeys] = useState(() => new Set());
@@ -157,7 +161,7 @@ export default function DownloadMonitorButton() {
       try {
         const r = await retryDownload(meta);
         if (r.ok) {
-          // 成功：只清掉这一条 —— clearFinished 会把其他等待重试的失败记录一并抹掉
+          // 成功：只清掉这一条 —— 别动别的失败记录（它们等着被重试）
           downloadMonitor.dismiss(job.key);
         } else {
           recreateFailed(failMsg(r.error));
@@ -176,9 +180,6 @@ export default function DownloadMonitorButton() {
       await handleRetry(job);
     }
   }, [jobs, handleRetry]);
-
-  // 悬浮按钮只在真有进行中/失败任务时出现；弹窗不依赖它，无任务时也能从侧边栏打开
-  const showFab = jobs.length > 0 && (activeCount > 0 || failCount > 0);
 
   const active = jobs.filter(j => j.status === 'downloading' || j.status === 'writing');
   const failed = jobs.filter(j => j.status === 'error');
@@ -205,22 +206,6 @@ export default function DownloadMonitorButton() {
 
   return (
     <>
-      {showFab && (
-        <button
-          className="download-fab glass-icon-btn"
-          onClick={() => setDownloadOpen(!open)}
-          aria-label="下载进度"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          {total > 0 && <span className="download-fab-badge">{total}</span>}
-          {failCount > 0 && <span className="download-fab-badge download-fab-badge--fail">{failCount}</span>}
-        </button>
-      )}
-
       {open && (
         <div
           className="dialog-overlay"
@@ -246,7 +231,7 @@ export default function DownloadMonitorButton() {
                   <button className="download-head-btn" onClick={handleRetryAll}>全部重试</button>
                 )}
                 {doneCount > 0 && (
-                  <button className="download-head-btn" onClick={() => downloadMonitor.clearFinished()}>清除已完成</button>
+                  <button className="download-head-btn" onClick={() => downloadMonitor.clearDone()}>清除已完成</button>
                 )}
               </div>
             </div>

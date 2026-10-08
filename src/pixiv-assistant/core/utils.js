@@ -166,7 +166,16 @@ export const DEFAULT_SOURCE = 'pixiv';
  */
 export const KNOWN_SOURCES = [
   'pixiv', 'yande', 'konachan', 'konachan-net', 'danbooru', 'safebooru', 'wallhaven',
+  'safebooru-donmai', 'tbib', 'sakugabooru', 'zerochan', 'hypnohub', 'xbooru',
 ];
+
+/**
+ * 实体 key：`{source}:{illustId}:{pageIndex}`（PixivEntity.makeId 也走这里，规则只有这一份）。
+ * cacheDB 的 v1→v2 迁移要用它判断「这条记录的 key 是不是该改」。
+ */
+export function entityKeyOf(illustId, pageIndex = 0) {
+  return `${sourceOfId(illustId)}:${illustId}:${pageIndex}`;
+}
 
 /**
  * 站点原始 id → 全局唯一 illustId。
@@ -273,7 +282,13 @@ export function safeFileName(s) {
 export function parseCacheFileName(name) {
   const extMatch = name.match(/\.(jpg|jpeg|png|gif|webp|zip)$/i);
   if (!extMatch) return null;
-  const base = name.slice(0, -extMatch[0].length);
+  const rawBase = name.slice(0, -extMatch[0].length);
+  // 兼容历史 bug 产出的「双前缀」文件名：zerochan_zerochan_12345_p0_[作者]_[标题].jpg。
+  // 成因：KNOWN_SOURCES 曾漏登记 6 个来源（tbib / sakugabooru / zerochan / hypnohub / xbooru /
+  // safebooru-donmai），rawIdOf 没能剥掉 id 前缀，而写文件名时又补了一遍来源名。
+  // 这类文件已经在用户相册里了，剥掉重复那段就能按正常格式解析出来（否则对账永远认不出）。
+  const dupPrefix = rawBase.match(/^([a-z][a-z0-9-]*)_\1_/);
+  const base = dupPrefix ? rawBase.slice(dupPrefix[1].length + 1) : rawBase;
   // 扩展名是「这条记录是不是动图」唯一可靠的信号：现役写入端（buildCacheFileName）
   // 无论动图与否都写 `_p{page}`，只有 .gif 结尾能区分。历史 `_g{page}` 命名仍要认，
   // 所以下面各分支的 isGif 是「`g` 标记 || gif 扩展名」，两者取或。
