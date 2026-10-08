@@ -634,7 +634,7 @@ const SCENARIOS = {
       const r = JSON.parse(await evaluate(cdp, `JSON.stringify({
         sideNav: (() => { const el = document.querySelector('.side-nav'); return el ? getComputedStyle(el).display : null; })(),
         drawerTrigger: (() => { const el = document.querySelector('.drawer-trigger'); return el ? getComputedStyle(el).display : null; })(),
-        bottomChrome: ['.tab-bar', '.chips-bottom', '.sub-tab-bar', '.download-fab'].filter(s => document.querySelector(s)),
+        bottomChrome: ['.tab-bar', '.chips-bottom', '.sub-tab-bar', '.download-fab', '.me-settings-btn'].filter(s => document.querySelector(s)),
         appDir: getComputedStyle(document.querySelector('.app')).flexDirection,
         appMaxW: getComputedStyle(document.querySelector('.app')).maxWidth,
         contentPadBottom: getComputedStyle(document.querySelector('.app-content')).paddingBottom,
@@ -658,7 +658,7 @@ const SCENARIOS = {
       // 这里不探 .drawer-trigger —— 它是 !isDesktop 门控的 React 节点，而 CDP 改宽度不派发
       // matchMedia 的 change，React 手里的 isDesktop 会停在旧值（见 forceAppRerender 注释）。
       expect(`${w}x${h} .side-nav`, r.sideNav, desktop ? 'flex' : 'none');
-      expect(`${w}x${h} 底部 chrome 残留`, r.bottomChrome.join(','), '');
+      expect(`${w}x${h} 已删元素残留`, r.bottomChrome.join(','), '');
       expect(`${w}x${h} .app flex-direction`, r.appDir, desktop ? 'row' : 'column');
       expect(`${w}x${h} .app-content padding-bottom`, r.contentPadBottom, '0px');
       await shot(cdp, `30-${w}x${h}`);

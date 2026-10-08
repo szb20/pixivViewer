@@ -3,13 +3,13 @@
    桌面端不参与：≥900px 有常驻 SideNav，汉堡按钮也不渲染
    ══════════════════════════════════════════════ */
 
-/* ── 左上角汉堡入口（玻璃圆钮，定位仿右上角 .me-settings-btn） ── */
+/* ── 左上角汉堡入口（玻璃圆钮，手机端唯一的常驻顶部入口） ── */
 .drawer-trigger {
   position: fixed;
   top: max(16px, env(safe-area-inset-top, 16px));
   left: max(16px, calc((100vw - 560px) / 2 + 16px));
   z-index: 100;
-  /* 只做位移：收起时随顶部 chrome 一起上滑出屏，与 .me-settings-btn 保持一致。
+  /* 只做位移：收起时随顶部 chrome 一起上滑出屏，不做透明度渐隐。
      抽屉打开期间它只是滑走、不卸载 —— 卸载会让关闭时的焦点归还无处可去 */
   transition: transform var(--t-slow) cubic-bezier(0.2, 0.8, 0.2, 1);
 }

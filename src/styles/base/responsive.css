@@ -59,8 +59,7 @@
     display: flex;
   }
 
-  /* 手机专属的顶部入口在桌面退场（导航与设置都在侧边栏里，状态栏毛玻璃只服务于手机沉浸式） */
-  .me-settings-btn,
+  /* 状态栏毛玻璃只服务于手机沉浸式布局，桌面退场（导航与设置都在侧边栏里） */
   .status-bar-frosted {
     display: none;
   }

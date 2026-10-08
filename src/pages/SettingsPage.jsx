@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSettings, saveSettings } from '../pixiv-assistant/index.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
-import { SOURCE_LIST, getSource } from '../sources/registry.js';
-import { setImageSource, setBooruSafeOnly } from '../hooks/useImageSource.js';
+import { getSource } from '../sources/registry.js';
+import { useImageSourceId, setBooruSafeOnly } from '../hooks/useImageSource.js';
 import '../styles/settings.css';
 
 const LAYOUT_OPTIONS = [
@@ -24,9 +24,11 @@ export default function SettingsPage({ onClose }) {
   const [gridLayout, setGridLayout] = useState('waterfall');
   const [saveDirectory, setSaveDirectory] = useState('');
   const [askEachTimeState, setAskEachTimeState] = useState(false);
-  // 来源开关：改它同时走 useImageSource 的模块单例（立即广播 + 自行持久化），
-  // 所以这两个不能进 doSave——否则同一次改动会写两遍 settings。
-  const [imageSourceId, setImageSourceId] = useState('pixiv');
+  // 当前来源：读模块单例的实时值（切来源的入口在侧边栏 / 抽屉，不在这里）。
+  // 分级过滤是 booru 专属项，靠它决定显隐，所以必须跟着实时值走，不能只读一次 settings。
+  const imageSourceId = useImageSourceId();
+  // 分级开关走 useImageSource 的模块单例（立即广播 + 自行持久化），
+  // 所以它不能进 doSave —— 否则同一次改动会写两遍 settings。
   const [safeOnly, setSafeOnly] = useState(false);
 
   // Cookie 收起/展开
@@ -63,7 +65,6 @@ export default function SettingsPage({ onClose }) {
       setGridLayout(s.gridLayout || 'waterfall');
       setSaveDirectory(s.saveDirectory || '');
       setAskEachTimeState(s.saveAskEachTime === true);
-      setImageSourceId(s.imageSource || 'pixiv');
       setSafeOnly(s.booruSafeOnly === true);
       loadedResolveRef.current?.();
     });
@@ -158,25 +159,11 @@ export default function SettingsPage({ onClose }) {
           )}
         </div>
 
-        {/* ── 来源 ── */}
+        {/* ── 来源 ──
+            来源本身只在侧边栏 / 抽屉的「来源」组里切（这里原来还有一排来源胶囊，
+            同一件事两个入口，已删）；本组只留跟着当前来源走的分级过滤 */}
         <div className="settings-group">
           <div className="settings-group-label">来源</div>
-          <div className="settings-row">
-            <div style={{ minWidth: 0 }}>
-              <div className="settings-row-label">图片来源</div>
-              <div className="settings-row-hint">切换后各页签会按新来源重新加载</div>
-            </div>
-            <div className="settings-pill-group">
-              {SOURCE_LIST.map(s => (
-                <button
-                  key={s.id}
-                  className={`settings-pill${imageSourceId === s.id ? ' settings-pill--active' : ''}`}
-                  onClick={() => { setImageSourceId(s.id); setImageSource(s.id); }}
-                  aria-pressed={imageSourceId === s.id}
-                >{s.label}</button>
-              ))}
-            </div>
-          </div>
 
           {/* 分级过滤：仅图站有意义（Pixiv 的分级由账号设置决定） */}
           {getSource(imageSourceId).kind !== 'pixiv' && (
