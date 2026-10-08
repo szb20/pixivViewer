@@ -105,6 +105,40 @@
   }
 }
 
+/* ── 退场：面板向左滑出屏幕（原路返回），遮罩同步淡出 ──
+   必须写在上面那两条基础动画之后：同特异性下后写的赢。
+   时长与 NavDrawer.jsx 的 EXIT_MS 是一对，改一处要改两处。
+   fill both 让它在「动画结束 → 组件真正卸载」之间保持退场末态，不会回弹一下 */
+.drawer-overlay--closing {
+  animation: drawer-overlay-out 0.22s ease both;
+}
+
+.drawer-panel--closing {
+  animation: drawer-out 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@keyframes drawer-overlay-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(-100%);
+  }
+}
+
 /* ── 抽屉形态的 SideNav ──
    覆盖 shell.css 的 .side-nav（display:none / 固定宽 / 实底 / 右边框）：
    本文件由组件 import，在 bundle 里晚于 index.css 那一批（shell.css 在其中），

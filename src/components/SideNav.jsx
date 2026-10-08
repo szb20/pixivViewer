@@ -289,7 +289,12 @@ export default function SideNav({
                   active={isActive}
                   aria-current={active === t.key ? 'page' : undefined}
                   {...(t.key === 'search' ? { 'data-search-toggle': '' } : null)}
-                  onClick={act(() => (t.key === 'search' && onSearchNav ? onSearchNav() : onChange(t.key)))}
+                  // 带二级项的行：点一下先原地展开（只想看看档位/子页签，不该被切走），
+                  // 展开着再点才进页面（同时也是「点当前项 = 刷新」那条路）。
+                  // 箭头任何时候都只管展开/收起。
+                  onClick={expandable && !open
+                    ? () => setSectionExpanded(t.key, true)
+                    : act(() => (t.key === 'search' && onSearchNav ? onSearchNav() : onChange(t.key)))}
                 />
                 {expandable && (
                   <button

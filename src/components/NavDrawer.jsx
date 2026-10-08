@@ -1,29 +1,48 @@
 /**
  * 手机端导航抽屉 —— <900px 的侧边栏形态，内容就是桌面常驻 SideNav 的同一份实现。
  *
- * 本文件只管抽屉外壳（遮罩 / 面板 / 焦点 / 返回键）；导航内容由 App 以 children 传进来。
- * 三路关闭：安卓返回键（registerBackHandler）/ Esc（useOverlayFocus 栈顶）/ backdrop 点击。
+ * 本文件只管抽屉外壳（遮罩 / 面板 / 焦点 / 返回键 / 进出动画）；导航内容由 App 以 children 传进来。
+ * 三路关闭：安卓返回键（registerBackHandler）/ Esc（useOverlayFocus 栈顶）/ backdrop 点击 ——
+ * 三路都走下面这个 close()：先播完向左滑出的退场动画，再让 App 真正卸载（否则是硬切）。
  *
  * 入口按钮 DrawerTrigger 也在这里 —— 与抽屉是一体的，
  * 且它订阅了下载队列（角标），必须自成一个组件：
  * 放在 App 里会让每次下载进度跳动都重渲染整棵页面树。
  */
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import { useDownloadJobs } from '../hooks/useDownloadJobs.js';
 import '../styles/navDrawer.css';
 
+/** 退场动画时长（与 navDrawer.css 的 drawer-out / drawer-overlay-out 一致）+ 一点余量 */
+const EXIT_MS = 220 + 40;
+
 export default function NavDrawer({ onClose, children }) {
-  const panelRef = useOverlayFocus(true, onClose);
+  // 关闭要做两件事：先播退场动画，再真正卸载。用状态位 + 定时器（不依赖 animationend：
+  // prefers-reduced-motion 下动画被全局关掉，那个事件永远不来，抽屉会关不掉）
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const timerRef = useRef(0);
+
+  const close = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    timerRef.current = window.setTimeout(() => onClose?.(), EXIT_MS);
+  }, [onClose]);
+
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
+
+  const panelRef = useOverlayFocus(true, close);
 
   // 安卓返回键先关抽屉：backHandler 倒序栈，灯箱/详情的 handler 先注册先消费，层级天然正确
   useEffect(() => {
     return registerBackHandler(() => {
-      onClose();
+      close();
       return true;
     });
-  }, [onClose]);
+  }, [close]);
 
   // 焦点刚落在面板上（还没进导航项）时，方向键直达第一个导航项；
   // 焦点已经在导航项里时由 SideNav 自己的 roving focus 处理（那条路径的 target 是按钮）
@@ -37,9 +56,9 @@ export default function NavDrawer({ onClose, children }) {
   };
 
   return (
-    <div className="drawer-overlay" onClick={onClose}>
+    <div className={`drawer-overlay${closing ? ' drawer-overlay--closing' : ''}`} onClick={close}>
       <div
-        className="drawer-panel"
+        className={`drawer-panel${closing ? ' drawer-panel--closing' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label="导航"
@@ -48,7 +67,9 @@ export default function NavDrawer({ onClose, children }) {
         onKeyDown={onKeyDown}
         onClick={(e) => e.stopPropagation()}
       >
-        {children}
+        {/* children 可以是函数：导航内容里的关闭入口（品牌行的 ✕、点选后关抽屉）
+            都得用这个带动画的 close，不能直接用 App 传来的 onClose（那是卸载） */}
+        {typeof children === 'function' ? children(close) : children}
       </div>
     </div>
   );

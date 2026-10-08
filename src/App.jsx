@@ -172,7 +172,7 @@ export default function App() {
 
       {drawerOpen && (
         <NavDrawer onClose={closeDrawer}>
-          <SideNav {...navProps} variant="drawer" onClose={closeDrawer} />
+          {(close) => <SideNav {...navProps} variant="drawer" onClose={close} />}
         </NavDrawer>
       )}
 

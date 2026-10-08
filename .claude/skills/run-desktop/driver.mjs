@@ -248,6 +248,21 @@ async function clickInDrawer(cdp, label) {
   })()`);
 }
 
+/** 点抽屉里某一行的独立展开箭头（.side-nav-chevron-btn）；返回点击前的 aria-expanded */
+async function clickDrawerChevron(cdp, label) {
+  return evaluate(cdp, `(() => {
+    const panel = document.querySelector('.drawer-panel');
+    if (!panel) return 'NO_DRAWER';
+    const div = [...panel.querySelectorAll('.side-nav-group > div')]
+      .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === ${JSON.stringify(label)});
+    const btn = div?.querySelector('.side-nav-chevron-btn');
+    if (!btn) return 'NOT_FOUND';
+    const before = btn.getAttribute('aria-expanded');
+    btn.click();
+    return before;
+  })()`);
+}
+
 /** 按可见文本点击按钮/链接（用 DOM click，避免坐标命中错的层） */
 async function clickText(cdp, text) {
   return evaluate(cdp, `(() => {
@@ -257,6 +272,26 @@ async function clickText(cdp, text) {
     if (!el) return 'NOT_FOUND';
     el.click(); return 'OK';
   })()`);
+}
+
+/**
+ * 点常驻侧栏（桌面栏）里的导航行，保证结果是「已切到该页」。
+ * 带二级项的行是新语义：收起时第一下只展开、展开后第二下才进页面 ——
+ * 这里按行的展开态补齐点击次数，免得调用方还要自己关心持久化偏好（pv:navExpanded）。
+ */
+async function navRail(cdp, label) {
+  const expanded = await evaluate(cdp, `(() => {
+    const div = [...document.querySelectorAll('.side-nav:not(.side-nav--drawer) .side-nav-group > div')]
+      .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === ${JSON.stringify(label)});
+    if (!div) return 'NO_ROW';
+    const chev = div.querySelector('.side-nav-chevron-btn');
+    return chev ? chev.getAttribute('aria-expanded') : 'no-chevron';
+  })()`);
+  if (expanded === 'false') {
+    await clickText(cdp, label);   // 第一下：只展开
+    await sleep(400);
+  }
+  return clickText(cdp, label);
 }
 
 /** 搜索框几何 / 形态探针（手机贴顶浮动 vs 桌面内容区悬浮胶囊） */
@@ -368,7 +403,7 @@ const SCENARIOS = {
         await shot(cdp, `01-tab-${i}-${label}`);
         continue;
       }
-      say(`  点「${label}」-> ${await clickText(cdp, label)}`);
+      say(`  点「${label}」-> ${await navRail(cdp, label)}`);
       await sleep(3500);
       await shot(cdp, `01-tab-${i}-${label}`);
     }
@@ -385,12 +420,12 @@ const SCENARIOS = {
     await sleep(4500);
     say('初始状态:', await collect(cdp));
 
-    say(`点「排行」-> ${await clickText(cdp, '排行')}`);
+    say(`点「排行」-> ${await navRail(cdp, '排行')}`);
     await sleep(6000);
     say('排行:', await collect(cdp));
     await shot(cdp, '10-ranking');
 
-    say(`点「我」-> ${await clickText(cdp, '我')}`);
+    say(`点「我」-> ${await navRail(cdp, '我')}`);
     await sleep(2500);
     say(`点「收藏」-> ${await clickText(cdp, '收藏')}`);
     await sleep(5000);
@@ -479,7 +514,7 @@ const SCENARIOS = {
 
     say('初始:', JSON.stringify(await probe()));
 
-    say(`点「我」-> ${await clickText(cdp, '我')}`);
+    say(`点「我」-> ${await navRail(cdp, '我')}`);
     await sleep(3000);
     await shot(cdp, '20-me');
     say('  点我后:', JSON.stringify(await probe()));
@@ -503,7 +538,7 @@ const SCENARIOS = {
     say('  详情打开:', JSON.stringify(await probe()));
 
     // 详情开着时点侧边栏切 tab → 详情应关闭
-    say(`详情开着点「排行」-> ${await clickText(cdp, '排行')}`);
+    say(`详情开着点「排行」-> ${await navRail(cdp, '排行')}`);
     await sleep(3500);
     await shot(cdp, '23-after-nav');
     say('  切 tab 后:', JSON.stringify(await probe()));
@@ -568,10 +603,20 @@ const SCENARIOS = {
     };
     const drawerProbe = async () => JSON.parse(await evaluate(cdp, `JSON.stringify((() => {
       const panel = document.querySelector('.drawer-panel');
+      // 「排行」行的展开态与二级项个数（副项文案随来源变，别断言具体档位名）
+      const row = () => {
+        const div = [...panel.querySelectorAll('.side-nav-group > div')]
+          .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === '排行');
+        return div ? {
+          expanded: div.querySelector('.side-nav-chevron-btn')?.getAttribute('aria-expanded') ?? null,
+          subs: div.querySelectorAll('.side-nav-subs .side-nav-item').length,
+        } : null;
+      };
       return {
         open: !!panel,
         items: panel ? [...panel.querySelectorAll('.side-nav-item')].map(b => b.textContent.trim()).join('/') : null,
         active: panel ? [...panel.querySelectorAll('.side-nav-item.active')].map(b => b.textContent.trim()).join('/') : null,
+        rankingRow: panel ? row() : null,
       };
     })())`));
     const openDrawer = async () => {
@@ -633,20 +678,45 @@ const SCENARIOS = {
     expect('抽屉能打开', opened.open, true);
     expect('抽屉含四个主项', ['推荐', '排行', '我', '搜索'].every(k => (opened.items || '').includes(k)), true);
 
+    // 带二级项的行：第一下只展开、第二下才进页面（箭头任何时候都只管展开/收起）。
+    // 展开偏好是持久化的（pv:navExpanded），可能带着上一轮的展开态进来 —— 先用箭头归零到收起
+    let row = (await drawerProbe()).rankingRow;
+    if (row?.expanded === 'true') {
+      say(`  箭头收起「排行」-> 之前 aria-expanded=${await clickDrawerChevron(cdp, '排行')}`);
+      await sleep(400);
+      row = (await drawerProbe()).rankingRow;
+    }
+    expect('「排行」行带独立展开箭头', row?.expanded, 'false');
+    expect('收起时无二级项', row?.subs, 0);
+
     // 点抽屉里的项必须点在 .drawer-panel 内：窄屏下常驻侧栏仍在 DOM（display:none），
     // 全局按文本找会命中那个隐藏实例 —— 它的 handler 不会关抽屉
-    say(`  点抽屉里的「排行」-> ${await clickInDrawer(cdp, '排行')}`);
+    say(`  点抽屉里的「排行」(① 只展开) -> ${await clickInDrawer(cdp, '排行')}`);
+    await sleep(500);
+    const mid = await drawerProbe();
+    say(`  ① 后: ${JSON.stringify({ open: mid.open, active: mid.active, rankingRow: mid.rankingRow })}`);
+    expect('点第一下抽屉不关', mid.open, true);
+    expect('点第一下不切页', (mid.active || '').includes('排行'), false);
+    expect('点第一下展开出二级项', mid.rankingRow?.subs > 0, true);
+
+    say(`  点抽屉里的「排行」(② 进页面) -> ${await clickInDrawer(cdp, '排行')}`);
     await sleep(1800);
-    expect('点主项后抽屉自动关', (await drawerProbe()).open, false);
+    expect('点第二下抽屉自动关', (await drawerProbe()).open, false);
 
     await openDrawer();
     const reopened = await drawerProbe();
     say(`  再开抽屉: ${JSON.stringify(reopened)}`);
     expect('「排行」成为当前项', (reopened.active || '').includes('排行'), true);
-    expect('档位二级项已展开', (reopened.items || '').includes('日榜'), true);
-    // 收尾：关掉抽屉，别把打开状态留给后面的场景
-    await evaluate(cdp, `document.querySelector('.drawer-overlay')?.click()`);
-    await sleep(500);
+    expect('档位二级项仍展开', reopened.rankingRow?.subs > 0, true);
+
+    // 退场动画：点关闭后面板要在 DOM 里多停一拍（带 --closing），不是硬切
+    say(`  点遮罩关抽屉 -> ${await evaluate(cdp, `(() => { const o = document.querySelector('.drawer-overlay'); if (!o) return 'NO_DRAWER'; o.click(); return 'OK'; })()`)}`);
+    await sleep(120);
+    const closingState = await evaluate(cdp, `(() => { const p = document.querySelector('.drawer-panel'); return p ? (p.classList.contains('drawer-panel--closing') ? 'closing' : 'STILL_OPEN_NO_CLOSING') : 'GONE'; })()`);
+    say(`  +120ms 面板: ${closingState}`);
+    expect('退场动画播放中（面板仍在且带 --closing）', closingState, 'closing');
+    await sleep(600);
+    expect('退场动画后抽屉卸载', !!(await evaluate(cdp, `!!document.querySelector('.drawer-panel')`)), false);
 
     // 这里不截图：抽屉背板是整屏 backdrop-filter，叠在图片网格上时 CDP 截图会卡到 45s 超时
     // （smoke 里同样的超时也偶发，属于本机截图通道的老毛病）。断言全在 DOM 上，不依赖截图。
