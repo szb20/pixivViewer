@@ -163,7 +163,7 @@
   .dialog-overlay,
   .dialog-panel,
   .grid-shimmer::after,
-  .ptr-refreshing .ptr-orbit {
+  .ptr-refreshing .ptr-ring {
     animation: none !important;
     transition: none !important;
     transform: none !important;

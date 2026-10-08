@@ -46,56 +46,40 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  overflow: hidden;
-  /* 加深暗部 + 加粗边框，让圆盘在各种背景上更显眼 */
-  background: linear-gradient(150deg,
-      rgba(255, 255, 255, 0.32) 0%,
-      rgba(255, 255, 255, 0.16) 45%,
-      rgba(255, 255, 255, 0.08) 100%);
-  backdrop-filter: blur(10px) saturate(140%);
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  box-shadow:
-    inset 0 0 2px rgba(255, 255, 255, 0.12),
-    0 2px 12px rgba(0, 0, 0, 0.25);
+  /* 深玻璃底（同 .frosted 的那一档）：底下穿过的是作品图，纯白细线会糊进浅色图里 */
+  background: rgba(15, 17, 21, 0.55);
+  backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-.ptr-orbit {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  transform-origin: center;
+/* 进度环：下拉时弧长 = 进度（满圈 = 松手即刷新），刷新时留一小段弧由这里带着转 */
+.ptr-ring {
+  display: block;
 }
 
-.ptr-dot {
-  position: absolute;
-  top: -13px;
-  left: 50%;
-  width: 26px;
-  height: 26px;
-  margin-left: -13px;
-  border-radius: 50%;
-  background: radial-gradient(circle,
-      #fff 0%,
-      rgba(255, 255, 255, 0.9) 18%,
-      rgba(255, 255, 255, 0.4) 45%,
-      rgba(255, 255, 255, 0) 70%);
+.ptr-ring-track {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 2.5;
 }
 
-.ptr-refreshing .ptr-orbit {
-  animation: ptr-orbit 1s linear infinite;
+.ptr-ring-arc {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
 }
 
-@keyframes ptr-orbit {
-  to {
-    transform: rotate(360deg);
-  }
+.ptr-refreshing .ptr-ring {
+  animation: ptr-spin 0.8s linear infinite;
 }
 
 /* 搜索按钮等小 spinner 共用的旋转动画 */

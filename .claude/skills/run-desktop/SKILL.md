@@ -45,6 +45,7 @@ node .claude/skills/run-desktop/driver.mjs shot 我的截图
 | `report` | 冒烟之外，额外诊断 Cookie 是否生效、破图、收藏页 |
 | `a11y` | 键盘可达性断言：侧边栏方向键导航、覆盖层焦点移入/归还、Esc 关闭（这些看截图看不出来） |
 | `downloads` | 下载管理专项：注入进行中/失败/已完成三类假任务，验证分组与「已下载/总大小 · 速度」显示。**需配 `--dev`**（用 `window.__pixivViewer` 调试口）；不真下载是因为桌面点下载会弹原生保存框，自动化关不掉 |
+| `ptr` | 下拉刷新专项：合成 TouchEvent 走完整条手势路径，**断言**进度环的四个状态（下拉出部分弧 → 过阈值满圈 → 松手转成刷新态 → 刷完自己卸载），失败即 FATAL + 退出码 1。不用 CDP 的 `Input.dispatchTouchEvent` 是因为那一路在本机会卡到 45s 超时 |
 | `eval <js>` | 在渲染进程求值（`awaitPromise`，async IIFE 可直接写），打印结果 |
 | `shot [name]` | 只截一张图 |
 

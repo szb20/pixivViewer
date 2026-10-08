@@ -8,7 +8,8 @@ const MAX_DISTANCE = 70;
 
 /**
  * 下拉刷新 — 监听 .app-content 滚动容器，在 scrollTop=0 时向下拖动触发 onRefresh。
- * 纯动画指示器（无文字）：一个白色光点，下拉时随进度放大，刷新时呼吸闪烁。
+ * 指示器是一枚进度环（无文字）：下拉时弧长跟着手指长，满圈即松手刷新，刷新时转起来。
+ * 环画在玻璃圆盘里（.ptr-indicator），压在作品图上也能看清。
  *
  * @param {Function} onRefresh — () => Promise，刷新完成后指示器收起
  */
@@ -107,17 +108,29 @@ export default function PullToRefresh({ onRefresh }) {
 
   const refreshing = state === 'refreshing';
   const progress = Math.min(1, distance / THRESHOLD);
-  // 下拉时光点从 0.5 放大到 1；刷新时小光点沿轨道旋转
-  const dotScale = refreshing ? 1 : 0.5 + progress * 0.5;
+  // 弧长：下拉时 = 进度（满圈就是「松手即刷新」的信号），刷新时留一小段固定弧让 CSS 带着转
+  const R = 9;
+  const CIRC = 2 * Math.PI * R;
+  const arcLen = CIRC * Math.max(refreshing ? 0.28 : progress, 0.001);
 
   return (
     <div
       className={`ptr-indicator ${refreshing ? 'ptr-refreshing' : ''}`}
       style={{ transform: `translateX(-50%) translateY(${distance}px)` }}
     >
-      <div className="ptr-orbit">
-        <span className="ptr-dot" style={{ transform: `scale(${dotScale})` }} />
-      </div>
+      {/* 环从 12 点方向起画：rotate 写成 SVG 属性而不是 CSS transform ——
+          降低动效的媒体查询里对 .ptr-refreshing .ptr-ring 有 transform: none !important，
+          用 CSS 的话那一档会把起点转回 3 点方向 */}
+      <svg className="ptr-ring" width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+        <circle className="ptr-ring-track" cx="12" cy="12" r={R} transform="rotate(-90 12 12)" />
+        <circle
+          className="ptr-ring-arc"
+          cx="12" cy="12" r={R}
+          transform="rotate(-90 12 12)"
+          strokeDasharray={CIRC}
+          strokeDashoffset={CIRC - arcLen}
+        />
+      </svg>
     </div>
   );
 }

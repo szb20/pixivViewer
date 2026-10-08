@@ -1031,6 +1031,81 @@ const SCENARIOS = {
     await shot(cdp, '61-grid-resize-back');
   },
 
+  /**
+   * 下拉刷新：合成 TouchEvent 走完整条手势路径，断言指示器（进度环）随手势的四个状态。
+   * 为什么不用 CDP 的 Input.dispatchTouchEvent：那一路在本机实测会卡到 45s 超时。
+   * 自造事件照样打在组件的监听器上（.app-content 的 touchstart/move/end），不是绕过它。
+   */
+  async ptr(cdp) {
+    await sleep(6000);
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 420, height: 820, deviceScaleFactor: 1, mobile: false });
+    await sleep(2000);
+    const drive = (y, type = 'touchmove') => evaluate(cdp, `(() => {
+      const el = document.querySelector('.app-content');
+      if (!el) return 'NO_EL';
+      // 下拉刷新的前提是 scrollTop === 0（冷启动会恢复上次的滚动位置）
+      if ('${type}' === 'touchstart') el.scrollTop = 0;
+      const t = new Touch({ identifier: 1, target: el, clientX: 210, clientY: ${y} });
+      const isEnd = '${type}' === 'touchend';
+      el.dispatchEvent(new TouchEvent('${type}', {
+        touches: isEnd ? [] : [t], targetTouches: isEnd ? [] : [t], changedTouches: [t],
+        bubbles: true, cancelable: true,
+      }));
+      return el.scrollTop;
+    })()`);
+    const probe = async () => JSON.parse(await evaluate(cdp, `JSON.stringify((() => {
+      const i = document.querySelector('.ptr-indicator');
+      const arc = document.querySelector('.ptr-ring-arc');
+      return {
+        present: !!i,
+        refreshing: !!(i && i.classList.contains('ptr-refreshing')),
+        // style.transform 是 "translateX(-50%) translateY(30px)"，取后半段的数字
+        y: i ? Math.round(parseFloat(i.style.transform.split('translateY(')[1])) : null,
+        dash: arc ? Number(arc.getAttribute('stroke-dashoffset')) : null,
+      };
+    })())`));
+
+    const problems = [];
+    const expect = (label, actual, want) => {
+      if (actual !== want) problems.push(`${label}: 期望 ${JSON.stringify(want)}，实际 ${JSON.stringify(actual)}`);
+    };
+    const CIRC = 2 * Math.PI * 9;   // 与 PullToRefresh 的 R 一致
+
+    expect('起始（idle）不该有指示器', (await probe()).present, false);
+
+    await drive(140, 'touchstart');
+    await drive(190); await sleep(80);
+    const half = await probe();
+    say(`拉 30px（未过阈值）: ${JSON.stringify(half)}`);
+    expect('下拉时指示器出现', half.present, true);
+    expect('指示器跟着手指走', half.y, 30);
+    expect('弧长是部分（既非空也非满）', half.dash > 1 && half.dash < CIRC - 1, true);
+
+    await drive(300); await sleep(80);
+    const full = await probe();
+    say(`过阈值（阻尼后 70px 上限）: ${JSON.stringify(full)}`);
+    expect('过阈值时满圈', Math.round(full.dash), 0);
+
+    await drive(300, 'touchend');
+    await sleep(200);
+    const refreshing = await probe();
+    say(`松手: ${JSON.stringify(refreshing)}`);
+    expect('松手后进入刷新态', refreshing.refreshing, true);
+    expect('刷新时留固定小弧（28%）', Math.round(refreshing.dash), Math.round(CIRC * 0.72));
+
+    // 刷新跑完（要等真网络，本机走代理拉一页实测能到二三十秒）后指示器自己收掉：
+    // 这是「转起来就不停了」那类 bug 的唯一防线，所以给足时间再判失败
+    let gone = false;
+    for (let i = 0; i < 100 && !gone; i++) {
+      await sleep(800);
+      gone = !(await probe()).present;
+    }
+    expect('刷新完成后指示器卸载', gone, true);
+
+    await cdp.send('Emulation.clearDeviceMetricsOverride');
+    if (problems.length) throw new Error(`下拉刷新断言失败:\n  ${problems.join('\n  ')}`);
+  },
+
   /** 在渲染进程求值（支持 async IIFE，会自动 await） */
   async eval(cdp) {
     if (!scenarioArg) throw new Error('用法: driver.mjs eval "<js 表达式>"');
