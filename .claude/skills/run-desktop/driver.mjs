@@ -709,6 +709,29 @@ const SCENARIOS = {
     expect('「排行」成为当前项', (reopened.active || '').includes('排行'), true);
     expect('档位二级项仍展开', reopened.rankingRow?.subs > 0, true);
 
+    // 「我」行同样得有独立箭头、点开得有东西：booru 来源下它只剩「喜欢」一项，
+    // 判据曾写成 >1（两处），于是整行没有箭头、展开也渲染不出内容 —— 换站后同一行行为不一致
+    const meRow = await evaluate(cdp, `(() => {
+      const panel = document.querySelector('.drawer-panel');
+      const div = [...panel.querySelectorAll('.side-nav-group > div')]
+        .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === '我');
+      const chev = div?.querySelector('.side-nav-chevron-btn');
+      if (!chev) return 'NO_CHEVRON';
+      // 只点箭头：它任何时候都只管展开，不会切页（点行第一下展开、第二下才进页面）
+      if (chev.getAttribute('aria-expanded') === 'false') chev.click();
+      return 'OK';
+    })()`);
+    expect('「我」行带独立展开箭头', meRow, 'OK');
+    await sleep(300);
+    const meSubs = await evaluate(cdp, `(() => {
+      const panel = document.querySelector('.drawer-panel');
+      const div = [...panel.querySelectorAll('.side-nav-group > div')]
+        .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === '我');
+      return div.querySelectorAll('.side-nav-subs .side-nav-item').length;
+    })()`);
+    say(`  「我」行展开后二级项数: ${meSubs}`);
+    expect('「我」行展开后有二级项', meSubs > 0, true);
+
     // 退场动画：点关闭后面板要在 DOM 里多停一拍（带 --closing），不是硬切
     say(`  点遮罩关抽屉 -> ${await evaluate(cdp, `(() => { const o = document.querySelector('.drawer-overlay'); if (!o) return 'NO_DRAWER'; o.click(); return 'OK'; })()`)}`);
     await sleep(120);

@@ -4,7 +4,7 @@ import FollowingAuthorsPanel from '../components/panels/FollowingAuthorsPanel.js
 import LikedPanel from '../components/panels/LikedPanel.jsx';
 import BookmarksPanel from '../components/panels/BookmarksPanel.jsx';
 import { useImageSourceId } from '../hooks/useImageSource.js';
-import { getMeSubTabs } from '../utils/meTabs.js';
+import { getMeSubTabs, clampMeSubTab } from '../utils/meTabs.js';
 import { useAppStore } from '../store/useAppStore.js';
 import '../styles/me.css';
 
@@ -23,10 +23,8 @@ export default function MePage({ onOpen, onOpenSettings, onAuthorWorks, register
   const sourceId = useImageSourceId();
   const tabs = getMeSubTabs(sourceId);
   const rawSubTab = useAppStore(s => s.meSubTab);
-  // 切来源会按 key 重挂载本页，但 meSubTab 留在 store 里：booru 来源没有账号态，
-  // 若上次停在「关注」会渲染出拉不到数据的面板 —— 这里按当前来源的可用项兜底。
-  // 不把兜底值写回 store，切回 pixiv 时仍能恢复到原来的子页。
-  const subTab = tabs.some(t => t.key === rawSubTab) ? rawSubTab : tabs[0].key;
+  // 切来源会按 key 重挂载本页，但 meSubTab 留在 store 里，这里按当前来源可用项兜底（见 clampMeSubTab）
+  const subTab = clampMeSubTab(tabs, rawSubTab);
   const [visitedSubs, setVisitedSubs] = useState(() => new Set([subTab]));
   // 子页签切换动画：旧面板淡出后再隐藏
   const [subAnim, setSubAnim] = useState(null);

@@ -21,3 +21,13 @@ export function getMeSubTabs(sourceId) {
     ? ME_SUB_TABS.filter(t => t.key === 'liked')
     : ME_SUB_TABS;
 }
+
+/**
+ * 把 store 里的子页签收敛到该来源可用的项（booru 只剩「喜欢」）。
+ * 切来源后 store 里可能留着别处的 key —— 停在「关注」会渲染出拉不到数据的面板，
+ * 侧边栏的高亮也会落在不存在的项上。侧边栏与 MePage 共用这一份，避免两处各判一次。
+ * 不把兜底值写回 store：切回 pixiv 时仍能恢复原来的子页。
+ */
+export function clampMeSubTab(tabs, raw) {
+  return tabs.some(t => t.key === raw) ? raw : tabs[0]?.key;
+}

@@ -17,7 +17,7 @@ import { useDownloadJobs } from '../hooks/useDownloadJobs.js';
 import { useSourcesExpanded, setSourcesExpanded } from '../hooks/useSourcesExpanded.js';
 import { useSectionExpanded, setSectionExpanded } from '../hooks/useSectionExpanded.js';
 import { useAppStore } from '../store/useAppStore.js';
-import { getMeSubTabs } from '../utils/meTabs.js';
+import { getMeSubTabs, clampMeSubTab } from '../utils/meTabs.js';
 import { getRankingModes, clampRankingCategory, canToggleR18 } from '../utils/rankingModes.js';
 import { SOURCE_LIST, getSource } from '../sources/registry.js';
 
@@ -105,7 +105,10 @@ export default function SideNav({
   const sectionExpanded = useSectionExpanded();
   const currentSource = getSource(sourceId);
   const meSubTabs = getMeSubTabs(sourceId);
-  const meSubTab = useAppStore(s => s.meSubTab);
+  const rawMeSubTab = useAppStore(s => s.meSubTab);
+  // 与排行档位同样收敛到当前来源可用的项：store 里可能留着别站的 key（如 pixiv 的「关注」），
+  // 不收敛的话 booru 下唯一那行「喜欢」不会被高亮，而页面显示的正是它
+  const meSubTab = clampMeSubTab(meSubTabs, rawMeSubTab);
   const setMeSubTab = useAppStore(s => s.setMeSubTab);
   const settingsOpen = useAppStore(s => s.settingsOpen);
   const searchComposerOpen = useAppStore(s => s.searchComposerOpen);
@@ -131,9 +134,11 @@ export default function SideNav({
     fn();
   };
 
-  // 哪些章节有二级项可展开（决定要不要给这一行加箭头）
+  // 哪些章节有二级项可展开（决定要不要给这一行加箭头）。
+  // 「我」在 booru 来源下只剩「喜欢」一项，照样给箭头：有箭头与否只看「点开有没有东西」，
+  // 让「点行先展开」这套手势在所有来源下一致（否则换个站，同一行的行为就变了）
   const hasSubs = (key) =>
-    (key === 'me' && meSubTabs.length > 1) || (key === 'ranking' && rankingModes.length > 0);
+    (key === 'me' && meSubTabs.length > 0) || (key === 'ranking' && rankingModes.length > 0);
 
   // 二级项显隐 = 用户手动点过箭头就听他的，没点过沿用旧规则（只在当前章节展开）。
   // 旧规则的意义见上面注释：常驻铺开的话「我」4 项 + 「排行」8 项会把侧边栏撑满。
@@ -141,7 +146,7 @@ export default function SideNav({
 
   // 二级项的内容渲染（显隐由上面的 subsVisible 决定）
   const renderSubs = (key) => {
-    if (key === 'me' && meSubTabs.length > 1) {
+    if (key === 'me' && meSubTabs.length > 0) {
       return meSubTabs.map(s => (
         <NavButton
           key={s.key}
