@@ -18,7 +18,10 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages, className = 'glass-
 
   return (
     <button
-      className={className}
+      // 「已喜欢」的外观钩子用 is-liked class，不用 aria-pressed 属性选择器 ——
+      // 动态改 aria-* 不触发样式失效，「喜欢」后按钮不变红（见 CLAUDE.md 的 CSS 规范）。
+      // aria-pressed 照旧输出给读屏器
+      className={`${className}${liked ? ' is-liked' : ''}`}
       onClick={handleLike}
       onPointerDown={startLongPress}
       onPointerUp={cancelLongPress}

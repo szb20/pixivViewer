@@ -390,32 +390,75 @@
   font-weight: 500;
 }
 
-/* 带状态值的二级项（R18 开关）：标签靠左、状态胶囊靠右 */
-.side-nav-item--switch {
-  justify-content: space-between;
-  gap: var(--sp-2);
+/* 「排行」行右侧的 R18 开关 —— R18 是当前档位的修饰（公开/R18），不是又一个档位，
+   所以不跟档位列表并排，挂在章节行上。行 + 开关 + 展开箭头是三个独立热区。 */
+
+/* 行要给右侧两件东西让位：箭头 28 + 开关（标签 ~20 + 间隙 + 轨道 30）+ 彼此的间隔 */
+.side-nav-row--r18 .side-nav-item {
+  padding-right: 96px;
 }
 
-/* 当前档位没有 R18 变体（R18G / 月榜 / 新人 / 原创）时整行置灰 */
-.side-nav-item--switch:disabled {
+.side-nav-r18 {
+  position: absolute;
+  /* 让开展开箭头热区（right 4 + 宽 28），再留 2px 空隙：
+     开关自身的左右 padding 也有 2px，实看是 4px */
+  right: 34px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  /* 上下 padding 只放大触摸热区，不改变开关的外观尺寸 */
+  padding: var(--sp-1) 2px;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: color var(--t-fast) ease;
+}
+
+/* 开态用 class 不用 [aria-checked="true"]：本机 Chromium 改 aria-* 不触发样式失效，
+   属性选择器会停在旧值上（见 SideNav 里 R18Switch 的注释） */
+.side-nav-r18--on {
+  color: var(--color-r18);
+}
+
+/* 当前档位没有 R18 变体（R18G / 月榜 / 新人 / 原创）时置灰 */
+.side-nav-r18:disabled {
   opacity: 0.4;
   cursor: default;
 }
 
-.side-nav-state {
+.side-nav-r18-track {
+  position: relative;
   flex-shrink: 0;
-  padding: 1px var(--sp-2);
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 400;
-  transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+  width: 30px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  transition: background var(--t-fast) ease;
 }
 
-.side-nav-state.on {
-  border-color: rgba(var(--color-r18-rgb), 0.55);
-  background: rgba(var(--color-r18-rgb), 0.16);
-  color: var(--color-r18);
+.side-nav-r18-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--r-circle);
+  background: var(--text-tertiary);
+  transition: transform var(--t-fast) ease, background var(--t-fast) ease;
+}
+
+.side-nav-r18--on .side-nav-r18-track {
+  background: rgba(var(--color-r18-rgb), 0.3);
+}
+
+/* 滑钮行程 = 轨道宽 30 - 两侧各 2 - 钮径 14 */
+.side-nav-r18--on .side-nav-r18-knob {
+  transform: translateX(12px);
+  background: var(--color-r18);
 }

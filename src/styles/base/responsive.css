@@ -124,6 +124,15 @@
     color: var(--text-primary);
   }
 
+  .side-nav-r18:not(:disabled):hover {
+    color: var(--text-primary);
+  }
+
+  /* 开着时悬停保持 R18 紫 —— 状态色不该被悬停盖掉 */
+  .side-nav-r18--on:not(:disabled):hover {
+    color: var(--color-r18);
+  }
+
   .glass-icon-btn:hover {
     background: rgba(255, 255, 255, 0.2);
     border-color: rgba(255, 255, 255, 0.32);

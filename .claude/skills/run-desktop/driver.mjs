@@ -623,6 +623,16 @@ const SCENARIOS = {
       await evaluate(cdp, `document.querySelector('.drawer-trigger')?.click()`);
       await sleep(600);
     };
+    // 关抽屉是「先播 260ms 退场动画、再卸载」。窗口失焦时 Chromium 会节流后台定时器，
+    // 定时器可能晚到几百毫秒 —— 所以轮询等它真的收掉，别用一个死板的 sleep 断言（会偶发假失败）
+    const waitDrawerGone = async () => {
+      for (let i = 0; i < 25; i++) {
+        if (!(await evaluate(cdp, `!!document.querySelector('.drawer-panel')`))) return true;
+        await sleep(200);
+      }
+      say('  ⚠ 抽屉 5s 内没卸载');
+      return false;
+    };
 
     // 899/900 卡断点；1100x500 是"宽而矮"，用来确认横屏紧凑规则没有误命中桌面
     const cases = [[420, 820], [899, 820], [900, 820], [1100, 820], [1100, 500], [1600, 900]];
@@ -732,14 +742,71 @@ const SCENARIOS = {
     say(`  「我」行展开后二级项数: ${meSubs}`);
     expect('「我」行展开后有二级项', meSubs > 0, true);
 
+    // 二级项 = 具体条目：点它必须「关抽屉 + 切到它所属的页面」。
+    // 曾经的实现只写 store 不切页 —— 抽屉关了、页面原地不动，这一下点击在界面上等于没发生。
+    // 先切回「推荐」，这样下面点档位是真的在跨页导航（本来就在排行页的话只换内容，测不到导航）
+    say(`  先切到「推荐」 -> ${await clickInDrawer(cdp, '推荐')}`);
+    await waitDrawerGone();
+    await openDrawer();
+    const firstMode = await evaluate(cdp, `(() => {
+      const panel = document.querySelector('.drawer-panel');
+      // 必须定位到「排行」那一行的二级项：抽屉里「来源」组也有 .side-nav-subs（展开时）
+      const div = [...panel.querySelectorAll('.side-nav-group > div')]
+        .find(d => d.querySelector('.side-nav-label')?.textContent.trim() === '排行');
+      const b = div?.querySelector('.side-nav-subs .side-nav-item');
+      return b ? b.textContent.trim() : 'NONE';
+    })()`);
+    say(`  点档位二级项「${firstMode}」 -> ${await clickInDrawer(cdp, firstMode)}`);
+    await waitDrawerGone();
+    expect('点二级项后抽屉自动关', !(await evaluate(cdp, `!!document.querySelector('.drawer-panel')`)), true);
+    // 抽屉关了就读常驻侧栏的激活项（窄屏下它 display:none 但仍在 DOM，且与抽屉同一份 store）
+    const railActive = await evaluate(cdp, `[...document.querySelectorAll('.side-nav:not(.side-nav--drawer) .side-nav-item.active')].map(b => b.textContent.trim()).join('/')`);
+    say(`  点二级项后常驻侧栏激活项: ${JSON.stringify(railActive)}`);
+    expect('点二级项后切到该章节', (railActive || '').includes('排行'), true);
+
+    // R18 开关挂在「排行」行右侧（不是又一个档位，见 SideNav 的头注释）。
+    // booru 来源没有 R18 变体，开关整个不渲染 —— 按当前来源分支断言
+    const srcName = await evaluate(cdp, `document.querySelector('.side-nav-group--source .side-nav-toggle')?.getAttribute('aria-label') || ''`);
+    await openDrawer();
+    const r18 = await evaluate(cdp, `(() => {
+      const btn = document.querySelector('.drawer-panel .side-nav-r18');
+      if (!btn) return null;
+      return JSON.stringify({
+        role: btn.getAttribute('role'),
+        checked: btn.getAttribute('aria-checked'),
+        disabled: btn.disabled,
+        row: btn.closest('.side-nav-row')?.querySelector('.side-nav-label')?.textContent.trim(),
+      });
+    })()`);
+    say(`  R18 开关（来源 ${JSON.stringify(srcName)}）: ${r18}`);
+    if (srcName.includes('Pixiv')) {
+      const parsed = JSON.parse(r18 || 'null');
+      expect('R18 是「排行」行上的开关', `${parsed?.role}/${parsed?.row}`, 'switch/排行');
+      // 刚点过第一个档位（日榜），它支持 R18 变体 → 开关可用；拨一下只翻自己的状态，不关抽屉
+      expect('日榜下 R18 开关可用', parsed?.disabled, false);
+      await evaluate(cdp, `document.querySelector('.drawer-panel .side-nav-r18')?.click()`);
+      await sleep(400);
+      const flipped = await evaluate(cdp, `(() => {
+        const btn = document.querySelector('.drawer-panel .side-nav-r18');
+        return JSON.stringify({ checked: btn?.getAttribute('aria-checked'), open: !!document.querySelector('.drawer-panel') });
+      })()`);
+      say(`  拨 R18 后: ${flipped}`);
+      const f = JSON.parse(flipped || '{}');
+      expect('拨 R18 翻转状态', f.checked !== parsed?.checked, true);
+      expect('拨 R18 不关抽屉', f.open, true);
+      await evaluate(cdp, `document.querySelector('.drawer-panel .side-nav-r18')?.click()`); // 拨回，别把状态留给下一轮
+      await sleep(300);
+    } else {
+      expect('booru 来源不渲染 R18 开关', r18, null);
+    }
+
     // 退场动画：点关闭后面板要在 DOM 里多停一拍（带 --closing），不是硬切
     say(`  点遮罩关抽屉 -> ${await evaluate(cdp, `(() => { const o = document.querySelector('.drawer-overlay'); if (!o) return 'NO_DRAWER'; o.click(); return 'OK'; })()`)}`);
     await sleep(120);
     const closingState = await evaluate(cdp, `(() => { const p = document.querySelector('.drawer-panel'); return p ? (p.classList.contains('drawer-panel--closing') ? 'closing' : 'STILL_OPEN_NO_CLOSING') : 'GONE'; })()`);
     say(`  +120ms 面板: ${closingState}`);
     expect('退场动画播放中（面板仍在且带 --closing）', closingState, 'closing');
-    await sleep(600);
-    expect('退场动画后抽屉卸载', !!(await evaluate(cdp, `!!document.querySelector('.drawer-panel')`)), false);
+    expect('退场动画后抽屉卸载', await waitDrawerGone(), true);
 
     // 这里不截图：抽屉背板是整屏 backdrop-filter，叠在图片网格上时 CDP 截图会卡到 45s 超时
     // （smoke 里同样的超时也偶发，属于本机截图通道的老毛病）。断言全在 DOM 上，不依赖截图。

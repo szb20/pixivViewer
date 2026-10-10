@@ -1068,8 +1068,10 @@
     animation: ptr-spin 0.8s linear infinite;
   }
 
-  /* 已喜欢：整颗按钮跟着红心一起变调，别只剩图标是红的 */
-  .detail-action[aria-pressed='true'] {
+  /* 已喜欢：整颗按钮跟着红心一起变调，别只剩图标是红的。
+     钩子用 is-liked class 而非 [aria-pressed='true']：动态改 aria-* 不触发样式失效，
+     属性选择器会停在旧值上（见 CLAUDE.md 的 CSS 规范） */
+  .detail-action.is-liked {
     border-color: rgba(255, 71, 87, 0.42);
     background: linear-gradient(180deg, rgba(255, 71, 87, 0.2), rgba(255, 71, 87, 0.09));
     box-shadow:
@@ -1158,7 +1160,7 @@
     border-color: rgba(255, 255, 255, 0.24);
   }
 
-  .detail-action[aria-pressed='true']:not(:disabled):hover {
+  .detail-action.is-liked:not(:disabled):hover {
     border-color: rgba(255, 71, 87, 0.58);
     background: linear-gradient(180deg, rgba(255, 71, 87, 0.28), rgba(255, 71, 87, 0.15));
   }

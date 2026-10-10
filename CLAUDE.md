@@ -25,6 +25,13 @@
 
 - **不要使用 `-webkit-backdrop-filter`**：在某些安卓 WebView 上会导致 `backdrop-filter` 失效，只写标准属性 `backdrop-filter` 即可。
 
+- **动态变化的 `aria-*` 属性不要当样式钩子，开/关态走 class。**
+  本机 Electron（Blink，与安卓 WebView 同源）实测：改 `aria-checked` / `aria-pressed` **不会让元素样式失效**，
+  `[aria-checked="true"] { ... }` 里的颜色/位移会停在旧值上，直到别处的改动顺手触发一次重算才跟上
+  —— 表现为「开关拨了没反应」，而 `matches()`、`getAttribute()`、DOM 检查全都正常，极难查。
+  样式钩子一律用 class（`.active` / `.open` / `.on` / `.side-nav-r18--on`），`aria-*` 照旧输出给读屏器。
+  挂载时就定死的静态属性（`[data-variant]` / `[data-type]`）不受影响，可以继续用。
+
 - **毛玻璃通用样式**（定义在 `src/styles/base/shell.css`）：
   - `.frosted` — 深色玻璃底 `rgba(15,17,21,0.55)` + `blur(12px)`
   - `.frosted-light` — 浅色玻璃底 `rgba(255,255,255,0.12)` + `blur(8px)`

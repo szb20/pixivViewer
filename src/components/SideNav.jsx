@@ -6,10 +6,16 @@
  * 那行还要负责切页签，不能让点一下就翻倍成「切页 + 折叠」。
  * 二级项默认只在对应章节展开（把「我」4 项和「排行」8 项常驻铺开会把侧边栏撑得很长），
  * 手动点过箭头的章节以用户的选择为准，见 useSectionExpanded。
+ * 点二级项 = 选中它 + 切到它所属的页面（已在那一页则只换内容）—— 二级项是「具体条目」，
+ * 选完必须能看到结果，否则这一下点击在界面上等于没发生（抽屉里还先把抽屉关掉了）。
  * 取值与过滤和 MePage / RankingPage 共用 getMeSubTabs / getRankingModes，避免两处逻辑漂移。
  *
+ * R18 是当前档位的修饰（公开/R18 两个变体）而不是又一个档位，所以不跟档位列表并排：
+ * 开关挂在「排行」行右侧，与展开箭头一样是独立热区（不能塞进 .side-nav-item —— button 套 button 是非法 HTML）。
+ *
  * variant='drawer' 时：根节点挂 .side-nav--drawer（样式在 styles/navDrawer.css），
- * 品牌行多一个关闭按钮，除「来源」副项外的所有动作都先关抽屉再执行 —— 选完要能立刻看到结果。
+ * 品牌行多一个关闭按钮，除「来源」副项与 R18 开关（两者都不换页）外的所有动作都先关抽屉再执行
+ * —— 选完要能立刻看到结果。
  */
 import { useRef } from 'react';
 import { useImageSourceId, setImageSource } from '../hooks/useImageSource.js';
@@ -95,6 +101,36 @@ function NavButton({ icon, label, active, onClick, sub = false, ...rest }) {
   );
 }
 
+/**
+ * 「排行」行右侧的 R18 开关（独立热区，不参与整行的展开/切页点击）。
+ * 三档状态：关（公开）/ 开（R18）/ 不可用（当前档位没有 R18 变体，见 canToggleR18）。
+ *
+ * 开态靠 class（.side-nav-r18--on）而不是 [aria-checked="true"] 选择器 ——
+ * 实测本机 Chromium 下**改 aria-* 属性不会让元素样式失效**：改完属性颜色/滑钮都不动，
+ * 得等别的改动顺手触发一次重算才跟上（开关拨了没反应的那种怪 bug）。
+ * aria-checked 照旧输出，只是别拿它做样式钩子。
+ */
+function R18Switch({ on, disabled, onToggle }) {
+  return (
+    <button
+      type="button"
+      className={`side-nav-r18${on ? ' side-nav-r18--on' : ''}`}
+      role="switch"
+      aria-checked={on}
+      aria-label="R18 内容"
+      disabled={disabled}
+      title={disabled ? '当前档位没有 R18 变体' : `R18 内容：${on ? '已开启' : '已关闭'}`}
+      // 不裹 act()：开关本身不换页，顺手关掉抽屉反而看不见自己刚改了什么
+      onClick={onToggle}
+    >
+      <span aria-hidden="true">R18</span>
+      <span className="side-nav-r18-track" aria-hidden="true">
+        <span className="side-nav-r18-knob" />
+      </span>
+    </button>
+  );
+}
+
 export default function SideNav({
   tabs, active, onChange, onOpenSettings, onSearchNav,
   variant = 'rail', onClose,
@@ -128,11 +164,18 @@ export default function SideNav({
   const orderedTabs = [...tabs.filter(t => t.key !== 'me'), ...tabs.filter(t => t.key === 'me')];
 
   // 抽屉里点任何一项都先关抽屉再执行 —— 抽屉盖着的正是要看的页面。
-  // 唯一例外是「来源」副项：连换几站对比时不希望每次都要重开抽屉（见下方注释）。
+  // 例外是「来源」副项与 R18 开关：它们不换页，连换几站/拨开关时不希望每次都要重开抽屉。
   const act = (fn) => () => {
     if (isDrawer) onClose?.();
     fn();
   };
+
+  // 点二级项 = 选中它 + 切到它所属的页面。已经在那一页时不能再调 setActiveTab ——
+  // 那会被当成「点当前项 = 刷新」，白白丢掉列表和滚动位置（换档位本来就会重新加载）。
+  const pickSub = (tabKey, select) => act(() => {
+    select();
+    if (active !== tabKey) onChange(tabKey);
+  });
 
   // 哪些章节有二级项可展开（决定要不要给这一行加箭头）。
   // 「我」在 booru 来源下只剩「喜欢」一项，照样给箭头：有箭头与否只看「点开有没有东西」，
@@ -152,40 +195,21 @@ export default function SideNav({
           key={s.key}
           label={s.label}
           active={meSubTab === s.key}
-          onClick={act(() => setMeSubTab(s.key))}
+          onClick={pickSub('me', () => setMeSubTab(s.key))}
           sub
         />
       ));
     }
     if (key === 'ranking') {
-      return (
-        <>
-          {rankingModes.map(m => (
-            <NavButton
-              key={m.key}
-              label={m.label}
-              active={m.key === rankingCategory}
-              onClick={act(() => selectRankingCategory(m.key))}
-              sub
-            />
-          ))}
-          {/* booru 来源没有 R18 档，整行不出现 */}
-          {!isBooru && (
-            <button
-              className="side-nav-item side-nav-item--sub side-nav-item--switch"
-              onClick={act(toggleRankingR18)}
-              disabled={!canToggleR18(rankingCategory)}
-              aria-pressed={rankingR18}
-              aria-label={`R18 内容：${rankingR18 ? '已开启' : '已关闭'}`}
-            >
-              <span className="side-nav-label">R18 内容</span>
-              <span className={`side-nav-state${rankingR18 ? ' on' : ''}`}>
-                {rankingR18 ? 'R18' : '公开'}
-              </span>
-            </button>
-          )}
-        </>
-      );
+      return rankingModes.map(m => (
+        <NavButton
+          key={m.key}
+          label={m.label}
+          active={m.key === rankingCategory}
+          onClick={pickSub('ranking', () => selectRankingCategory(m.key))}
+          sub
+        />
+      ));
     }
     return null;
   };
@@ -193,11 +217,11 @@ export default function SideNav({
   // 方向键在导航项之间移动焦点（Home/End 跳首尾）。
   // 按钮本身 Tab 就能到，这里补的是「进入侧边栏后用方向键连续浏览」的预期行为；
   // 焦点在子项上时会跨到下一个主项，因为选择器取的是全部 .side-nav-item。
-  // 展开箭头（.side-nav-chevron-btn）也算一站：它是独立热区，键盘不该只能 Tab 到它。
+  // 展开箭头（.side-nav-chevron-btn）与 R18 开关也算一站：它们是独立热区，键盘不该只能 Tab 到它们。
   const navRef = useRef(null);
   const onKeyDown = (e) => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-    const items = [...(navRef.current?.querySelectorAll('.side-nav-item:not(:disabled), .side-nav-chevron-btn') || [])];
+    const items = [...(navRef.current?.querySelectorAll('.side-nav-item:not(:disabled), .side-nav-chevron-btn, .side-nav-r18:not(:disabled)') || [])];
     const i = items.indexOf(document.activeElement);
     if (i < 0) return;
     e.preventDefault();
@@ -283,11 +307,14 @@ export default function SideNav({
           const expandable = hasSubs(t.key);
           const open = expandable && subsVisible(t.key);
           const subs = open ? renderSubs(t.key) : null;
+          // booru 来源没有 R18 变体，开关整个不出现
+          const showR18 = t.key === 'ranking' && !isBooru;
           return (
             <div key={t.key}>
-              {/* 行 + 箭头两个独立热区：点文字切页签（现有语义不变），点箭头只管展开/收起。
-                  箭头不能塞进 .side-nav-item 里 —— button 套 button 是非法 HTML */}
-              <div className="side-nav-row">
+              {/* 行 + R18 开关 + 箭头三个独立热区：点文字切页签（现有语义不变），
+                  点箭头只管展开/收起，点开关只拨 R18。
+                  后两者不能塞进 .side-nav-item 里 —— button 套 button 是非法 HTML */}
+              <div className={`side-nav-row${showR18 ? ' side-nav-row--r18' : ''}`}>
                 <NavButton
                   icon={<svg {...svgProps}>{ICONS[t.key]}</svg>}
                   label={t.label}
@@ -301,6 +328,13 @@ export default function SideNav({
                     ? () => setSectionExpanded(t.key, true)
                     : act(() => (t.key === 'search' && onSearchNav ? onSearchNav() : onChange(t.key)))}
                 />
+                {showR18 && (
+                  <R18Switch
+                    on={rankingR18}
+                    disabled={!canToggleR18(rankingCategory)}
+                    onToggle={toggleRankingR18}
+                  />
+                )}
                 {expandable && (
                   <button
                     className={`side-nav-chevron-btn${open ? ' open' : ''}`}
