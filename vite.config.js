@@ -27,7 +27,8 @@ export default defineConfig({
   ],
   server: {
     port: 5182,
-    host: '0.0.0.0',
+    // 只监听本机：dev 代理要转 Cookie，不能暴露给局域网
+    host: '127.0.0.1',
     strictPort: true,
   },
 });

@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { pixivApi } from '../api/pixiv.js';
+import { pixivApi, isCookieErrorCode } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet, usePixivCache } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
@@ -12,7 +12,6 @@ import { scopedTabKey } from '../pixiv-assistant/index.js';
 
 const PAGE_SIZE = 20;
 const CACHE_KEY = 'discover';
-const NEED_COOKIE_RE = /cookie|no_cookie|需要.*Cookie/i;
 const log = createLogger('Discover');
 
 /**
@@ -79,6 +78,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
       let rawTotal = 0;
       let emptyStreak = 0;
       let lastError = '';
+      let lastErrorCode = '';
       while (rawTotal < PAGE_SIZE * 3 && emptyStreak < 3) {
         const r = await pixivApi.fetchDiscovery({ limit: PAGE_SIZE, start: startRef.current });
         // 响应已被刷新/新请求取代 → 立刻停手：这次 await 之后不能再推进 startRef，
@@ -86,6 +86,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         if (isStale?.()) return null;
         const rawList = r?.illusts || [];
         lastError = r?.message || r?.error || '';
+        lastErrorCode = r?.error || '';
         if (!rawList.length) break;
         rawTotal += rawList.length;
         startRef.current += rawList.length;
@@ -108,6 +109,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         // 上游仍有返回就继续；连续多页无新内容才断流（整页被过滤不算断流）
         hasMore: rawTotal > 0 && emptyStreak < 3,
         error: failed ? (lastError || '推荐为空（需要 Cookie）') : '',
+        errorCode: failed ? lastErrorCode : '',
         emptyMessage: lastError || '推荐为空（需要 Cookie）',
         cacheExtra: { start: startRef.current },
       };
@@ -116,7 +118,7 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
 
   // 注意：已喜欢/已保存的作品保留在当前网格，仅在 fetchPage 中对后续新页过滤
 
-  const needCookie = !isBooru && !!feed.error && NEED_COOKIE_RE.test(feed.error);
+  const needCookie = !isBooru && isCookieErrorCode(feed.errorCode);
 
   return (
     <div className="page">
@@ -130,6 +132,8 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         ))}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
+      {/* pixiv 来源首拉需等 cacheReady（含相册权限申请），给个占位反馈避免整页空白 */}
+      {feed.loading && <div className="hint">加载中...</div>}
       {feed.loadingMore && <div className="hint">加载中...</div>}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">

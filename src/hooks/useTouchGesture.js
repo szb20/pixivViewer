@@ -27,7 +27,6 @@ export function useTouchGesture({
   const [index, setIndex] = useState(initialIndex);
   const indexRef = useRef(index);
   indexRef.current = index;
-  const [hideUI, setHideUI] = useState(false);
   const [closing, setClosing] = useState(false);
 
   const cur = images[index];
@@ -45,7 +44,6 @@ export function useTouchGesture({
   const touchRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
   const touchTimeRef = useRef(0);
   const lastTapRef = useRef(0);
-  const lastTapTimeRef = useRef(0); // 触摸已处理时间戳，防止合成 click 重复触发
   const doubleTapTimeRef = useRef(0); // 触摸双击已处理时间戳，防止合成 dblclick 重复触发
   const ignoreNativeDoubleClickUntilRef = useRef(0);
   const springRef = useRef(null);
@@ -733,14 +731,6 @@ export function useTouchGesture({
       }
     }
 
-    // ── 单击：切换 UI 显隐 ──
-    if (tapDur < 200 && moved < 10 && now - prevLastTap > 350) {
-      if (!e.target.closest('button, a')) {
-        lastTapTimeRef.current = now;
-        setHideUI(h => !h);
-      }
-    }
-
     pinchRef.current.fingers = 0;
   }, [zoomDisabled, disableSwipe, handleDoubleTap, nav, springBack, hardClamp, startInertia, animateNavSwipe, index]);
 
@@ -1013,15 +1003,6 @@ export function useTouchGesture({
     handleDoubleTap(e);
   }, [zoomDisabled, isInteractiveTarget, handleDoubleTap]);
 
-  // ── 点击遮罩 ─────────────────────────────────────────────
-  const handleOverlayClick = useCallback((e) => {
-    if (e.target === e.currentTarget) {
-      // 触摸事件已处理过（touchend 先于合成 click 触发），跳过避免二次 toggle
-      if (Date.now() - lastTapTimeRef.current < 500) return;
-      setHideUI(h => !h);
-    }
-  }, []);
-
   // ── 键盘导航 ─────────────────────────────────────────────
   useEffect(() => {
     function onKeyDown(e) {
@@ -1043,7 +1024,7 @@ export function useTouchGesture({
     overlayRef, trackRef, slideRefs,
 
     // State
-    index, closing, hideUI, setHideUI,
+    index, closing,
     swipeOff, pinchScale, pinchPan, zoomTrans,
 
     // Derived
@@ -1053,7 +1034,7 @@ export function useTouchGesture({
     handleTouchStart, handleTouchMove, handleTouchEnd,
     handleMouseDown, handleMouseMove, handleMouseUp,
     handleWheel, handleDoubleClick,
-    handleClose, handleOverlayClick, handleDoubleTap,
+    handleClose, handleDoubleTap,
     nav, navPage, findAdjacentPage, cancelSpring,
     applyTransform,
   };

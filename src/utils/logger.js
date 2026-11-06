@@ -7,8 +7,9 @@
  * - createLogger(tag) 生成带命名空间前缀的 logger，便于按模块定位。
  */
 
-const IS_DEV = import.meta.env.DEV;
-const MIN_LEVEL = IS_DEV ? 'debug' : 'warn';
+import { isDev } from './platform.js';
+
+const MIN_LEVEL = isDev() ? 'debug' : 'warn';
 
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 

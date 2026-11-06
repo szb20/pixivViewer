@@ -2,11 +2,11 @@
  * Ugoira 元数据查询（只发小请求，不下载 ZIP）。
  *
  * 自建 transport 实例（与 api/pixiv.js 的 pixivTransport 同参数），不 import pixiv.js：
- * 否则会形成 storageService → ugoira → pixiv.js → pixiv-assistant barrel →
- * storageFacade → storageService 的环。同理这里直连 capacitor/config.js，不走 barrel。
+ * 保持 ugoira 子模块与主 API 模块解耦。（历史上这里还曾直连 capacitor/config.js 以
+ * 避免 barrel 环，但 barrel 从不 import src/api/**，环不存在，现按统一约定走 barrel。）
  */
-import { createTransport } from '../transport.js';
-import { getPixivCookie } from '../../pixiv-assistant/capacitor/config.js';
+import { createTransport } from '../../utils/transport.js';
+import { getPixivCookie } from '../../pixiv-assistant/index.js';
 
 const ugoiraMetaFetch = createTransport({
   apiPrefix: '/pixiv-api',

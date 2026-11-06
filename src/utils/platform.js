@@ -11,10 +11,33 @@
 
 /**
  * 桌面壳：electron/preload.cjs 注入的 window.desktopProxy。
- * 历史注：早期设计的 window.desktop 桥从未实现，桌面能力一律走 desktopProxy。
+ * 历史注：另有 window.desktop 桥（platform + download，流式下载用），
+ * 早期还设想过 desktop.fs 文件桥但从未实现，桌面文件/目录能力一律走 desktopProxy。
  */
 export function isDesktopShell() {
-    return typeof window !== 'undefined' && !!window.desktopProxy;
+    return getDesktopProxy() !== null;
+}
+
+/** Android 原生壳（Capacitor） */
+export function isNative() {
+    return typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.();
+}
+
+/** dev 构建（import.meta.env.DEV 的唯一出口，不要在别处重复声明 IS_DEV）。
+ *  import.meta.env 是 Vite 注入的，Node 脚本（如 check:sources）经 barrel 间接触达这里时为
+ *  undefined —— 用 ?. 兜成 false（Node 下本来就不是 dev），别让整条导入链崩掉。 */
+export function isDev() {
+    return !!import.meta.env?.DEV;
+}
+
+/** Electron preload 注入的桌面桥；非桌面环境返回 null */
+export function getDesktopProxy() {
+    return (typeof window !== 'undefined' && window.desktopProxy) || null;
+}
+
+/** Capacitor 全局对象；web / 非原生环境返回 null */
+export function getCapacitor() {
+    return (typeof window !== 'undefined' && window.Capacitor) || null;
 }
 
 let _proxyPortPromise = null;
@@ -41,6 +64,5 @@ export function getDesktopProxyPort() {
  */
 export function getGallerySaver() {
     if (isDesktopShell()) return null;
-    if (typeof window !== 'undefined') return window.Capacitor?.Plugins?.GallerySaver || null;
-    return null;
+    return getCapacitor()?.Plugins?.GallerySaver || null;
 }

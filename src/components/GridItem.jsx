@@ -16,7 +16,7 @@ const LONG_PRESS_MS = 500;
  * @param {function} onOpen     (img) => void，点击打开
  * @param {function} onLongPress (img) => void，提供则启用长按（长按后不再触发 onOpen）
  * @param {function} onHide      (id) => void，提供则在右上角显示 ✕（不想看/不再推荐）
- * @param {string}   variant    'grid' | 'media' | 'gallery'
+ * @param {string}   variant    'grid' | 'masonry' | 'gallery'
  * @param {string}   thumbSrc   覆盖缩略图 src（如瀑布流的等比 540 缩略图）
  */
 export default memo(function GridItem({
@@ -137,22 +137,13 @@ export default memo(function GridItem({
     ? { aspectRatio: ratio || 1, '--item-index': index % 24 }
     : { '--item-index': index % 24 };
 
-  // gallery 变体：无缩略图 → 空占位；加载失败 → 占位重试
-  if (variant === 'gallery') {
-    if (!src) {
-      return <div className={`${v.item} grid-shimmer`}><div className={v.thumb} /></div>;
-    }
-    if (error) {
-      return (
-        <div className={`${v.item}${stateCls}`} style={itemStyle} onClick={retryThumb}>
-          <div className="grid-thumb-fallback">加载失败<br />点此重试</div>
-        </div>
-      );
-    }
+  // gallery 变体：无缩略图 → 空占位
+  if (variant === 'gallery' && !src) {
+    return <div className={`${v.item} grid-shimmer`}><div className={v.thumb} /></div>;
   }
-  // 非 gallery 变体加载失败 → 显示占位（可点击重试），不再直接消失
+  // 加载失败 → 显示占位（可点击重试），不再直接消失
   // （弱网下几张缩略图瞬时失败会让卡片凭空消失，且 key 复用后也不会回来）
-  if (error && variant !== 'gallery') {
+  if (error) {
     return (
       <div className={`${v.item}${stateCls}`} style={itemStyle} onClick={retryThumb}>
         <div className="grid-thumb-fallback">加载失败<br />点此重试</div>

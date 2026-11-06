@@ -12,12 +12,14 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "check:sources": "node scripts/check-sources.mjs",
     "desktop": "npm run build && electron .",
     "desktop:dev": "cross-env PIXIVVIEWER_DEV_URL=http://localhost:5182 electron .",
     "desktop:build": "npm run build && electron-builder --config electron/electron-builder.yml"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
+    "@capacitor/core": "^8.5.0",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/status-bar": "^8.0.3",
     "fflate": "^0.8.3",
@@ -25,13 +27,11 @@
     "https-proxy-agent": "^9.1.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router-dom": "^7.18.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
-    "@capacitor/core": "^8.5.0",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.4",
@@ -39,7 +39,6 @@
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "oxlint": "^1.75.0",
-    "typescript": "^7.0.2",
     "vite": "^8.2.0"
   }
 }

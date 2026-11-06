@@ -6,10 +6,11 @@
  */
 import { useEffect } from 'react';
 import { runBackHandlers } from '../utils/backHandler.js';
+import { isNative } from '../utils/platform.js';
 
 export function useAndroidBackButton() {
     useEffect(() => {
-        if (!window.Capacitor?.isNativePlatform?.()) return;
+        if (!isNative()) return;
         let cancelled = false;
         let listener;
         (async () => {

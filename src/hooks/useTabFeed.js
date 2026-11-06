@@ -19,9 +19,12 @@
  * @param {function} [opts.registerRefresh] App 传入的回调注册器
  * @param {number}  [opts.refreshToken]     强制刷新令牌（重点当前 tab 时 +1）
  * @param {function} opts.fetchPage         async (append, currentItems) => ({
- *                                            list, hasMore, cacheExtra, emptyMessage
+ *                                            list, hasMore, cacheExtra, emptyMessage,
+ *                                            error, errorCode
  *                                          }) | null
  *                                          - list 已过滤/去重；cacheExtra 是持久化附加字段
+ *                                          - error/errorCode：失败提示与其机器码（如 no_cookie
+ *                                            / network，供 UI 等值判断，见 isCookieErrorCode）
  *                                          - 返回 null 表示本次不加载（如搜索无关键词）
  * @param {function} [opts.hydrate]         (cache) => ({ items, hasMore }) | null
  *                                          - 负责恢复游标/查询等副作用，返回 null 表示不水合
@@ -53,6 +56,7 @@ export function useTabFeed({
   const [loading, setLoading] = useState(autoLoad);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const [errorCode, setErrorCode] = useState(''); // error 的机器码（如 no_cookie / network），供 UI 等值判断
   const [appendError, setAppendError] = useState(null); // 触底翻页失败（区别于 error：不清空已有列表）
   const [hasMore, setHasMore] = useState(true);
   const [hydrated, setHydrated] = useState(false);
@@ -81,7 +85,7 @@ export function useTabFeed({
     loadingRef.current = true;
 
     if (append) setLoadingMore(true);
-    else { setLoading(true); setError(null); setAppendError(null); }
+    else { setLoading(true); setError(null); setErrorCode(''); setAppendError(null); }
 
     // 刷新失败但手里已有内容：保留列表 + 轻提示，不把用户正在看的东西换成错误框。
     // 只对「刷新」（keepOnFail）生效 —— 换关键词/换档位失败时必须清空，
@@ -117,12 +121,18 @@ export function useTabFeed({
         saveTabCache(cacheKey, { ...r.cacheExtra, items: nextItems, hasMore: !!r.hasMore })
           .catch(() => { });
       }
-      if (!append && !nextItems.length) setError(failed ? r.error : (r.emptyMessage || ''));
+      if (!append && !nextItems.length) {
+        setError(failed ? r.error : (r.emptyMessage || ''));
+        setErrorCode(failed ? (r.errorCode || '') : '');
+      }
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       log.warn('[load] 失败:', e?.message || e);
       if (append) setAppendError(e.message || '加载失败');
-      else if (!refreshFailed(e.message || '加载失败')) setError(e.message || '加载失败');
+      else if (!refreshFailed(e.message || '加载失败')) {
+        setError(e.message || '加载失败');
+        setErrorCode(e?.code || '');
+      }
     } finally {
       if (seq === loadSeqRef.current) {
         setLoading(false);
@@ -209,5 +219,5 @@ export function useTabFeed({
   // 触底翻页失败后的重试：仍走 append（失败时游标未推进，重试即重拉同一页）
   const retryAppend = useCallback(() => load(true), [load]);
 
-  return { items, setItems, loading, loadingMore, error, appendError, retryAppend, hasMore, sentinelRef, hydrated, load };
+  return { items, setItems, loading, loadingMore, error, errorCode, appendError, retryAppend, hasMore, sentinelRef, hydrated, load };
 }

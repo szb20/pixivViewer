@@ -35,6 +35,36 @@ function getCardRatio(img) {
 
 const MIN_COL_WIDTH = 250;
 
+/* ===== 渐进挂载：只渲染前 renderCap 个条目，接近末尾经哨兵扩容 =====
+ * 触底翻页 + tab 缓存恢复会让 feed 一次挂进数百条；全量挂载 DOM（每卡片
+ * 十几个节点 + 事件监听）线性推高滚动 hit-test 与 GC 成本。列分配是
+ * 纯计算（plan 对全量 items 计算），渲染前缀 [0, cap) 与全量渲染的上半
+ * 部分完全一致 → 扩容只在底部追加，不重排、不重挂。 */
+const RENDER_BATCH = 150;
+
+function useProgressiveMount(total) {
+  const [renderCap, setRenderCap] = useState(RENDER_BATCH);
+  const capRef = useRef(renderCap);
+  capRef.current = renderCap;
+  // 列表重置（换源/清空，total 变小）回到初始窗口，避免下次恢复直接全量挂载
+  useEffect(() => {
+    if (total < capRef.current) setRenderCap(RENDER_BATCH);
+  }, [total]);
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) {
+        setRenderCap(c => (c < total ? c + RENDER_BATCH : c));
+      }
+    }, { rootMargin: '800px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [total]);
+  return { renderCap, sentinelRef };
+}
+
 /**
  * 瀑布流网格 — 唯一实现，首页 feed 与详情页相关推荐共用。
  * 按估算高度（1/宽高比）均衡分配到各列，列数由容器宽度实时推算。
@@ -82,6 +112,9 @@ export function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide,
     return { cols, colCount };
   }, [items, ratios, colCount]);
 
+  // 渐进挂载（见 useProgressiveMount 注释）。注意必须在所有条件 return 之前调用
+  const { renderCap, sentinelRef } = useProgressiveMount(items.length);
+
   if (!plan) return null;
 
   const renderItem = (i) => {
@@ -119,9 +152,10 @@ export function MasonryFeed({ items, likedIllustIds, onOpen, toggleLike, onHide,
     >
       <div className="masonry-cols">
         {plan.cols.map((col, ci) => (
-          <div className="masonry-col" key={ci}>{col.map(renderItem)}</div>
+          <div className="masonry-col" key={ci}>{col.filter(i => i < renderCap).map(renderItem)}</div>
         ))}
       </div>
+      {items.length > renderCap && <div ref={sentinelRef} style={{ height: 1 }} />}
     </div>
   );
 }
@@ -146,10 +180,17 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
     showToast('已隐藏，不再推荐', { type: 'info' });
   }, []);
 
-  // 宫格/瀑布流共用：包装成 { items, index } 供详情页左右切换（GridItem 传出的 index 是 items 下标）
+  // 宫格/瀑布流共用：包装成 { items, index } 供详情页左右切换（GridItem 传出的 index 是 items 下标）。
+  // visibleItems 走 ref 稳定回调：触底 append 会让 visibleItems 换引用，
+  // 若直接进依赖会打穿 GridItem 的 memo，已挂载的整批卡片全量重渲染。
+  const visibleItemsRef = useRef(visibleItems);
+  visibleItemsRef.current = visibleItems;
   const handleGridOpen = useCallback((img, index) => {
-    onOpen?.(img, { items: visibleItems, index });
-  }, [onOpen, visibleItems]);
+    onOpen?.(img, { items: visibleItemsRef.current, index });
+  }, [onOpen]);
+
+  // 宫格渐进挂载（见 useProgressiveMount 注释）。必须在所有条件 return 之前调用
+  const { renderCap, sentinelRef } = useProgressiveMount(visibleItems?.length || 0);
 
   if (!visibleItems?.length) return null;
 
@@ -167,7 +208,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
 
   return (
     <div className="grid">
-      {visibleItems.map((img, index) => (
+      {visibleItems.slice(0, renderCap).map((img, index) => (
         <GridItem
           key={img.illustId}
           img={img}
@@ -179,6 +220,7 @@ const ImageGrid = memo(function ImageGrid({ items, likedSet, onOpen, layout = 'a
           variant="grid"
         />
       ))}
+      {visibleItems.length > renderCap && <div ref={sentinelRef} style={{ height: 1, gridColumn: '1 / -1' }} />}
     </div>
   );
 });

@@ -26,7 +26,6 @@
 │   pixiv-assistant/capacitor/                     │
 │   ├─ storageFacade.js    (UI 门面)                │
 │   ├─ storageService.js   (业务编排)                │
-│   ├─ transitionEngine.js (状态机 + Saga 补偿)      │
 │   ├─ repository.js       (对象映射)                │
 │   ├─ cacheDB.js          (IndexedDB 操作)          │
 │   ├─ fileStore.js        (文件操作)                │
@@ -111,15 +110,17 @@ main.jsx ── <PixivCacheProvider>（2 个 context：pixivCache 读写层 / li
 api/
 ├── pixiv.js      ← 传输适配层（dev fetch / prod CapacitorHttp）
 ├── transport.js  ← 三通道传输工厂（dev / desktop / prod）
-├── ugoira/       ← 动图加载模块群（只管「看」，保存链路在存储层）
+├── ugoira/       ← 动图模块群（加载「看」+ 保存用例）
 │   ├── index.js        ← fetchUgoiraFrames 编排（缓存→磁盘→网络）
 │   ├── framesCache.js  ← 帧内存 LRU（blob URL 回收）
 │   ├── meta.js         ← ugoira 元数据查询
 │   ├── zipDownload.js  ← ZIP 流式/缓冲下载
 │   ├── unzip.js        ← fflate 解帧（流式 + 整包）
 │   ├── zipDiskCache.js ← ZIP 磁盘缓存（LRU + 无损副本备份）
-│   └── gifEncoder.js   ← gifenc 编码
-└── index.js      ← 统一保存入口（saveItem → storageFacade 透传）
+│   ├── gifEncoder.js   ← gifenc 编码（Worker 主线程回退）
+│   ├── gifWorker.js    ← GIF 编码 Worker（quantize + 写帧）
+│   └── saveGif.js      ← 动图保存用例（取帧→编码→导出相册→落库）
+└── index.js      ← 统一保存入口（saveItem：动图/静图分流 + saveInFlight 并发去重）
        │
        ▼
 pixiv-assistant/core/pixivApi.js  ← API 工厂（纯逻辑，无平台依赖）
@@ -155,11 +156,13 @@ fetchUgoiraFrames(illustId, onProgress)          ← ugoira/index.js 编排
   → fflate 解帧（unzip.js） → 每帧生成 blob URL
   → return { frames: [{ path, delay }], meta }
 
-动图保存（storageService._saveGifFromNetwork / _doSaveGif）
+动图保存（api/ugoira/saveGif.js）
   → fetchUgoiraFrames（取帧）
   → Canvas 逐帧取像素数据（gifEncoder.js）
   → gifenc 编码（共享调色板）
-  → 导出系统相册 + 元数据落库（与静图同走 storageFacade 门面去重）
+  → 导出系统相册 + 元数据落库
+  （动图/静图分流与并发去重统一在 api/index.js 的 saveItem，
+    存储层不再反向依赖 api/ugoira —— 依赖单向：api → capacitor → core）
 ```
 
 ---
@@ -225,12 +228,8 @@ interface Transport {
 ├──────────────────────────────────────────────────────────┤
 │  PixivStorageService (业务编排层)                          │
 │  职责：业务规则编排，不执行具体操作                        │
-│  save → TransitionEngine → cached→saved                   │
+│  save → Repository.changeState → cached→saved            │
 │  saveFromNetwork → NetworkStore + FileStore + Repository  │
-├──────────────────────────────────────────────────────────┤
-│  TransitionEngine (状态迁移引擎)                           │
-│  职责：Saga 补偿模式，三步策略 + 倒序回滚                  │
-│  1. copy_file → 2. update_meta → 3. cleanup               │
 ├─────────────────────┬────────────────────────────────────┤
 │  PixivRepository    │  FileStore                          │
 │  (对象映射)          │  (文件操作)                          │
@@ -268,7 +267,7 @@ PixivEntity {
 #### 状态迁移
 
 ```
-cached ←→ saved  (TransitionEngine + Saga 补偿)
+cached ←→ saved  (Repository.changeState，由 StorageService 编排)
   ↓                    ↑
   └── 下载 + 写入 ─────┘  (saveFromNetwork)
 
@@ -387,7 +386,7 @@ DetailPageBlock      → IntersectionObserver 进入视口
 | 设计 | 评价 |
 |------|------|
 | **API 工厂模式** | `createPixivApi(transport)` 完美隔离平台差异，API 逻辑只写一次 |
-| **Saga 补偿模式** | `TransitionEngine` 的状态迁移三步策略 + 倒序回滚 → 数据一致性有保障 |
+| **写失败上抛** | `putMeta` 写失败上抛（喜欢/保存据此回滚乐观更新）；批量写失败让恢复流程如实报错，杜绝「重启后喜欢消失」的假持久化 |
 | **统一数据模型** | `PixivEntity` 作为全系统唯一数据契约，各层不直接操作原始 DB 记录 |
 | **Transport 接口** | 薄接口定义清晰，dev/prod 切换只需换一个实现 |
 | **幂等设计** | save/unsave/toggleLike 全部幂等，避免重复操作 |
@@ -403,7 +402,7 @@ DetailPageBlock      → IntersectionObserver 进入视口
 | ~~**StorageFacade 混入 Toast**~~ | ✅ 已解耦：Toast 移至 `utils/storageFeedback.js`，UI 层按返回值提示；`toggleLike` 事件广播归 `LightboxActions` |
 | ~~**pixivCache 扁平状态**~~ | ✅ 已收敛：状态移入 `PixivCacheProvider`（读写层 / likedSet 两个 context），详情链路不再逐层穿透；Set 结构不变时复用引用 → 无关变化不触发网格重渲染 |
 | ~~**window.api 全局对象**~~ | ✅ 已收敛：所有消费方改为直接 import（`pixivApi` / `storageFacade` / `fetchUgoiraFrames` / `saveItem`），全局对象已删除 |
-| ~~**动图/静图保存分流**~~ | ✅ 已收敛：823 行 `api/gif.js` 拆为 `api/ugoira/` 七模块（只管「看」），保存链路并入 `storageService`（`_saveGifFromNetwork`），动图/静图在 `saveFromNetwork` 入口分流、共用门面去重；重复的 getCookie/字节工具/文件名生成已收口，JSZip 依赖移除（fflate 整包喂入覆盖） |
+| ~~**动图/静图保存分流**~~ | ✅ 已收敛：823 行 `api/gif.js` 拆为 `api/ugoira/` 模块群（加载「看」），保存用例上提为 `api/ugoira/saveGif.js`，动图/静图分流与 `saveInFlight` 并发去重统一在 `api/index.js` 的 `saveItem`；存储层回归纯存储，不再反向依赖 api 层（依赖单向：api → capacitor → core）；重复的 getCookie/字节工具/文件名生成已收口，JSZip 依赖移除（fflate 整包喂入覆盖） |
 | **FileStore cached/saved 同目录** | ⏳ 待办：`_resolveDir` 对 cached 和 saved 返回同一路径，状态分离失去物理意义（涉及存量数据迁移） |
 | **Tab 页面重复模式** | ✅ 部分解决：Discover/Bookmarks/Search 已收敛到 `useTabFeed`；Ranking 因分档/竞态守卫保留原实现 |
 | **GifPlayer/UgoiraPlayer 重复** | ✅ 已合并：共享 `FrameAnimPlayer`，两组件为薄包装 |
@@ -438,7 +437,6 @@ App.jsx
        └─ capacitor/         ← 平台依赖（IndexedDB + Filesystem）
             ├─ storageFacade.js ← 纯逻辑，不依赖 UI
             ├─ storageService.js ← 依赖 NetworkStore + FileStore + Repository
-            ├─ transitionEngine.js ← 依赖 Repository + FileStore
             ├─ repository.js   ← 依赖 cacheDB.js
             ├─ cacheDB.js      ← 依赖 IndexedDB
             ├─ fileStore.js    ← 依赖 Capacitor Filesystem
@@ -457,7 +455,7 @@ App.jsx
 2. **capacitor/** 封装了所有平台特定实现（IndexedDB、Filesystem、CapacitorHttp）
 3. **api/pixiv.js** 通过 Transport 接口桥接 core 和平台
 4. **StorageFacade** 作为 UI 门面隔离 UI 和存储层
-5. **TransitionEngine** 的 Saga 模式是亮点，保证数据一致性
+5. 写失败一律上抛（乐观更新可回滚），尽力而为的调用方自行 catch
 
 整体架构清晰，分层合理。Tab 页重复骨架、动图播放器与动图保存链路均已收敛，
 主要剩余优化空间在 **FileStore 目录物理分离**上。

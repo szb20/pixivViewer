@@ -10,7 +10,7 @@ import { getFS } from './config.js';
 import { CACHE_DIR } from '../core/constants.js';
 import { buildCacheFileName } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
-import { exportToGallery, deleteFromGallery, loadFromGallery } from './gallery.js';
+import { exportToGallery, loadFromGallery } from './gallery.js';
 
 const log = createLogger('FileStore');
 
@@ -63,7 +63,7 @@ export class FileStore {
         // 非 saved（缓存）状态：写应用私有存储（旧逻辑保留，实际当前只有 saved 走这里）
         const FS = await getFS();
         if (!FS) { log.error('[save] getFS 返回空 — Filesystem 不可用'); return false; }
-        const { dir, dirType } = this._resolveDir(targetState);
+        const { dir, dirType } = this._resolveDir();
         await ensureDirectory(FS, dir, dirType);
         await FS.plugin.writeFile({ path: `${dir}/${entity.fileName}`, data, directory: dirType });
         return true;
@@ -88,7 +88,7 @@ export class FileStore {
       // 1. 旧数据：应用私有存储
       const FS = await getFS();
       if (FS) {
-        const { dir, dirType } = this._resolveDir(entity.state);
+        const { dir, dirType } = this._resolveDir();
         const raw = await FS.plugin.readFile({
           path: `${dir}/${entity.fileName}`, directory: dirType,
         }).catch(() => null);
@@ -110,29 +110,6 @@ export class FileStore {
   }
 
   /**
-   * 删除文件。
-   * @param {PixivEntity} entity
-   * @param {'cached'|'saved'} [state] — 不传则用 entity.state
-   * @returns {Promise<boolean>}
-   */
-  async delete(entity, state) {
-    try {
-      const FS = await getFS();
-      if (!FS || !entity.fileName) return false;
-      const targetState = state || entity.state;
-      const { dir, dirType } = this._resolveDir(targetState);
-      await FS.plugin.deleteFile({ path: `${dir}/${entity.fileName}`, directory: dirType }).catch(() => { });
-      if (targetState === 'saved') {
-        await deleteFromGallery(entity.fileName);
-      }
-      return true;
-    } catch (e) {
-      log.debug('[delete] 删除失败:', e?.message || e);
-      return false;
-    }
-  }
-
-  /**
    * 获取文件 base64 数据。
    * @param {PixivEntity} entity
    * @returns {Promise<string|null>}
@@ -141,7 +118,7 @@ export class FileStore {
     try {
       const FS = await getFS();
       if (!FS || !entity.fileName) return null;
-      const { dir, dirType } = this._resolveDir(entity.state);
+      const { dir, dirType } = this._resolveDir();
       const raw = await FS.plugin.readFile({
         path: `${dir}/${entity.fileName}`, directory: dirType,
       }).catch(() => null);
@@ -150,26 +127,6 @@ export class FileStore {
     } catch (e) {
       log.debug('[readData] 读取失败:', e?.message || e);
       return null;
-    }
-  }
-
-  /**
-   * 检查文件是否存在。
-   * @param {PixivEntity} entity
-   * @returns {Promise<boolean>}
-   */
-  async exists(entity) {
-    try {
-      const FS = await getFS();
-      if (!FS || !entity.fileName) return false;
-      const { dir, dirType } = this._resolveDir(entity.state);
-      const raw = await FS.plugin.readFile({
-        path: `${dir}/${entity.fileName}`, directory: dirType,
-      }).catch(() => null);
-      return !!raw;
-    } catch (e) {
-      log.debug('[exists] 检查失败:', e?.message || e);
-      return false;
     }
   }
 

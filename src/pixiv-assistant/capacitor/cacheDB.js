@@ -122,18 +122,16 @@ function openDB() {
  * @returns {object|null}
  */
 export async function getMeta(cacheKey) {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).get(cacheKey);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => resolve(null);
-    });
-  } catch (e) {
-    log.debug('getMeta 失败:', e?.message || e);
-    return null;
-  }
+  // open / 事务失败均上抛：调用方（repository/hiddenWorks）可区分「记录不存在」
+  // 与「存储不可用」，后者静默返回 null 会把数据故障伪装成「没这条记录」。
+  // 已复核全部调用方均有 catch / .catch 兜底（回滚乐观更新或按尽力而为处理）。
+  const db = await openDB();
+  return await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(cacheKey);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
 }
 
 /**
@@ -150,8 +148,11 @@ export async function putMeta(meta) {
       req.onerror = () => reject(req.error);
     });
   } catch (e) {
-    // 写失败只记日志：调用方多为"尽力而为"的乐观更新，但必须留下痕迹（磁盘满/事务 abort）
+    // 写失败必须上抛（磁盘满/事务 abort）：喜欢/保存据此返回失败并回滚 UI 乐观更新，
+    // 静默吞掉会出现「红心亮着、重启后喜欢消失」的假持久化。
+    // 确实尽力而为的调用方（如 hiddenWorks）自己 .catch 即可。
     log.warn('putMeta 失败:', e?.message || e);
+    throw e;
   }
 }
 
@@ -163,42 +164,21 @@ export async function putMetaBatch(metas) {
   if (!metas?.length) return;
   try {
     const db = await openDB();
-    return await new Promise((resolve) => {
+    return await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readwrite');
       const store = tx.objectStore(STORE);
       for (const meta of metas) {
         store.put(meta);
       }
       tx.oncomplete = () => resolve();
-      tx.onerror = () => {
-        // 批量写失败（如恢复备份）不能静默：调用方会据此报"已恢复 N 条"
-        log.warn('putMetaBatch 事务失败:', tx.error?.message || tx.error);
-        resolve();
-      };
-      tx.onabort = () => {
-        log.warn('putMetaBatch 事务中止:', tx.error?.message || tx.error);
-        resolve();
-      };
+      // 失败必须上抛：调用方（恢复备份/相册对账）在 catch 里记日志并放弃
+      // 「已恢复 N 条」的成功结论，静默 resolve 会虚报恢复成功
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
     });
   } catch (e) {
     log.warn('putMetaBatch 失败:', e?.message || e);
-  }
-}
-
-/**
- * 删除单条缓存元数据。
- */
-export async function deleteMeta(cacheKey) {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      const req = tx.objectStore(STORE).delete(cacheKey);
-      req.onsuccess = () => resolve();
-      req.onerror = () => resolve();
-    });
-  } catch (e) {
-    log.debug('deleteMeta 失败:', e?.message || e);
+    throw e;
   }
 }
 
@@ -206,68 +186,15 @@ export async function deleteMeta(cacheKey) {
  * 获取全部元数据。
  */
 export async function getAllMeta() {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-  } catch (e) {
-    log.debug('getAllMeta 失败:', e?.message || e);
-    return [];
-  }
-}
-
-/**
- * 分页获取按 state 过滤的缓存元数据（按 cachedAt 倒序）。
- * @param {'cached'|'saved'} filterState — 目标 state 值
- * @param {number} offset
- * @param {number} limit
- * @returns {{ items: object[], total: number }}
- */
-export async function getByStatePaginated(filterState, offset = 0, limit = 50) {
-  try {
-    const db = await openDB();
+  // open 失败上抛：调用方自行决定降级（metaBackup 已 .catch(() => [])），
+  // 这里静默返回 [] 会让启动扫描/备份把「存储坏了」当成「一条记录都没有」
+  const db = await openDB();
+  return await new Promise((resolve) => {
     const tx = db.transaction(STORE, 'readonly');
-    const store = tx.objectStore(STORE);
-
-    const total = await new Promise((resolve) => {
-      try {
-        const req = store.index('state').count(IDBKeyRange.only(filterState));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(0);
-      } catch { resolve(0); }
-    });
-
-    if (total === 0) return { items: [], total: 0 };
-
-    // 优先使用复合索引 [state, cachedAt] 进行高效分页
-    const items = await new Promise((resolve) => {
-      const results = [];
-      let skipped = 0;
-      const idx = store.index('stateCachedAt');
-      const req = idx.openCursor(
-        IDBKeyRange.bound([filterState], [filterState, Number.MAX_SAFE_INTEGER]),
-        'prev'
-      );
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (!cursor) { resolve(results); return; }
-        if (skipped < offset) { skipped++; cursor.continue(); return; }
-        if (results.length >= limit) { resolve(results); return; }
-        results.push(cursor.value);
-        cursor.continue();
-      };
-      req.onerror = () => resolve(results);
-    });
-
-    return { items, total };
-  } catch (e) {
-    log.debug('getByStatePaginated 失败:', e?.message || e);
-    return { items: [], total: 0 };
-  }
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
 }
 
 /**
@@ -278,170 +205,40 @@ export async function getByStatePaginated(filterState, offset = 0, limit = 50) {
  * @returns {{ items: object[], total: number }}
  */
 export async function getLikedMetaPaginated(offset = 0, limit = 50) {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE, 'readonly');
-    const store = tx.objectStore(STORE);
+  // open 失败上抛：喜欢页据此显示「加载失败」而不是把坏存储当成「收藏为空」
+  const db = await openDB();
+  const tx = db.transaction(STORE, 'readonly');
+  const store = tx.objectStore(STORE);
 
-    // 使用 likedAt 索引计数
-    let total = 0;
-    if (store.indexNames.contains('likedAt')) {
-      total = await new Promise((resolve) => {
-        try {
-          const req = store.index('likedAt').count(IDBKeyRange.lowerBound(1));
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => resolve(0);
-        } catch { resolve(0); }
-      });
-    }
-    if (total === 0) return { items: [], total: 0 };
-
-    // 按 likedAt 倒序分页
-    const items = await new Promise((resolve) => {
-      const results = [];
-      let skipped = 0;
-      const idx = store.index('likedAt');
-      const req = idx.openCursor(IDBKeyRange.lowerBound(1), 'prev');
-      req.onsuccess = () => {
-        const cursor = req.result;
-        if (!cursor) { resolve(results); return; }
-        if (skipped < offset) { skipped++; cursor.continue(); return; }
-        if (results.length >= limit) { resolve(results); return; }
-        results.push(cursor.value);
-        cursor.continue();
-      };
-      req.onerror = () => resolve(results);
-    });
-
-    return { items, total };
-  } catch (e) {
-    log.debug('getByStatePaginated 失败:', e?.message || e);
-    return { items: [], total: 0 };
-  }
-}
-
-/**
- * 获取同一 illustId 的所有页缓存。
- * @param {string} illustId
- * @returns {object[]}
- */
-export async function getByIllustId(illustId) {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const idx = tx.objectStore(STORE).index('illustId');
-      const req = idx.getAll(IDBKeyRange.only(String(illustId)));
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-  } catch (e) {
-    log.debug('getByIllustId 失败:', e?.message || e);
-    return [];
-  }
-}
-
-/**
- * 通过标签搜索缓存。
- * @param {string} tag
- * @returns {object[]}
- */
-export async function searchByTag(tag) {
-  try {
-    const db = await openDB();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const idx = tx.objectStore(STORE).index('tags');
-      const req = idx.getAll(IDBKeyRange.only(String(tag)));
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-  } catch (e) {
-    log.debug('searchByTag 失败:', e?.message || e);
-    return [];
-  }
-}
-
-/**
- * 获取缓存统计信息。
- * @returns {{ total: number, saved: number, cached: number, totalSize: number }}
- */
-export async function getCacheStats() {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE, 'readonly');
-    const store = tx.objectStore(STORE);
-
-    const saved = await new Promise((resolve) => {
+  // 使用 likedAt 索引计数
+  let total = 0;
+  if (store.indexNames.contains('likedAt')) {
+    total = await new Promise((resolve) => {
       try {
-        const req = store.index('state').count(IDBKeyRange.only('saved'));
+        const req = store.index('likedAt').count(IDBKeyRange.lowerBound(1));
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(0);
       } catch { resolve(0); }
     });
-
-    const cached = await new Promise((resolve) => {
-      try {
-        const req = store.index('state').count(IDBKeyRange.only('cached'));
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => resolve(0);
-      } catch { resolve(0); }
-    });
-
-    const total = saved + cached;
-
-    // 总大小仍需扫描（只累加 size 字段，不返回完整记录）
-    let totalSize = 0;
-    if (total > 0) {
-      await new Promise((resolve) => {
-        const req = store.openCursor();
-        req.onsuccess = () => {
-          const cursor = req.result;
-          if (!cursor) { resolve(); return; }
-          if (!cursor.value.cacheKey?.startsWith('_meta_') && cursor.value.size) {
-            totalSize += cursor.value.size;
-          }
-          cursor.continue();
-        };
-        req.onerror = () => resolve();
-      });
-    }
-
-    return { total, saved, cached, totalSize };
-  } catch (e) {
-    log.debug('getCacheStats 失败:', e?.message || e);
-    return { total: 0, saved: 0, cached: 0, totalSize: 0 };
   }
-}
+  if (total === 0) return { items: [], total: 0 };
 
-// ═══════════════════════════════════════════════
-// 持久化备份（卸载不丢）
-// ═══════════════════════════════════════════════
+  // 按 likedAt 倒序分页
+  const items = await new Promise((resolve) => {
+    const results = [];
+    let skipped = 0;
+    const idx = store.index('likedAt');
+    const req = idx.openCursor(IDBKeyRange.lowerBound(1), 'prev');
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) { resolve(results); return; }
+      if (skipped < offset) { skipped++; cursor.continue(); return; }
+      if (results.length >= limit) { resolve(results); return; }
+      results.push(cursor.value);
+      cursor.continue();
+    };
+    req.onerror = () => resolve(results);
+  });
 
-/** 导出全部元数据为 JSON 字符串 */
-export async function exportDBToJSON() {
-  const all = await getAllMeta();
-  return JSON.stringify(all);
-}
-
-/** 从 JSON 字符串导入元数据（合并，不覆盖已有记录） */
-export async function importDBFromJSON(json) {
-  if (!json) return 0;
-  try {
-    const records = JSON.parse(json);
-    if (!Array.isArray(records) || !records.length) return 0;
-    let count = 0;
-    for (const rec of records) {
-      if (!rec.cacheKey || rec.cacheKey.startsWith('_meta_')) continue;
-      const existing = await getMeta(rec.cacheKey);
-      if (!existing) {
-        await putMeta(rec);
-        count++;
-      }
-    }
-    return count;
-  } catch (e) {
-    log.debug('importDBFromJSON 失败:', e?.message || e);
-    return 0;
-  }
+  return { items, total };
 }

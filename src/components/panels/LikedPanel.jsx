@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { storageFacade } from '../../pixiv-assistant/index.js';
+import { storageFacade, sourceOfId } from '../../pixiv-assistant/index.js';
 import { pixivApi } from '../../api/pixiv.js';
-import { sourceOfId } from '../../pixiv-assistant/core/utils.js';
 import { booruApiFor } from '../../sources/api.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { createLogger } from '../../utils/logger.js';
@@ -57,7 +56,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
           const r = await api.fetchIllust(it.illustId);
           if (cancelled || !r?.illust) { migrateFailed.add(it.illustId); continue; }
           const p0 = r.illust.images?.[0] || {};
-          const res = await storageFacade.backfillMeta(it.illustId, it.pageIndex ?? 0, {
+          const res = await storageFacade.fillMeta(it.illustId, it.pageIndex ?? 0, {
             thumbnailUrl: p0.thumbnailUrl || p0.previewUrl || p0.url || '',
             title: r.illust.title || '',
             authorName: r.illust.authorName || r.illust.author || '',

@@ -20,10 +20,11 @@ import { useIsDesktop } from './hooks/useIsDesktop.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useImageSourceId } from './hooks/useImageSource.js';
 import { restoreMainScrollOnColdStart } from './utils/scroll.js';
+import { isDev } from './utils/platform.js';
 import './index.css';
 import './styles/detail.css';
 
-if (import.meta.env.DEV) {
+if (isDev()) {
   window.__pixivViewer = window.__pixivViewer || {
     storageFacade,
     openDetail: useAppStore.getState().openDetail,
@@ -56,29 +57,30 @@ export default function App() {
   // 全局来源：切换来源时 tab-pane 的 key 变化 → 整块重挂载，
   // 列表 / 翻页游标 / 滚动位置 / 内存缓存全部天然重置（否则会残留另一站的列表）。
   const sourceId = useImageSourceId();
-  const {
-    activeTab,
-    visitedTabs,
-    tabTokens,
-    detailImage,
-    detailContext,
-    authorWorks,
-    searchSeed,
-    settingsOpen,
-    setActiveTab,
-    registerRefresh,
-    triggerPullRefresh,
-    openDetail,
-    closeDetail,
-    openAuthorWorks,
-    closeAuthorWorks,
-    openAuthorImage,
-    searchByTag,
-    openSettings,
-    closeSettings,
-    openSearchComposer,
-    closeSearchComposer,
-  } = useAppStore();
+  // 逐字段订阅：无 selector 的 useAppStore() 会让 App 订阅整个 store，
+  // scrollPositions（每次滚动保存）/ meSubTab / downloadOpen 等高频变化
+  // 都会重渲染 App 整棵 tab 树。action 函数引用恒定，订阅它们零成本。
+  const activeTab = useAppStore(s => s.activeTab);
+  const visitedTabs = useAppStore(s => s.visitedTabs);
+  const tabTokens = useAppStore(s => s.tabTokens);
+  const detailImage = useAppStore(s => s.detailImage);
+  const detailContext = useAppStore(s => s.detailContext);
+  const authorWorks = useAppStore(s => s.authorWorks);
+  const searchSeed = useAppStore(s => s.searchSeed);
+  const settingsOpen = useAppStore(s => s.settingsOpen);
+  const setActiveTab = useAppStore(s => s.setActiveTab);
+  const registerRefresh = useAppStore(s => s.registerRefresh);
+  const triggerPullRefresh = useAppStore(s => s.triggerPullRefresh);
+  const openDetail = useAppStore(s => s.openDetail);
+  const closeDetail = useAppStore(s => s.closeDetail);
+  const openAuthorWorks = useAppStore(s => s.openAuthorWorks);
+  const closeAuthorWorks = useAppStore(s => s.closeAuthorWorks);
+  const openAuthorImage = useAppStore(s => s.openAuthorImage);
+  const searchByTag = useAppStore(s => s.searchByTag);
+  const openSettings = useAppStore(s => s.openSettings);
+  const closeSettings = useAppStore(s => s.closeSettings);
+  const openSearchComposer = useAppStore(s => s.openSearchComposer);
+  const closeSearchComposer = useAppStore(s => s.closeSearchComposer);
 
   // 各 tab 的 props：共用项走 base，差异项在这里补。
   // 集中一处，省掉「每加一个 tab 就复制一段保活 JSX + 对齐 props」。

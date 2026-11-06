@@ -96,6 +96,17 @@ export function checkProxyAvailability() {
 }
 
 /**
+ * 请求头透传白名单：进来的头名 → 转发上游的头名。
+ * 关注/取消关注是 POST 表单，缺 Content-Type 与 x-csrf-token 会被 Pixiv 直接拒绝
+ * （dev / 桌面端点赞关注失败的原因），所以这两项必须透传。
+ */
+const PASSTHROUGH_HEADERS = {
+  'content-type': 'Content-Type',
+  'x-csrf-token': 'x-csrf-token',
+  'x-pixiv-cookie': 'Cookie',
+};
+
+/**
  * 创建 API 代理中间件（转发到目标 host，走 Clash）。
  * @param {string} targetHost — 如 'https://www.pixiv.net'
  * @param {Object} [opts]
@@ -132,17 +143,16 @@ export function createApiProxy(targetHost, opts = {}) {
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
           'Referer': targetHost,
           ...extraHeaders,
-          // 透传业务头：关注/取消关注是 POST 表单，缺 Content-Type 与 x-csrf-token
-          // 会被 Pixiv 直接拒绝（dev / 桌面端点赞关注失败的原因）
-          ...(req.headers['content-type'] ? { 'Content-Type': req.headers['content-type'] } : {}),
-          ...(req.headers['x-csrf-token'] ? { 'x-csrf-token': req.headers['x-csrf-token'] } : {}),
-          // 透传自定义头
-          ...(req.headers['x-pixiv-cookie'] ? { Cookie: req.headers['x-pixiv-cookie'] } : {}),
         },
         agent,
         timeout: 15000,
       };
-      delete proxyOpts.headers['host'];
+      // 请求头透传白名单：只有表内业务头会转发上游，其余（Host/Cookie/任意自定义头）
+      // 一律丢弃，防止伪造。x-pixiv-cookie 是 dev/桌面壳的 Cookie 携带约定
+      // （浏览器禁设 Cookie，见 src/utils/transport.js 的 cookieAs），代理负责还原成真正的 Cookie。
+      for (const [from, to] of Object.entries(PASSTHROUGH_HEADERS)) {
+        if (req.headers[from]) proxyOpts.headers[to] = req.headers[from];
+      }
 
       const proxyReq = https.request(proxyOpts, (proxyRes) => {
         // 响应已开始后出错（半截流）无法重试：直接掐断客户端连接

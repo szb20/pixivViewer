@@ -10,11 +10,11 @@
  */
 import { CapacitorHttp } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
+import { isDev } from '../../utils/platform.js';
 import { isNativeDownloadAvailable, nativeDownload } from '../../utils/nativeDownload.js';
 import { isDesktopDownloadAvailable, desktopDownload } from '../../utils/desktopDownload.js';
 
 const log = createLogger('NetworkStore');
-const IS_DEV = import.meta.env.DEV;
 
 /**
  * 按目标域名给 Referer。
@@ -53,7 +53,7 @@ export class NetworkStore {
       }
     }
     // 生产环境：优先原生流式下载（真实字节进度、不受 CORS 限制），失败降级 CapacitorHttp
-    if (!IS_DEV) {
+    if (!isDev()) {
       if (isNativeDownloadAvailable()) {
         try {
           const data = await nativeDownload(abs, onProgress);

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { getCompositeKey } from '../pixiv-assistant/core/utils.js';
-import { storageFacade } from '../pixiv-assistant/index.js';
-import { usePixivCache } from '../context/pixivCacheContext.js';
+import { getCompositeKey, sourceOfId, storageFacade } from '../pixiv-assistant/index.js';
+import { usePixivCache, usePixivCacheSetter } from '../context/pixivCacheContext.js';
 import { showToast } from '../utils/toast.js';
 import { buildLikeMeta } from '../utils/likeMeta.js';
+import { syncBookmark } from '../api/bookmarkSync.js';
 
 /**
  * useLikeAction — 统一的"喜欢"逻辑：
@@ -18,9 +18,13 @@ import { buildLikeMeta } from '../utils/likeMeta.js';
  * @param {number|string} [opts.totalPages] 总页数（缺省从条目推导）
  */
 export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
-  const { pixivCache, setPixivCache } = usePixivCache();
+  const { pixivCache } = usePixivCache();
+  const { setPixivCache } = usePixivCacheSetter();
+  // 红心显示 = 本地喜欢 || 远端已收藏（详情接口带 bookmarkData，与红心同步联动）。
+  // _bookmarked 是收藏夹面板注入的「远端已收藏但本地未点」标记，需一并认账，
+  // 否则详情页红心语义与网格（全亮）相反
   const liked = cur?.illustId
-    ? (pixivCache[getCompositeKey(cur)]?.liked || cur._liked || false)
+    ? (pixivCache[getCompositeKey(cur)]?.liked || cur._liked || cur.bookmarked || cur._bookmarked || false)
     : false;
   const multiPage = (Number(totalPages) || Number(cur?._totalPages) || Number(cur?.pageCount) || 1) > 1;
   const longPressTimerRef = useRef(null);
@@ -40,7 +44,7 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     e?.stopPropagation?.();
     if (!cur?.illustId) return;
     const ck = getCompositeKey(cur);
-    const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
+    const prevLiked = pixivCache[ck]?.liked || cur._liked || cur.bookmarked || cur._bookmarked || false;
     const targetLiked = !prevLiked;
     setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: targetLiked, likedAt: Date.now() } }));
 
@@ -64,6 +68,12 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
       const likedAt = targetLiked ? (result.likedAt || Date.now()) : 0;
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: targetLiked, likedAt } }));
       notifyLikedChanged();
+      // 远端收藏同步（fire-and-forget；booru/未登录由 syncBookmark 内部跳过）
+      void syncBookmark({
+        illustId: cur.illustId,
+        source: cur.source || sourceOfId(cur.illustId),
+        targetLiked,
+      });
     } else {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
       showToast('操作失败', { type: 'error' });
@@ -83,12 +93,13 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
     }
   }, [cur, pixivCache, setPixivCache, onLikeSaveAll, multiPage, notifyLikedChanged]);
 
-  // 长按 → 切换喜欢 + 下载全部页
+  // 长按 → 未喜欢则先标记喜欢 + 下载全部页（已喜欢时仅下载，不取消喜欢）
   const handleLongPressSaveAll = useCallback(async () => {
     if (!cur?.illustId) return;
     const ck = getCompositeKey(cur);
-    const prevLiked = pixivCache[ck]?.liked || cur._liked || false;
-    if (!prevLiked) {
+    const localLiked = pixivCache[ck]?.liked || cur._liked || false;
+    // 组合态（远端已收藏但本地未点）长按时补本地落库 + 幂等远端收藏，网格红心随之持久化
+    if (!localLiked) {
       setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: Date.now() } }));
       if (typeof storageFacade.like === 'function') {
         try {
@@ -96,11 +107,17 @@ export function useLikeAction(cur, { onLikeSaveAll, totalPages } = {}) {
           if (result.success) {
             setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: true, likedAt: result.likedAt || Date.now() } }));
             notifyLikedChanged();
+            // 长按只喜欢不取消 → 只同步收藏（fire-and-forget）
+            void syncBookmark({
+              illustId: cur.illustId,
+              source: cur.source || sourceOfId(cur.illustId),
+              targetLiked: true,
+            });
           } else {
-            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
+            setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: localLiked } }));
           }
         } catch {
-          setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: prevLiked } }));
+          setPixivCache(prev => ({ ...prev, [ck]: { ...prev[ck], liked: localLiked } }));
         }
       }
     }

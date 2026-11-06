@@ -5,10 +5,11 @@
  *       网络流式下载解帧（prod 主路径）/ 缓冲下载整包解帧（dev / 回退）→ blob URL 帧序列。
  * FrameAnimPlayer 约定 result.frames = [{ path, delay }]。
  *
- * 保存链路（取帧 → GIF 编码 → 相册导出）在 storageService（pixiv-assistant/capacitor），
- * 不在本模块 —— 本模块只管「看」，storageService 只管「存」。
+ * 保存链路（取帧 → GIF 编码 → 相册导出）在本目录 saveGif.js（API 层用例编排），
+ * 不在本模块 —— 本模块只管「看」，saveGif 只管「存」。
  */
 import { createLogger } from '../../utils/logger.js';
+import { isDev } from '../../utils/platform.js';
 import { getCachedFrames, clearFrameCache, setFrames, trimToRoom } from './framesCache.js';
 import { fetchUgoiraMeta } from './meta.js';
 import { loadFramesFromDisk, deleteZipFromDisk, saveZipToDisk } from './zipDiskCache.js';
@@ -16,7 +17,6 @@ import { proxyZipUrl, streamUgoira, downloadZip } from './zipDownload.js';
 import { extractFramesFromBuffer } from './unzip.js';
 
 const log = createLogger('ugoira');
-const IS_DEV = import.meta.env.DEV;
 
 /** 进行中的下载注册表：illustId → { promise, listeners: Set, lastPct }，跨组件共享进度与去重 */
 const inflight = new Map();
@@ -84,7 +84,7 @@ export async function fetchUgoiraFrames(illustId, onProgress, opts = {}) {
     trimToRoom();
 
     let frames;
-    if (IS_DEV) {
+    if (isDev()) {
       const zipBuf = await downloadZip(proxyZipUrl(body.originalSrc));
       frames = await extractFramesFromBuffer(zipBuf, body, broadcast);
     } else {

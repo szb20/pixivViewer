@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
+import { pixivReUrl } from '../../pixiv-assistant/index.js';
 import { createLogger } from '../../utils/logger.js';
 import { markImageLoaded } from '../../utils/loadedImages.js';
 

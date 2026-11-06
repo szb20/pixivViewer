@@ -7,7 +7,7 @@
  */
 import { Capacitor } from '@capacitor/core';
 import { createLogger } from '../../utils/logger.js';
-import { isDesktopShell } from '../../utils/platform.js';
+import { isDesktopShell, isNative, getDesktopProxy } from '../../utils/platform.js';
 import { getSettingsSync } from './config.js';
 
 const log = createLogger('gallery');
@@ -70,7 +70,7 @@ export async function loadFromGallery(fileName) {
  *  调用方据此跳过"相册里文件还在不在"的校验，避免误判为缺失。 */
 export function isGalleryAvailable() {
   try {
-    return !!Capacitor?.Plugins?.GallerySaver && !!Capacitor?.isNativePlatform?.();
+    return !!Capacitor?.Plugins?.GallerySaver && isNative();
   } catch {
     return false;
   }
@@ -96,7 +96,7 @@ export async function exportToGallery(data, fileName, mimeType = mimeFor(fileNam
     if (isDesktopShell()) {
       try {
         const s = getSettingsSync();
-        const ok = await window.desktopProxy.saveFile({
+        const ok = await getDesktopProxy()?.saveFile({
           data,
           fileName,
           mimeType,
@@ -124,19 +124,6 @@ export async function exportToGallery(data, fileName, mimeType = mimeFor(fileNam
     return true;
   } catch (e) {
     log.warn('导出系统相册失败:', e?.message || e);
-    return false;
-  }
-}
-
-/** 从系统相册删除副本（幂等） */
-export async function deleteFromGallery(fileName) {
-  try {
-    const saver = Capacitor?.Plugins?.GallerySaver;
-    if (!saver) return false;
-    await saver.delete({ fileName });
-    return true;
-  } catch (e) {
-    log.debug('删除相册副本失败:', e?.message || e);
     return false;
   }
 }

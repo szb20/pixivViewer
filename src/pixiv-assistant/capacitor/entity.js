@@ -1,7 +1,7 @@
 /**
  * Pixiv 实体 — 全系统统一数据模型。
  *
- * 所有层（StorageService / TransitionEngine / FileStore / Repository）
+ * 所有层（StorageService / FileStore / Repository）
  * 都用这个类通信，不直接操作 IndexedDB 的原始记录。
  *
  * Key 格式：{source}:{illustId}:{pageIndex}（pixiv 的 source 段即 'pixiv'）

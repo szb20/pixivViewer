@@ -1,6 +1,6 @@
 import { pixivApi } from './pixiv.js';
 import { saveItem } from './index.js';
-import { getCompositeKey, pixivReUrl, sourceOfId } from '../pixiv-assistant/core/utils.js';
+import { getCompositeKey, pixivReUrl, sourceOfId } from '../pixiv-assistant/index.js';
 
 const SAVE_BATCH_SIZE = 3;
 
@@ -78,14 +78,24 @@ export async function saveAllPages(item, { pixivCache = {}, setPixivCache, image
   let existsCount = existsInCache;
   for (let i = 0; i < pages.length; i += SAVE_BATCH_SIZE) {
     const batch = pages.slice(i, i + SAVE_BATCH_SIZE);
+    const doneCks = [];
     const results = await Promise.allSettled(batch.map(async ({ item: saveIt, ck }) => {
       const r = await saveItem(saveIt);
       if (r?.success || r?.cached) {
-        setPixivCache?.(prev => ({ ...prev, [ck]: { ...prev[ck], cached: true, saved: true } }));
+        doneCks.push(ck);
         return r;
       }
       return null;
     }));
+    // 整批合并成一次 setPixivCache：逐页 set 会逐次重建 cacheValue，
+    // 触发所有 usePixivCache 消费方（含整网格 likedSet 派生）一轮重渲染
+    if (doneCks.length) {
+      setPixivCache?.(prev => {
+        const next = { ...prev };
+        for (const ck of doneCks) next[ck] = { ...next[ck], cached: true, saved: true };
+        return next;
+      });
+    }
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value) {
         if (r.value.idempotent || r.value.skipped) existsCount += 1;

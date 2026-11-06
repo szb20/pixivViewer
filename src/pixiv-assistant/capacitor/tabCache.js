@@ -14,14 +14,8 @@ const STORE = 'tabs';
 /** 升级被旧连接阻塞时的宽限期：超过即放弃本次打开（缓存降级为直连），避免 promise 永远挂着 */
 const BLOCKED_GRACE_MS = 3000;
 
-/** 各 Tab 的 TTL（毫秒），统一 24 小时 */
-const TTL_MAP = {
-  discover: 24 * 60 * 60 * 1000,
-  ranking: 24 * 60 * 60 * 1000,
-  bookmarks: 24 * 60 * 60 * 1000,
-  following: 24 * 60 * 60 * 1000,
-};
-const DEFAULT_TTL = 24 * 60 * 60 * 1000;
+/** 各 Tab 缓存统一 24 小时过期（原按 tab 分档的 TTL_MAP 四档全等价于这个值，已收敛） */
+const TTL_MS = 24 * 60 * 60 * 1000;
 
 let _db = null;
 let _dbPromise = null;
@@ -73,11 +67,9 @@ function openDB() {
   return _dbPromise;
 }
 
-/** 解析 key 获取 TTL。
- * key 形如 `{source}:discover` / `{source}:ranking:{mode}` —— 用 includes 而非
- * startsWith，来源前缀不会让 TTL 查找落空。 */
-function getTTL(key) {
-  return key.includes('ranking') ? TTL_MAP.ranking : (TTL_MAP[key] || DEFAULT_TTL);
+/** 解析 key 获取 TTL（key 形如 `{source}:discover` / `{source}:ranking:{mode}`，档期见 TTL_MS） */
+function getTTL() {
+  return TTL_MS;
 }
 
 /**
@@ -119,7 +111,7 @@ export async function saveTabCache(key, data) {
 export async function loadTabCache(key) {
   try {
     const db = await openDB();
-    const ttl = getTTL(key);
+    const ttl = getTTL();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, 'readonly');
       const store = tx.objectStore(STORE);
@@ -142,44 +134,6 @@ export async function loadTabCache(key) {
   }
 }
 
-/**
- * 批量加载所有缓存（用于组件挂载时恢复）
- * @returns {Object} { [key]: data }
- */
-export async function loadAllTabCaches() {
-  try {
-    const db = await openDB();
-    const now = Date.now();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const store = tx.objectStore(STORE);
-      const req = store.getAll();
-      req.onsuccess = () => {
-        const records = req.result || [];
-        const result = {};
-        const expiredKeys = [];
-        for (const rec of records) {
-          const ttl = getTTL(rec.key);
-          if (now - rec.updatedAt > ttl) {
-            expiredKeys.push(rec.key);
-          } else {
-            result[rec.key] = rec.data;
-          }
-        }
-        // 后台清理过期条目
-        if (expiredKeys.length > 0) {
-          cleanupExpired(expiredKeys).catch(() => { });
-        }
-        resolve(result);
-      };
-      req.onerror = () => reject(req.error);
-    });
-  } catch (e) {
-    log.debug('loadAllTabCaches 失败:', e?.message || e);
-    return {};
-  }
-}
-
 /** 删除一个 tab 的缓存 */
 export async function deleteTabCache(key) {
   try {
@@ -193,23 +147,5 @@ export async function deleteTabCache(key) {
     });
   } catch (e) {
     log.debug('deleteTabCache 失败:', e?.message || e);
-  }
-}
-
-/** 批量清理过期条目 */
-async function cleanupExpired(keys) {
-  try {
-    const db = await openDB();
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    for (const key of keys) {
-      store.delete(key);
-    }
-    await new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch (e) {
-    log.debug('cleanupExpired 失败:', e?.message || e);
   }
 }

@@ -8,18 +8,17 @@
  * 避免无关的 pixivCache 变化（如保存动作）触发网格重渲染。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { storageFacade, getCompositeKey } from '../pixiv-assistant/index.js';
 import {
-  restoreMetaBackupIfNeeded,
-  ensureMetaBackup,
-  reconcileGallery,
-} from '../pixiv-assistant/capacitor/metaBackup.js';
-import { ensureGalleryReadPermission } from '../pixiv-assistant/capacitor/gallery.js';
+  storageFacade, getCompositeKey,
+  restoreMetaBackupIfNeeded, ensureMetaBackup, reconcileGallery,
+  ensureGalleryReadPermission,
+} from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
 import { buildLikedOrSavedSet } from '../utils/worksState.js';
 import {
   PixivCacheContext,
+  PixivCacheSetterContext,
   PixivLikedSetContext,
 } from './pixivCacheContext.js';
 
@@ -91,19 +90,31 @@ export function PixivCacheProvider({ children }) {
 
   const likedSet = useStableFilteredSet(pixivCache, isLiked);
 
-  // setPixivCache 引用稳定；cacheValue 只在 pixivCache 变化时更新
+  // Provider 层维护最新值 ref：写侧消费者经 getPixivCache() 现场取，
+  // 不必订阅 pixivCache 的每次变化（多页下载逐页落库不再重渲染网格壳层）
+  const cacheRef = useRef(pixivCache);
+  cacheRef.current = pixivCache;
+
+  // setterValue 身份永不变（setPixivCache 是 useState 的 setter）
+  const setterValue = useMemo(() => ({
+    setPixivCache,
+    getPixivCache: () => cacheRef.current,
+  }), [setPixivCache]);
+
+  // cacheValue 只在 pixivCache / 推荐排除集 / 就绪标记变化时更新
   const cacheValue = useMemo(() => ({
     pixivCache,
-    setPixivCache,
     recommendationExcludedSet,
     cacheReady,
-  }), [pixivCache, setPixivCache, recommendationExcludedSet, cacheReady]);
+  }), [pixivCache, recommendationExcludedSet, cacheReady]);
 
   return (
-    <PixivCacheContext.Provider value={cacheValue}>
-      <PixivLikedSetContext.Provider value={likedSet}>
-        {children}
-      </PixivLikedSetContext.Provider>
-    </PixivCacheContext.Provider>
+    <PixivCacheSetterContext.Provider value={setterValue}>
+      <PixivCacheContext.Provider value={cacheValue}>
+        <PixivLikedSetContext.Provider value={likedSet}>
+          {children}
+        </PixivLikedSetContext.Provider>
+      </PixivCacheContext.Provider>
+    </PixivCacheSetterContext.Provider>
   );
 }

@@ -16,8 +16,8 @@
  *   - 越界翻页返回 200 + HTML 错误页（“Page number too high”）→ 按没有更多处理
  *   - 条目大量转载自 Pixiv：source 字段填 pixivUrl，详情页出现「在 Pixiv 打开」
  */
-import { createTransport } from '../api/transport.js';
-import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/core/utils.js';
+import { createTransport } from '../utils/transport.js';
+import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { classifyError, extractPostId, toIllust } from './shared.js';
 

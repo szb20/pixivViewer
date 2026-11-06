@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { getMeta, putMeta } from '../pixiv-assistant/capacitor/cacheDB.js';
+import { getMeta, putMeta } from '../pixiv-assistant/index.js';
 
 /**
  * hiddenWorks — 用户"不想看"的作品集合。

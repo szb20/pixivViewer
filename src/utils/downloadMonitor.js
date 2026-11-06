@@ -69,6 +69,18 @@ function emit() {
   for (const fn of [...listeners]) fn();
 }
 
+// 进度类更新合并 emit：原生通道每任务 12.5 tick/s × 3 并发会触发所有
+// useSyncExternalStore 消费方全量重渲染（弹窗关着也一样）。人眼对进度条
+// 8fps 足够，状态迁移（start/finish/error）仍走即时 emit 不受影响。
+let emitTimer = null;
+function scheduleEmit() {
+  if (emitTimer) return;
+  emitTimer = setTimeout(() => {
+    emitTimer = null;
+    emit();
+  }, 120);
+}
+
 /**
  * 登记失败任务的重试信息（内部实现）。
  * 单例方法 recordFailure(key, meta) 与 start() 返回的句柄共用同一份逻辑，
@@ -124,10 +136,14 @@ export const downloadMonitor = {
       setProgress(pct, bytes) {
         const j = jobs.get(key);
         if (!j || j.status === 'done' || j.status === 'error') return;
+        let changed = false;
         const value = Number(pct);
         if (Number.isFinite(value)) {
           // 进度只增不减：模拟进度/真实进度/写相册阶段混用时不回退
-          if (j.progress == null || value >= j.progress) j.progress = value;
+          if ((j.progress == null || value >= j.progress) && j.progress !== value) {
+            j.progress = value;
+            changed = true;
+          }
         }
         if (bytes && typeof bytes.loaded === 'number') {
           const now = Date.now();
@@ -142,8 +158,9 @@ export const downloadMonitor = {
           j._lastLoaded = bytes.loaded;
           j.loaded = bytes.loaded;
           if (bytes.total > 0) j.total = bytes.total;
+          changed = true; // 字节数驱动速度平滑，必须走节流 emit
         }
-        emit();
+        if (changed) scheduleEmit();
       },
       setStatus(status, message = '') {
         const j = jobs.get(key);

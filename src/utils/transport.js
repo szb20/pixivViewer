@@ -6,12 +6,14 @@
  *   prod     → CapacitorHttp（原生 HTTP 栈，走系统代理），失败降级 fetch
  *
  * 各站点通过 createTransport 生成自己的传输实例。
+ *
+ * 放在 utils 层（而非 api 层）：sources 适配器与 api/pixiv 都是消费方，
+ * 传输层是基础设施，下沉到公共层避免 sources → api 的反向依赖。
  */
 import { CapacitorHttp } from '@capacitor/core';
-import { isDesktopShell, getDesktopProxyPort } from '../utils/platform.js';
-import { createLogger } from '../utils/logger.js';
+import { isDesktopShell, getDesktopProxyPort, isDev } from './platform.js';
+import { createLogger } from './logger.js';
 
-const IS_DEV = import.meta.env.DEV;
 export const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 const FORBIDDEN = new Set(['cookie', 'referer', 'user-agent']);
 
@@ -41,7 +43,7 @@ function makeBuildHeaders({ cookieAs = null, referer = null, userAgent = null } 
       if (value == null || value === '') continue;
       const lower = key.toLowerCase();
       if (lower === 'cookie') {
-        if (IS_DEV || isDesktopShell()) {
+        if (isDev() || isDesktopShell()) {
           if (cookieAs) h[cookieAs] = value;
           continue;
         }
@@ -51,7 +53,7 @@ function makeBuildHeaders({ cookieAs = null, referer = null, userAgent = null } 
       if (FORBIDDEN.has(lower)) continue;
       h[key] = value;
     }
-    if (!IS_DEV && !isDesktopShell()) {
+    if (!isDev() && !isDesktopShell()) {
       if (referer) h['Referer'] = referer;
       h['User-Agent'] = userAgent || DESKTOP_UA;
     }
@@ -149,7 +151,7 @@ export function createTransport({
     }
   }
 
-  const fetch_ = isDesktopShell() ? desktopFetch : (IS_DEV ? devFetch : prodFetch);
+  const fetch_ = isDesktopShell() ? desktopFetch : (isDev() ? devFetch : prodFetch);
   fetch_.devFetch = devFetch;
   fetch_.desktopFetch = desktopFetch;
   fetch_.prodFetch = prodFetch;

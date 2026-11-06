@@ -4,15 +4,13 @@ import { registerBackHandler } from '../utils/backHandler.js';
 import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
 import { getSource } from '../sources/registry.js';
 import { useImageSourceId, setBooruSafeOnly } from '../hooks/useImageSource.js';
+import { isDesktopShell, getDesktopProxy } from '../utils/platform.js';
 import '../styles/settings.css';
 
 const LAYOUT_OPTIONS = [
   { value: 'waterfall', label: '瀑布流' },
   { value: 'grid', label: '方形宫格' },
 ];
-
-// 桌面壳（Electron）才支持选择保存目录；Web / Android 隐藏该设置项
-const isDesktopShell = () => typeof window !== 'undefined' && !!window.desktopProxy?.chooseDirectory;
 
 /**
  * 全屏设置页。
@@ -93,7 +91,7 @@ export default function SettingsPage({ onClose }) {
 
   // 选择图片保存目录（仅桌面壳，经 Electron 文件夹选择对话框）
   const chooseDir = async () => {
-    const dir = await window.desktopProxy?.chooseDirectory?.();
+    const dir = await getDesktopProxy()?.chooseDirectory?.();
     if (dir) {
       setSaveDirectory(dir);
       doSave({ saveDirectory: dir });

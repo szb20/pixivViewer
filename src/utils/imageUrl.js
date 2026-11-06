@@ -12,7 +12,7 @@
  * 所以「更大」不等于「换个更大的 c/ 尺寸」——pixiv.re 只放行 540 这一种裁剪前缀，
  * 要更高清只能退回**不带 c/ 前缀**的 img-master 原图。加新档位前先用 curl 验一遍。
  */
-import { pixivPageUrl } from '../pixiv-assistant/core/utils.js';
+import { pixivPageUrl } from '../pixiv-assistant/index.js';
 
 /**
  * 生成等比预览图 URL（Pixiv）。

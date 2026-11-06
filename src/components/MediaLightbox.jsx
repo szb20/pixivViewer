@@ -85,6 +85,17 @@ export default function MediaLightbox({
   // 比例对不上的托底图按 slide 下标记下来，直接不渲染（见下面 underlay 的注释）
   const [underlayHidden, setUnderlayHidden] = useState(() => new Set());
   const videoRefs = useRef({});
+  // 按 idx 缓存的稳定 onRef：内联箭头每次渲染换引用，会打穿 VideoPlayer 里
+  // useEffect([onRef]) 的挂/摘逻辑（卸载重挂 video DOM）；缓存后每个 idx 恒定
+  const videoRefCbs = useRef(new Map());
+  const getVideoRefCb = useCallback((idx) => {
+    let cb = videoRefCbs.current.get(idx);
+    if (!cb) {
+      cb = (el) => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; };
+      videoRefCbs.current.set(idx, cb);
+    }
+    return cb;
+  }, []);
   const [iwaraQuality, setIwaraQuality] = useState('Source');
 
   const {
@@ -132,8 +143,11 @@ export default function MediaLightbox({
   }, [index]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   // ── 主动预加载相邻图片（浏览器缓存预热，避免滑动时等待） ──
+  // 只预热 ±1 且只预热候选链首选项（原图档）：预热 ±2 会提前下载并解码
+  // 两张全分辨率图，Android WebView 上内存峰值过高（4000×6000 单张解码 ≈96MB）
   useEffect(() => {
-    for (let d = -2; d <= 2; d++) {
+    for (let d = -1; d <= 1; d++) {
+      if (d === 0) continue; // 当前页由已挂载的 <img> 自己加载
       const idx = index + d;
       if (idx < 0 || idx >= items.length) continue;
       const item = items[idx];
@@ -162,7 +176,7 @@ export default function MediaLightbox({
       // ── 抖音视频 ──
       case 'douyin': {
         const vidSrc = item.localUrl || item.downloadUrl || item.url;
-        return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+        return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />;
       }
 
       // ── iwara 视频 ──
@@ -189,7 +203,7 @@ export default function MediaLightbox({
             : (q?.view || item.localUrl || item.downloadUrl || item.url);
           return (
             <div className="iwara-video-wrapper">
-              <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />
+              <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />
               {qualities?.length > 1 && (
                 <div className="quality-selector">
                   {qualities.map(qo => (
@@ -211,13 +225,13 @@ export default function MediaLightbox({
         // 优先本地缓存 blob URL（Capacitor 下载），其次 streamUrl（Electron 自定义协议），
         // 再其次 playUrl（CDN 直链），最后 iframe 嵌入
         if (item.localUrl) {
-          return <VideoPlayer src={item.localUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+          return <VideoPlayer src={item.localUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />;
         }
         if (item.streamUrl) {
-          return <VideoPlayer src={item.streamUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+          return <VideoPlayer src={item.streamUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />;
         }
         if (item.playUrl) {
-          return <VideoPlayer src={item.playUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+          return <VideoPlayer src={item.playUrl} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />;
         }
         if (item.embedUrl) {
           return isCurrent ? (
@@ -253,7 +267,7 @@ export default function MediaLightbox({
         }
         {
           const vidSrc = item.url;
-          return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={el => { if (el) videoRefs.current[idx] = el; else delete videoRefs.current[idx]; }} />;
+          return <VideoPlayer src={vidSrc} poster={item.coverUrl || item.thumbnailUrl || ''} isCurrent={isCurrent} onRef={getVideoRefCb(idx)} />;
         }
       }
     }
@@ -263,8 +277,10 @@ export default function MediaLightbox({
   function renderSlideContent(item, idx) {
     const isCurrent = idx === index;
 
-    // 只渲染当前及前后各两张，其余用占位符避免带宽竞争
-    const loadable = Math.abs(idx - index) <= 2;
+    // 只渲染当前及前后各 1 页，其余用占位符：±2 窗口下最多 5 张原图同时挂载，
+    // Android WebView 解码内存峰值过高；相邻页即时挂载已保证滑动无白屏
+    // （滑动结束 index 变化后新的相邻页立刻挂载，托底小图先垫住视觉）
+    const loadable = Math.abs(idx - index) <= 1;
     if (!loadable) {
       return <div className="lightbox-slide-placeholder" />;
     }
@@ -350,7 +366,6 @@ export default function MediaLightbox({
               }
               setRetryMap(prev => ({ ...prev, [idx]: next }));
             }}
-            loading={idx === index ? 'eager' : Math.abs(idx - index) <= 1 ? 'eager' : 'lazy'}
             fetchPriority={idx === index ? 'high' : 'auto'}
             style={{
               width: '100%',

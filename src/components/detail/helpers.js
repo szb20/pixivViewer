@@ -2,7 +2,7 @@
 // Pixiv 数据处理
 // ═══════════════════════════════════════════════════════
 
-import { pixivReUrl } from '../../pixiv-assistant/core/utils.js';
+import { pixivReUrl } from '../../pixiv-assistant/index.js';
 
 /** 将 Pixiv API 返回的原始结果展开为全部页面（格子只渲染 page 0）*/
 export function parsePixivResults(rawList) {

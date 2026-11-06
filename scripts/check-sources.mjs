@@ -1,9 +1,14 @@
 /**
  * 多来源接入的自检：身份层不依赖 DOM / IndexedDB，可直接跑。
- * 用法：node scripts/check-sources.mjs
+ * 用法：npm run check:sources
  */
+// 本脚本是包内自检器，就是要直读内部实现（parseCacheFileName 等不进 barrel），
+// 豁免 barrel 导入约束。其余包外代码一律走 pixiv-assistant/index.js。
+// oxlint-disable-next-line no-restricted-imports
 import { parseCacheFileName, buildCacheFileName, getCompositeKey, qualifyId, sourceOfId, rawIdOf, KNOWN_SOURCES } from '../src/pixiv-assistant/core/utils.js';
 import { SOURCE_LIST, getSource, capsOf } from '../src/sources/registry.js';
+import { BOORU_ROUTES } from './booru-proxy.mjs';
+import { pixivRoutes } from './pixiv-proxy.mjs';
 
 let failed = 0;
 function ok(cond, label, extra = '') {
@@ -117,6 +122,33 @@ for (const s of SOURCE_LIST) {
     );
   }
 }
+
+// 7) 代理路由表与注册表一致。BOORU_ROUTES 已从 net 派生，这里断言派生结果
+// 覆盖全部非 pixiv 来源的 apiPrefix 与 imgHosts 前缀、target/UA 对齐 ——
+// 防的是有人把手抄路由表改回来后两处悄悄漂移（历史教训：wallhaven 图床 UA 漂过）。
+const routeByPrefix = new Map(BOORU_ROUTES.map(r => [r.prefix, r]));
+ok(new Set(routeByPrefix.keys()).size === BOORU_ROUTES.length, 'BOORU_ROUTES 前缀唯一');
+for (const s of SOURCE_LIST) {
+  if (s.id === 'pixiv') continue;
+  const api = routeByPrefix.get(s.net.apiPrefix);
+  ok(!!api, `${s.id} API 路由存在`, s.net.apiPrefix);
+  ok(api?.target === s.net.apiOrigin, `${s.id} API 路由 target 一致`);
+  ok(api?.userAgent === s.net.userAgent, `${s.id} API 路由 UA 一致`);
+  for (const [host, prefix] of Object.entries(s.net.imgHosts)) {
+    const r = routeByPrefix.get(prefix);
+    ok(!!r, `${s.id} 图床路由 ${prefix} 存在`);
+    ok(r?.target === `https://${host}`, `${s.id} 图床路由 target 一致（${host}）`);
+    ok(r?.userAgent === s.net.userAgent, `${s.id} 图床路由 UA 一致（${host}）`);
+  }
+}
+// pixiv 路由表：4 条固定前缀齐全（thumb/zip 是基础设施路由，不在 net.imgHosts 里）
+const pixivPrefixes = pixivRoutes().map(r => r.prefix).sort();
+ok(
+  JSON.stringify(pixivPrefixes) === JSON.stringify(['/pixiv-api', '/pixiv-img', '/pixiv-thumb', '/pixiv-zip']),
+  'PIXIV_ROUTES 前缀齐全',
+  pixivPrefixes.join(','),
+);
+ok(getSource('pixiv').net.apiPrefix === '/pixiv-api', 'pixiv apiPrefix 与路由表对齐');
 
 if (failed) { console.error(`\n${failed} 项失败`); process.exit(1); }
 console.log('OK — 身份层与来源注册表自检通过');

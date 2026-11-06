@@ -23,28 +23,17 @@
   pointer-events: none;
 }
 
-/* 点击图片隐藏 UI 控件 */
+/* 控件常显（hide-ui 切换已随死代码移除） */
 .lightbox-overlay .lightbox-close,
 .lightbox-overlay .lightbox-nav {
   opacity: 1;
   transition: opacity var(--t-slow) ease;
 }
 
-.lightbox-overlay.hide-ui .lightbox-close,
-.lightbox-overlay.hide-ui .lightbox-nav {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* 标题区域单独处理：移除 transition 避免滑动时闪烁，用 will-change 保持 GPU 层 */
+/* 标题区域：移除 transition 避免滑动时闪烁，用 will-change 保持 GPU 层 */
 .lightbox-overlay .lightbox-info {
   opacity: 1;
   will-change: opacity;
-}
-
-.lightbox-overlay.hide-ui .lightbox-info {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .lightbox-close {

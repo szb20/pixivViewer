@@ -4,7 +4,7 @@
  */
 import { createPixivApi, getPixivCookie } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
-import { createTransport } from './transport.js';
+import { createTransport } from '../utils/transport.js';
 
 const PIXIV_BASE = 'https://www.pixiv.net';
 
@@ -26,3 +26,10 @@ export const pixivApi = createPixivApi({
   // logger 由外层注入（core 不反向依赖 utils/logger）
   log: createLogger('pixivApi'),
 });
+
+/**
+ * 「需要引导用户去设置页处理 Cookie」的错误码集合。
+ * UI 用等值判断替代对错误消息的正则嗅探（feed.errorCode 经 useTabFeed 透传）。
+ */
+const COOKIE_ERROR_CODES = new Set(['no_cookie', 'auth_failed', 'cookie_invalid']);
+export const isCookieErrorCode = (code) => COOKIE_ERROR_CODES.has(code);

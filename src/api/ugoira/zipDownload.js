@@ -4,12 +4,10 @@
  * 流式（prod 主路径，边下边解）+ 缓冲（dev 代理 / prod 回退）双路径。
  */
 import { CapacitorHttp } from '@capacitor/core';
-import { isDesktopShell, getDesktopProxyPort } from '../../utils/platform.js';
+import { isDesktopShell, getDesktopProxyPort, isDev } from '../../utils/platform.js';
 import { base64ToBytes } from '../../utils/bytes.js';
 import { createUnzipper } from './unzip.js';
 import { saveZipToDisk, ZIP_CACHE_MAX_BYTES } from './zipDiskCache.js';
-
-const IS_DEV = import.meta.env.DEV;
 
 /**
  * i.pximg.net → i.pixiv.re：CDN 要求 pixiv Referer（浏览器 fetch 无法设置，WebView 会 403），
@@ -25,7 +23,7 @@ export function proxyZipUrl(url) {
  */
 async function zipProxyFetchUrl(url) {
   const enc = encodeURIComponent(url);
-  if (IS_DEV) return `/pixiv-zip/${enc}`;
+  if (isDev()) return `/pixiv-zip/${enc}`;
   if (isDesktopShell()) {
     const port = await getDesktopProxyPort();
     if (!port) throw new Error('桌面代理端口不可用');

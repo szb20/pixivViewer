@@ -59,7 +59,7 @@ export function createApiClient(transport) {
         const now = Date.now();
         if (csrfTokenCache.token && now - csrfTokenCache.ts < CSRF_TTL) return csrfTokenCache.token;
         const cookieCheck = await ensureCookie();
-        if (cookieCheck.error) throw new Error(cookieCheck.message || 'no_cookie');
+        if (cookieCheck.error) throw Object.assign(new Error(cookieCheck.message || 'no_cookie'), { code: 'no_cookie' });
         const html = await apiFetch('/', {
             headers: { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` },
             raw: true,
@@ -68,7 +68,7 @@ export function createApiClient(transport) {
         const text = typeof html === 'string' ? html : String(html || '');
         const unescaped = text.replace(/\\"/g, '"');
         const m = unescaped.match(/"token"\s*:\s*"([a-f0-9]+)"/);
-        if (!m) throw new Error('csrf_token_missing');
+        if (!m) throw Object.assign(new Error('csrf_token_missing'), { code: 'csrf_token_missing' });
         csrfTokenCache = { token: m[1], ts: Date.now() };
         return m[1];
     }
@@ -76,6 +76,24 @@ export function createApiClient(transport) {
     /** 清空 CSRF token 缓存（请求被拒时强制下次重取） */
     function invalidateCsrfToken() {
         csrfTokenCache = { token: '', ts: 0 };
+    }
+
+    /**
+     * 错误 → 机器码（供 UI 做等值判断，替代对 message 的正则嗅探）。
+     * 优先级：自带 code > HTTP 状态码 > 消息模式兜底（历史错误只有消息字符串）。
+     * 403 单独给 cookie_invalid：UI 据此引导用户去设置页更新 Cookie。
+     */
+    function classifyCode(err) {
+        if (!err) return 'unknown';
+        if (err.code) return err.code;
+        const status = typeof err.status === 'number' ? err.status
+            : Number(String(err.message || '').match(/HTTP\s+(\d+)/)?.[1]);
+        if (status) return status === 403 ? 'cookie_invalid' : `http_${status}`;
+        const msg = err.message || '';
+        if (/Failed to fetch|NetworkError|ERR_NETWORK|ENOTFOUND|ECONNREFUSED|timeout|Timeout|TIMEOUT|abort|Abort/.test(msg)) return 'network';
+        if (msg.includes('no_cookie')) return 'no_cookie';
+        if (msg.includes('auth_failed')) return 'auth_failed';
+        return 'unknown';
     }
 
     /** 分类错误信息，返回中文友好提示 */
@@ -109,5 +127,6 @@ export function createApiClient(transport) {
         getCsrfToken,
         invalidateCsrfToken,
         classifyError,
+        classifyCode,
     };
 }

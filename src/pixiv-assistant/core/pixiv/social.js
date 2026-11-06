@@ -6,7 +6,7 @@ import { extractUserIdFromCookie, proxyThumb } from '../utils.js';
 import { isCsrfRetryable } from './client.js';
 
 export function createSocialApi(ctx) {
-    const { apiFetch, ensureCookie, getCsrfToken, invalidateCsrfToken, classifyError, log } = ctx;
+    const { apiFetch, ensureCookie, getCsrfToken, invalidateCsrfToken, classifyError, classifyCode, log } = ctx;
 
     const formHeaders = (cookie) => ({
         'Cookie': `PHPSESSID=${cookie}`,
@@ -111,7 +111,7 @@ export function createSocialApi(ctx) {
             };
         } catch (e) {
             log.error('[fetchFollowingUsers] 失败:', e.message);
-            return { users: [], error: classifyError(e, '关注作者') };
+            return { users: [], error: classifyCode(e), message: classifyError(e, '关注作者') };
         }
     }
 

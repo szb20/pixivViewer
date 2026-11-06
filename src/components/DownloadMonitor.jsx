@@ -120,17 +120,25 @@ function DownloadRow({ job, onRetry, retrying }) {
 }
 
 export default function DownloadMonitorButton() {
-  const { jobs, activeCount, failCount, doneCount } = useDownloadJobs();
   const open = useAppStore(s => s.downloadOpen);
   const setDownloadOpen = useAppStore(s => s.setDownloadOpen);
+  // 关闭时直接不挂弹窗子树：useDownloadJobs 的 8fps 快照订阅只存在于弹窗挂载期间，
+  // 不再在后台下载时随每帧快照空转整棵组件树
+  if (!open) return null;
+  return <DownloadMonitorDialog onClose={() => setDownloadOpen(false)} />;
+}
+
+/** 弹窗本体：只在打开期间挂载，订阅下载队列快照 */
+function DownloadMonitorDialog({ onClose }) {
+  const { jobs, activeCount, failCount, doneCount } = useDownloadJobs();
   const [retryingKeys, setRetryingKeys] = useState(() => new Set());
   // 打开时把焦点移进抽屉、关闭时还给侧边栏那个入口；Esc 关闭
-  const overlayRef = useOverlayFocus(open, () => setDownloadOpen(false));
+  const overlayRef = useOverlayFocus(true, onClose);
 
   // 任务全部完成后自动关闭弹窗（失败任务常驻，不触发关闭）
   useEffect(() => {
-    if (open && jobs.length > 0 && jobs.every(j => j.status === 'done')) setDownloadOpen(false);
-  }, [jobs, open, setDownloadOpen]);
+    if (jobs.length > 0 && jobs.every(j => j.status === 'done')) onClose();
+  }, [jobs, onClose]);
 
   // 重试：调用下载管理的 retry(key)，随后重新走保存链路。
   // 返回 promise —— 「全部重试」靠 await 它才能真串行。
@@ -205,54 +213,50 @@ export default function DownloadMonitorButton() {
   );
 
   return (
-    <>
-      {open && (
-        <div
-          className="dialog-overlay"
-          data-variant="download"
-          ref={overlayRef}
-          tabIndex={-1}
-          onClick={() => setDownloadOpen(false)}
-        >
-          <div
-            className="dialog-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="下载管理"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="download-head">
-              <div className="download-head-text">
-                <span className="download-head-title">下载管理</span>
-                {summary && <span className="download-head-summary">{summary}</span>}
-              </div>
-              <div className="download-head-actions">
-                {failCount > 1 && (
-                  <button className="download-head-btn" onClick={handleRetryAll}>全部重试</button>
-                )}
-                {doneCount > 0 && (
-                  <button className="download-head-btn" onClick={() => downloadMonitor.clearDone()}>清除已完成</button>
-                )}
-              </div>
-            </div>
-
-            <div className="download-list">
-              {jobs.length === 0 ? (
-                <div className="download-empty">
-                  暂无下载任务
-                  <span>在详情页点「下载」，或长按图片保存</span>
-                </div>
-              ) : (
-                <>
-                  {renderGroup('进行中', active)}
-                  {renderGroup('失败', failed)}
-                  {renderGroup('已完成', done)}
-                </>
-              )}
-            </div>
+    <div
+      className="dialog-overlay"
+      data-variant="download"
+      ref={overlayRef}
+      tabIndex={-1}
+      onClick={onClose}
+    >
+      <div
+        className="dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="下载管理"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="download-head">
+          <div className="download-head-text">
+            <span className="download-head-title">下载管理</span>
+            {summary && <span className="download-head-summary">{summary}</span>}
+          </div>
+          <div className="download-head-actions">
+            {failCount > 1 && (
+              <button className="download-head-btn" onClick={handleRetryAll}>全部重试</button>
+            )}
+            {doneCount > 0 && (
+              <button className="download-head-btn" onClick={() => downloadMonitor.clearDone()}>清除已完成</button>
+            )}
           </div>
         </div>
-      )}
-    </>
+
+        <div className="download-list">
+          {jobs.length === 0 ? (
+            <div className="download-empty">
+              暂无下载任务
+              <span>在详情页点「下载」，或长按图片保存</span>
+            </div>
+          ) : (
+            <>
+              {renderGroup('进行中', active)}
+              {renderGroup('失败', failed)}
+              {renderGroup('已完成', done)}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

@@ -4,11 +4,10 @@
  * caps 是 UI 分支的唯一依据：组件问 caps.follow / caps.related / caps.multiPage，
  * 而不是散落 source === 'pixiv' 判断。新增站点只需在这里加一条 + 写一个适配器。
  *
- * net 是该来源的代理配置，dev/桌面壳的代理路由与前端的 URL 重写都从它派生。
- * ⚠️ scripts/booru-proxy.mjs 里有一份等价的路由表（Node 侧不便直接 import src/），
- *    改这里时务必同步那边。
+ * net 是该来源的代理配置，dev/桌面壳的代理路由（scripts/booru-proxy.mjs 的
+ * BOORU_ROUTES 直接 import 本表派生）与前端的 URL 重写都从它派生 —— 改这里即全局生效。
  */
-import { DEFAULT_SOURCE } from '../pixiv-assistant/core/utils.js';
+import { DEFAULT_SOURCE } from '../pixiv-assistant/index.js';
 import { API_CLIENT_UA } from './shared.js';
 
 /**
@@ -29,6 +28,8 @@ import { API_CLIENT_UA } from './shared.js';
  * @property {string} apiPrefix      — dev / 桌面壳的 API 代理前缀
  * @property {Record<string,string>} imgHosts — 图片域名 → dev 下的代理前缀
  * @property {string} [userAgent]    — 覆盖默认 UA（见 shared.js 的 API_CLIENT_UA 说明）
+ * @property {boolean} [http2]       — 全站应用层强制 HTTP/2（代理路由走 createH2Proxy，
+ *                                     见 scripts/proxy-utils.mjs 的 createH2Proxy 说明）
  */
 
 /**
@@ -263,10 +264,11 @@ export const SOURCES = {
     net: {
       // 新版 Gelbooru DAPI（直接给 file_url，带 owner 上传者）。
       // ⚠️ 应用层强制 HTTP/2：TLS 能握手，但 HTTP/1.1 请求一律挂起（浏览器默认 h2 所以无感）；
-      //    代理路由带 http2 标记，走 proxy-utils.mjs 的 createH2Proxy。
+      //    代理路由按 net.http2 标记走 proxy-utils.mjs 的 createH2Proxy。
       apiOrigin: 'https://hypnohub.net',
       apiPrefix: '/hypnohub-api',
       imgHosts: { 'hypnohub.net': '/hypnohub-img' },
+      http2: true,
     },
   },
   xbooru: {
@@ -285,6 +287,7 @@ export const SOURCES = {
       // 图床分两个域：原图在 img.xbooru.com、缩略图在主域（两条代理路由）。
       apiOrigin: 'https://xbooru.com',
       apiPrefix: '/xbooru-api',
+      http2: true,
       imgHosts: {
         'img.xbooru.com': '/xbooru-img',
         'xbooru.com': '/xbooru-thumb',

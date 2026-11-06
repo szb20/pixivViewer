@@ -11,8 +11,8 @@
  *
  * 文档：https://danbooru.donmai.us/wiki_pages/help:api
  */
-import { createTransport } from '../api/transport.js';
-import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/core/utils.js';
+import { createTransport } from '../utils/transport.js';
+import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { classifyError, extractPostId, toIllust } from './shared.js';
 

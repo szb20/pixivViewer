@@ -7,7 +7,8 @@ import { createLogger } from './utils/logger.js'
 
 // 设置透明状态栏 + 白色文字/图标（适配深色背景）
 import { StatusBar, Style } from '@capacitor/status-bar'
-if (window.Capacitor?.isNativePlatform?.()) {
+import { isNative } from './utils/platform.js'
+if (isNative()) {
   StatusBar.setStyle({ style: Style.Dark }).catch(() => { })
   StatusBar.setOverlaysWebView({ overlay: true }).catch(() => { })
 }

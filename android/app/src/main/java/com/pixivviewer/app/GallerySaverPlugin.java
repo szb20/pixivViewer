@@ -314,8 +314,8 @@ public class GallerySaverPlugin extends Plugin {
         }
         try {
             ContentResolver cr = getContext().getContentResolver();
-            // 用 LIKE 匹配（可能因历史遗留物理文件/同名冲突被 MediaStore 写成 "pixiv_meta (N).json"），
-            // 按修改时间倒序取最新一份，保证恢复时读到最近备份
+            // 精确匹配文件名 + 相对目录（应用自身只写一份固定名备份，同名冲突由写侧的
+            // 覆盖式插入兜底；这里取匹配到的第一份）
             String selection = MediaStore.Downloads.DISPLAY_NAME + " = ? AND "
                 + MediaStore.Downloads.RELATIVE_PATH + " = ?";
             String[] args = new String[]{fileName, META_RELATIVE_PATH};
@@ -505,5 +505,165 @@ public class GallerySaverPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }
+    }
+
+    // ── 分块写入大文件（与 saveDownload 同目标，供 ugoira 无损 ZIP 副本等大文件） ──
+    // 40MB ZIP 经 JS 桥传整份 base64 会产生 ~53MB 字符串峰值（WebView 上有 OOM 风险），
+    // 分块后 JS 侧峰值 ≈ 单块。流程：startDownloadFile → appendDownloadChunk×N
+    // → finishDownloadFile；失败走 abortDownloadFile 清理半写的记录。
+
+    /** 分块会话：fileName → 打开中的输出流与其 MediaStore uri */
+    private final java.util.Map<String, Uri> chunkedSessionUris = new java.util.HashMap<>();
+    private final java.util.Map<String, OutputStream> chunkedSessionStreams = new java.util.HashMap<>();
+
+    /** 关闭会话并返回其 uri（无会话返回 null）；publish=true 时清除 IS_PENDING 让文件对相册可见 */
+    private Uri closeChunkedSession(String fileName, boolean publish) {
+        Uri uri;
+        OutputStream os;
+        synchronized (chunkedSessionUris) {
+            uri = chunkedSessionUris.remove(fileName);
+            os = chunkedSessionStreams.remove(fileName);
+        }
+        if (os != null) {
+            try {
+                os.close();
+            } catch (IOException ignored) {
+            }
+        }
+        if (uri != null && publish) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            getContext().getContentResolver().update(uri, values, null, null);
+        }
+        return uri;
+    }
+
+    /** 关闭会话并删除半写行（写失败路径用：abort 时已拿不到 uri，必须直接清） */
+    private void closeAndDiscardChunkedSession(String fileName) {
+        Uri uri = closeChunkedSession(fileName, false);
+        if (uri != null) {
+            try {
+                getContext().getContentResolver().delete(uri, null, null);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @PluginMethod
+    public void startDownloadFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String mimeType = call.getString("mimeType", "application/octet-stream");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            // 先删除同名旧文件（幂等，与 saveDownload 一致）；同名残留会话也一并关闭
+            cr.delete(FILES_URI,
+                MediaStore.MediaColumns.DISPLAY_NAME + " = ? AND "
+                    + MediaStore.MediaColumns.RELATIVE_PATH + " = ?",
+                new String[]{fileName, RELATIVE_PATH});
+            closeChunkedSession(fileName, false);
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, mimeType);
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, RELATIVE_PATH);
+            values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = cr.insert(FILES_URI, values);
+            if (uri == null) {
+                call.reject("MediaStore 插入失败");
+                return;
+            }
+            OutputStream os = cr.openOutputStream(uri);
+            if (os == null) {
+                call.reject("打开输出流失败");
+                return;
+            }
+            synchronized (chunkedSessionUris) {
+                chunkedSessionUris.put(fileName, uri);
+                chunkedSessionStreams.put(fileName, os);
+            }
+            call.resolve(new JSObject());
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
+    public void appendDownloadChunk(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String data = call.getString("data"); // 单块 base64
+        if (fileName == null || data == null) {
+            call.reject("fileName 与 data 不能为空");
+            return;
+        }
+        OutputStream os;
+        synchronized (chunkedSessionUris) {
+            os = chunkedSessionStreams.get(fileName);
+        }
+        if (os == null) {
+            call.reject("会话不存在，请先 startDownloadFile");
+            return;
+        }
+        try {
+            os.write(Base64.decode(data, Base64.DEFAULT));
+            call.resolve(new JSObject());
+        } catch (Exception e) {
+            // 写失败：关流并删除半写行（此时 abort 已拿不到 uri，必须在这里清）
+            closeAndDiscardChunkedSession(fileName);
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    @PluginMethod
+    public void finishDownloadFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        synchronized (chunkedSessionUris) {
+            if (!chunkedSessionUris.containsKey(fileName)) {
+                call.reject("会话不存在");
+                return;
+            }
+        }
+        try {
+            closeChunkedSession(fileName, true);
+            call.resolve(new JSObject());
+        } catch (Exception e) {
+            // 必须捕获：publish 阶段抛异常（磁盘满/权限）会让 Bridge 直接崩溃整个应用
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 放弃分块会话：关流并删除半写的记录（备份失败时调用） */
+    @PluginMethod
+    public void abortDownloadFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        Uri uri;
+        OutputStream os;
+        synchronized (chunkedSessionUris) {
+            uri = chunkedSessionUris.remove(fileName);
+            os = chunkedSessionStreams.remove(fileName);
+        }
+        if (os != null) {
+            try {
+                os.close();
+            } catch (IOException ignored) {
+            }
+        }
+        if (uri != null) {
+            try {
+                getContext().getContentResolver().delete(uri, null, null);
+            } catch (Exception ignored) {
+            }
+        }
+        call.resolve(new JSObject());
     }
 }

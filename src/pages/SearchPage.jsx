@@ -223,9 +223,14 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   // 结果页「‹」返回：只在有明确来路（唤起搜索前所在的 tab）时出现
   const showBack = isDesktop && active && !!searchReturnTab && searchReturnTab !== 'search';
 
-  // 详情页点 Tag → 关闭详情并切到搜索 tab 后直接搜索该 tag
+  // 详情页点 Tag → 关闭详情并切到搜索 tab 后直接搜索该 tag。
+  // 跳过重复消费：切来源会整块重挂载本页，store 里残留的旧 seed
+  // 不该再触发一次自动重搜；每次点 Tag 都生成新 seq，同 tag 再点仍会重搜。
+  const appliedSeedSeqRef = useRef(null);
   useEffect(() => {
     if (!searchSeed?.tag) return;
+    if (appliedSeedSeqRef.current === searchSeed.seq) return;
+    appliedSeedSeqRef.current = searchSeed.seq;
     runSearch(searchSeed.tag);
   }, [searchSeed, runSearch]);
 

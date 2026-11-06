@@ -12,6 +12,7 @@ import { PixivEntity } from './entity.js';
 import { parseCacheFileName, sourceOfId } from '../core/utils.js';
 import { createLogger } from '../../utils/logger.js';
 import { hiddenWorks } from '../../utils/hiddenWorks.js';
+import { isNative as isNativeShell } from '../../utils/platform.js';
 
 const log = createLogger('metaBackup');
 
@@ -33,9 +34,7 @@ function plugin() {
 }
 
 function isNative() {
-  return typeof window !== 'undefined'
-    && !!window.Capacitor?.isNativePlatform?.()
-    && !!plugin();
+  return isNativeShell() && !!plugin();
 }
 
 /** 是否可用备份（原生 + GallerySaver 插件） */
@@ -79,15 +78,19 @@ export async function writeMetaBackup(records) {
     await S.writeMeta({ fileName: META_FILE, data: payload });
     // 同时写一份相册副本（1×1 PNG 尾部藏 JSON）：
     // 卸载重装后 MediaStore Downloads 行对新 UID 不可见，而 Pictures 媒体行可见，
-    // 相册副本是跨重装恢复的关键载体。
+    // 相册副本是跨重装恢复的关键载体。重写成本高（建 PNG + 删旧图 + MediaStore 写入），
+    // 内容没变就跳过；_lastAlbumPayload 只在内存，进程重启后首次仍会写一遍兜底落盘。
     try {
-      const oldPngs = await S.listMetaPngs().then(r => r?.files, () => []);
-      if (Array.isArray(oldPngs)) {
-        for (const name of oldPngs) {
-          await S.delete({ fileName: name }).catch(() => {});
+      if (payload !== _lastAlbumPayload) {
+        const oldPngs = await S.listMetaPngs().then(r => r?.files, () => []);
+        if (Array.isArray(oldPngs)) {
+          for (const name of oldPngs) {
+            await S.delete({ fileName: name }).catch(() => {});
+          }
         }
+        await S.save({ fileName: LEGACY_META_PNG, data: buildMetaPng(payload), mimeType: 'image/png' });
+        _lastAlbumPayload = payload;
       }
-      await S.save({ fileName: LEGACY_META_PNG, data: buildMetaPng(payload), mimeType: 'image/png' });
     } catch (e) {
       log.warn('[metaBackup] 写入相册备份失败:', e?.message || e);
     }
@@ -96,6 +99,9 @@ export async function writeMetaBackup(records) {
     log.warn('[metaBackup] 写入备份失败:', e?.message || e);
   }
 }
+
+/** 上次已写入相册 PNG 副本的备份内容：内容未变化时跳过重写（见 writeMetaBackup） */
+let _lastAlbumPayload = null;
 
 /** 防抖调度备份：一次连续操作结束后写一次（默认 1.5s）。 */
 export function scheduleMetaBackup() {

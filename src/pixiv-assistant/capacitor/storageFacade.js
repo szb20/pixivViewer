@@ -1,7 +1,8 @@
 /**
  * StorageFacade — UI 门面。
  *
- * 职责：参数校验、错误转换、并发去重。
+ * 职责：参数校验、错误转换。
+ * 并发去重统一在 api/index.js 的 saveItem 一处（同键 `作品ID_页码`）。
  * 不再混入 Toast —— 提示由 UI 层根据返回值自行决定。
  */
 import { PixivStorageService } from './storageService.js';
@@ -9,28 +10,17 @@ import { PixivStorageService } from './storageService.js';
 export class StorageFacade {
   constructor() {
     this.service = new PixivStorageService();
-    // 进行中的保存请求（按 作品ID_页码 去重），避免并发重复下载/重复提示
-    this._saveInFlight = new Map();
   }
 
   /**
-   * 下载并保存到相册（原图优先）——UI 层「保存」的入口。
+   * 下载并保存到相册（原图优先）。
+   * 并发去重统一在 api/index.js 的 saveItem（覆盖动图+静图同一键空间），
+   * 这里不再做第二层同键去重——所有 UI 入口都先过 saveItem。
    * @param {object} item — 图片条目（含 illustId / _pageIndex / originalUrl / mediumUrl / title 等）
    * @returns {Promise<{success: boolean, entity?: import('./entity.js').PixivEntity, error?: string, idempotent?: boolean}>}
    */
   async saveFromNetwork(item) {
     if (!item?.illustId) return { success: false, error: 'invalid_item' };
-    // 同一张图并发保存（自动保存 + 点♡等）共享同一个 promise：只下载一次
-    const id = `${item.illustId}_${item._pageIndex ?? 0}`;
-    const inFlight = this._saveInFlight.get(id);
-    if (inFlight) return inFlight;
-    const promise = this._doSaveFromNetwork(item);
-    this._saveInFlight.set(id, promise);
-    promise.finally(() => this._saveInFlight.delete(id)).catch(() => { });
-    return promise;
-  }
-
-  async _doSaveFromNetwork(item) {
     return await this.service.saveFromNetwork(item);
   }
 
@@ -97,18 +87,6 @@ export class StorageFacade {
   async fillMeta(illustId, pageIndex = 0, meta = {}) {
     if (!illustId) return { updated: false };
     return await this.service.fillMeta(illustId, pageIndex, meta);
-  }
-
-  /**
-   * 回填缺失的展示元数据（缩略图/标题/作者等），供「喜欢」页网格展示。
-   * @param {string} illustId
-   * @param {number} [pageIndex=0]
-   * @param {object} [meta]
-   * @returns {Promise<{updated: boolean}>}
-   */
-  async backfillMeta(illustId, pageIndex = 0, meta = {}) {
-    if (!illustId) return { updated: false };
-    return await this.service.backfillMeta(illustId, pageIndex, meta);
   }
 
   /**

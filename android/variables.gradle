@@ -1,5 +1,6 @@
 ext {
-    minSdkVersion = 24
+    // API 29+：MediaStore RELATIVE_PATH/IS_PENDING 分块保存链路仅在 Android 10+ 可用
+    minSdkVersion = 29
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { pixivApi } from '../../api/pixiv.js';
+import { pixivApi, isCookieErrorCode } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import NeedCookieNotice from '../NeedCookieNotice.jsx';
 
@@ -7,6 +7,18 @@ const PAGE_SIZE = 30;
 const WORKS_PER_AUTHOR = 12;
 const MAX_CONCURRENT = 3;
 const CACHE_KEY = 'me_subscriptions';
+
+// 近期作品条目 → 详情页条目（openWork 与列表上下文共用同一映射）
+const toDetailItem = (w) => ({
+  illustId: w.illustId,
+  _pageIndex: 0,
+  _totalPages: w.pageCount || 1,
+  type: w.type === 'gif' ? 'gif' : 'image',
+  title: w.title,
+  author: w.authorName || w.author,
+  authorId: w.authorId,
+  thumbnailUrl: w.thumbnailUrl,
+});
 
 /**
  * 订阅面板 — 我关注的作者列表。
@@ -21,15 +33,22 @@ export default function FollowingAuthorsPanel({ onOpen, onOpenAuthor, onOpenSett
 
   const feed = useTabFeed({
     cacheKey: CACHE_KEY,
-    fetchPage: async (append) => {
+    fetchPage: async (append, _currentItems, isStale) => {
       if (!append) offsetRef.current = 0;
       const r = await pixivApi.fetchFollowingUsers({ offset: offsetRef.current, limit: PAGE_SIZE });
+      // 响应已被刷新/新请求取代 → 立刻停手：await 之后不能推进游标，
+      // 否则会把新一轮刷新刚归零的游标又推走一页，导致触底跳页
+      if (isStale?.()) return null;
       const list = r?.users || [];
-      offsetRef.current += list.length;
-      const hasMore = (r?.total || 0) > offsetRef.current;
+      // 失败（有 message/error 且无数据）不推进游标，重试才会重拉同一页
+      const failed = !list.length && !!(r?.message || r?.error);
+      if (!failed) offsetRef.current += list.length;
+      const hasMore = !failed && (r?.total || 0) > offsetRef.current;
       return {
         list,
         hasMore,
+        error: failed ? (r?.message || r?.error || '') : '',
+        errorCode: failed ? (r?.error || '') : '',
         emptyMessage: r?.message || r?.error || '还没有订阅任何画师 — 在画师主页点击关注吧',
       };
     },
@@ -72,19 +91,12 @@ export default function FollowingAuthorsPanel({ onOpen, onOpenAuthor, onOpenSett
     onReportLoad?.('subscriptions', reload);
   }, [reload, onReportLoad]);
 
-  const needCookie = !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
+  const needCookie = isCookieErrorCode(feed.errorCode);
 
-  const openWork = useCallback((w) => {
-    onOpen?.({
-      illustId: w.illustId,
-      _pageIndex: 0,
-      _totalPages: w.pageCount || 1,
-      type: w.type === 'gif' ? 'gif' : 'image',
-      title: w.title,
-      author: w.authorName || w.author,
-      authorId: w.authorId,
-      thumbnailUrl: w.thumbnailUrl,
-    });
+  // 包装 { items, index } 列表上下文（照抄 ImageGrid.handleGridOpen 模式）：
+  // 详情页可在这位作者的近期作品里左右切图；列表显式传入，回调保持稳定引用
+  const openWork = useCallback((w, list, index) => {
+    onOpen?.(toDetailItem(w), { items: (list || []).map(toDetailItem), index });
   }, [onOpen]);
 
   return (
@@ -117,8 +129,8 @@ export default function FollowingAuthorsPanel({ onOpen, onOpenAuthor, onOpenSett
               <span className="author-chevron">›</span>
             </button>
             <div className="author-card-works">
-              {(worksMap[u.userId] || []).map(w => (
-                <button key={w.illustId} className="author-work" onClick={() => openWork(w)}>
+              {(worksMap[u.userId] || []).map((w, wi) => (
+                <button key={w.illustId} className="author-work" onClick={() => openWork(w, worksMap[u.userId], wi)}>
                   <img
                     className="author-work-thumb"
                     src={w.thumbnailUrl || w.mediumUrl}

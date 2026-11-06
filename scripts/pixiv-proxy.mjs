@@ -136,12 +136,25 @@ export function pixivImageProxy() {
 }
 
 /**
+ * Pixiv 路由表（Vite dev 与 Electron 壳共用这一份，避免两边漂移）。
+ * /pixiv-thumb、/pixiv-zip 是基础设施路由（同一图床 / 动图 ZIP 白名单），不在 net.imgHosts 里。
+ * @returns {{prefix:string, fn:Function}[]}
+ */
+export function pixivRoutes() {
+  const img = pixivImageProxy();
+  return [
+    { prefix: '/pixiv-api', fn: createApiProxy('https://www.pixiv.net') },
+    { prefix: '/pixiv-img', fn: img.img },
+    { prefix: '/pixiv-thumb', fn: img.thumb },
+    { prefix: '/pixiv-zip', fn: img.zip },
+  ];
+}
+
+/**
  * 注册 Pixiv 代理到 Vite dev server。
  */
 export function registerPixivProxies(server) {
-  const img = pixivImageProxy();
-  server.middlewares.use('/pixiv-api', createApiProxy('https://www.pixiv.net'));
-  server.middlewares.use('/pixiv-img', img.img);
-  server.middlewares.use('/pixiv-thumb', img.thumb);
-  server.middlewares.use('/pixiv-zip', img.zip);
+  for (const r of pixivRoutes()) {
+    server.middlewares.use(r.prefix, r.fn);
+  }
 }

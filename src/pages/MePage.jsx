@@ -60,11 +60,15 @@ export default function MePage({ onOpen, onOpenSettings, onAuthorWorks, register
     });
   }, [registerRefresh]);
 
-  // 点击当前"我" tab（refreshToken 变化）→ 刷新当前活跃子面板
+  // 点击当前"我" tab（refreshToken 变化）→ 刷新当前活跃子面板。
+  // 跳过挂载那一次：切来源会整块重挂载本页，此时 token 往往已 > 0，
+  // 若照单全收就会在水合/首拉之外多发一次重复请求。
+  const lastTokenRef = useRef(refreshToken);
   useEffect(() => {
-    if (refreshToken > 0) {
+    if (refreshToken > 0 && refreshToken !== lastTokenRef.current) {
       panelLoadsRef.current[subTabRef.current]?.();
     }
+    lastTokenRef.current = refreshToken;
   }, [refreshToken]);
 
   const subPaneVisible = (key) => key === subTab || (subAnim && key === subAnim.from);

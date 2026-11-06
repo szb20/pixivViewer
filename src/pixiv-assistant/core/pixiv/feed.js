@@ -6,7 +6,7 @@ import { extractUserIdFromCookie, pixivReUrl, proxyThumb } from '../utils.js';
 import { mapIllustItem } from './mappers.js';
 
 export function createFeedApi(ctx) {
-    const { apiFetch, ensureCookie, classifyError, log } = ctx;
+    const { apiFetch, ensureCookie, classifyError, classifyCode, log } = ctx;
 
     /** 每日推荐 */
     async function fetchDiscovery(opts = {}) {
@@ -23,11 +23,11 @@ export function createFeedApi(ctx) {
 
             const rawIllusts = data?.body?.illusts || data?.body?.thumbnails?.illust || [];
             const illusts = rawIllusts.map(mapIllustItem);
-            log.warn('[discovery] start:', start, 'count:', illusts.length, 'apiError:', data?.error);
+            log.debug('[discovery] start:', start, 'count:', illusts.length, 'apiError:', data?.error);
             return { illusts, recommendMethods: data?.body?.recommendMethods || [], hasCookie: true };
         } catch (e) {
             log.error('[fetchDiscovery] 失败:', e?.message || e);
-            return { illusts: [], error: classifyError(e, '每日推荐') };
+            return { illusts: [], error: classifyCode(e), message: classifyError(e, '每日推荐') };
         }
     }
 
@@ -49,7 +49,7 @@ export function createFeedApi(ctx) {
                 { headers, timeout: 15000 }
             );
 
-            const works = (data?.body?.works || []).map(item => ({
+            const illusts = (data?.body?.works || []).map(item => ({
                 illustId: String(item.id || item.illustId || ''),
                 title: item.title || item.illustTitle || '',
                 author: item.userName || item.userAccount || '',
@@ -70,11 +70,11 @@ export function createFeedApi(ctx) {
                 userId: String(userId),
                 total: data?.body?.total || 0,
                 offset,
-                works,
+                illusts,
             };
         } catch (e) {
             log.error('[fetchBookmarks] 失败:', e.message);
-            return { error: 'fetch_failed', message: classifyError(e, '收藏夹') };
+            return { error: classifyCode(e), message: classifyError(e, '收藏夹') };
         }
     }
 
@@ -98,7 +98,7 @@ export function createFeedApi(ctx) {
             };
         } catch (e) {
             log.error('[fetchFollowing] 失败:', e.message);
-            return { illusts: [], error: classifyError(e, '关注列表') };
+            return { illusts: [], error: classifyCode(e), message: classifyError(e, '关注列表') };
         }
     }
 

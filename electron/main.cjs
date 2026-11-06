@@ -24,19 +24,36 @@ let proxyServer = null;
 let proxyPort = 0;
 let mainWindow = null;
 
-/** 统一 CORS 头（每次调用固定为这份值） */
+/** 统一 CORS 头（每次调用固定为这份值；ACO 按请求 Origin 动态给，见 corsHeaders） */
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
   'Access-Control-Allow-Headers': '*',
 };
+
+/**
+ * 允许跨源访问本代理的来源：renderer 的 file://（含部分 Chromium 发送的 null）
+ * 与 dev server。其余来源（如浏览器里随便什么网页）不带 ACAO，fetch 读不到响应。
+ */
+const ALLOWED_ORIGINS = new Set(['file://', 'null']);
+if (process.env.PIXIVVIEWER_DEV_URL) {
+  try { ALLOWED_ORIGINS.add(new URL(process.env.PIXIVVIEWER_DEV_URL).origin); } catch { /* 非法 URL 忽略 */ }
+}
+
+function corsHeaders(req) {
+  const origin = req?.headers?.origin || '';
+  // 无 Origin（img 标签 / curl / 同源）不涉及 CORS，照常放行
+  if (!origin || ALLOWED_ORIGINS.has(origin)) {
+    return { ...CORS_HEADERS, 'Access-Control-Allow-Origin': origin || '*' };
+  }
+  return null; // 不给 ACAO，浏览器侧 fetch/preflight 自然失败
+}
 
 /**
  * 包装 res：上游中间件用 res.writeHead(status, upstreamHeaders) 会整体替换已有头，
  * 导致这里预设的 CORS 头被冲掉。这里把 writeHead 换成"始终合并 CORS 头"的版本。
  * （renderer 以 file:// 加载，跨源 fetch 必须见到 Access-Control-Allow-Origin）
  */
-function withCors(res) {
+function withCors(req, res) {
   const origWriteHead = res.writeHead.bind(res);
   res.writeHead = (statusCode, statusMessage, headers) => {
     // 兼容 (status, headers) 两参调用
@@ -44,7 +61,8 @@ function withCors(res) {
       headers = statusMessage;
       statusMessage = undefined;
     }
-    const merged = { ...CORS_HEADERS };
+    const cors = corsHeaders(req);
+    const merged = cors ? { ...cors } : {};
     if (headers && typeof headers === 'object') Object.assign(merged, headers);
     return origWriteHead(statusCode, statusMessage, merged);
   };
@@ -54,7 +72,7 @@ function withCors(res) {
 /** 处理 OPTIONS 预检（file:// 页面发起跨源 fetch 前会先发 preflight） */
 function optionsMiddleware(req, res, next) {
   if (req.method === 'OPTIONS') {
-    withCors(res).writeHead(204).end();
+    withCors(req, res).writeHead(204).end();
     return;
   }
   next();
@@ -68,20 +86,10 @@ async function startProxyServer() {
   proxyUtils = await import('../scripts/proxy-utils.mjs');
   pixivProxy = await import('../scripts/pixiv-proxy.mjs');
   booruProxy = await import('../scripts/booru-proxy.mjs');
-  const { createApiProxy } = proxyUtils;
 
-  // 复用 scripts/ 下的现有中间件（与 Vite dev 完全同款），仅新增 CORS 包装：
-  // /pixiv-api → www.pixiv.net（透传 x-pixiv-cookie 头）
-  // /pixiv-img | /pixiv-thumb → i.pixiv.re
-  // /pixiv-zip → 原始 ZIP（Ugoira）
-  // /yande-* / /konachan-* → 见 scripts/booru-proxy.mjs 的路由表
-  const img = pixivProxy.pixivImageProxy();
-  const routes = [
-    { prefix: '/pixiv-api', fn: createApiProxy('https://www.pixiv.net') },
-    { prefix: '/pixiv-img', fn: img.img },
-    { prefix: '/pixiv-thumb', fn: img.thumb },
-    { prefix: '/pixiv-zip', fn: img.zip },
-  ];
+  // 复用 scripts/ 下的现有路由表（与 Vite dev 完全同款），仅新增 CORS 包装：
+  // Pixiv 4 条 + booru 全量 → 见 scripts/pixiv-proxy.mjs / scripts/booru-proxy.mjs
+  const routes = [...pixivProxy.pixivRoutes()];
   for (const r of booruProxy.BOORU_ROUTES) {
     routes.push({ prefix: r.prefix, fn: booruProxy.createBooruMiddleware(r) });
   }
@@ -92,12 +100,12 @@ async function startProxyServer() {
     optionsMiddleware(req, res, () => {
       const route = routes.find(r => req.url.startsWith(r.prefix));
       if (!route) {
-        withCors(res).writeHead(404).end();
+        withCors(req, res).writeHead(404).end();
         return;
       }
       // 剥掉前缀交给中间件（与 Vite 剥前缀的语义一致）
       req.url = req.url.slice(route.prefix.length) || '/';
-      withCors(res);
+      withCors(req, res);
       // 中间件抛错（如畸形 URL / 非法百分号编码）绝不能冒泡到主进程：
       // 未捕获异常会让 Electron 弹错误框甚至中断进程，这里统一兜底 500。
       const onRouteError = (e) => {
@@ -150,7 +158,7 @@ async function startProxyServer() {
  */
 function registerDownloadIpc() {
   ipcMain.handle('download:image', async (event, { id, url, referer } = {}) => {
-    if (!id || !url) throw new Error('bad_request');
+    if (!id || !url) throw Object.assign(new Error('bad_request'), { code: 'bad_request' });
     const holder = proxyUtils.createAgentHolder();
     const sender = event.sender;
 
@@ -165,7 +173,8 @@ function registerDownloadIpc() {
       }, (res) => {
         if (res.statusCode >= 400) {
           res.resume();
-          reject(new Error(`HTTP ${res.statusCode}`));
+          // code 供渲染侧等值判断（替代对消息字符串的嗅探），status 沿用 transport 的惯例
+          reject(Object.assign(new Error(`HTTP ${res.statusCode}`), { code: `http_${res.statusCode}`, status: res.statusCode }));
           return;
         }
         const total = Number(res.headers['content-length']) || 0;

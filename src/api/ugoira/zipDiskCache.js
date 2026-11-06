@@ -5,8 +5,7 @@
  * LRU 保留最近 ZIP_CACHE_MAX 个，超 40MB 的包不落盘（读取内存风险）。
  * 读写均按 2MB 分块，避免整包 base64 内存峰值。
  */
-import { getFS } from '../../pixiv-assistant/capacitor/config.js';
-import { CACHE_DIR } from '../../pixiv-assistant/core/constants.js';
+import { getFS, CACHE_DIR } from '../../pixiv-assistant/index.js';
 import { getGallerySaver } from '../../utils/platform.js';
 import { createLogger } from '../../utils/logger.js';
 import { concatBytes, base64ToBytes, bytesToBase64 } from '../../utils/bytes.js';
@@ -118,25 +117,79 @@ export async function deleteZipFromDisk(id) {
 /**
  * 把原版无损 ZIP 从磁盘缓存复制到相册目录（Pictures/PixivViewer/，与保存的图片/动图同目录），
  * 作为卸载后仍保留的无损副本（尽力而为：缓存被 LRU 淘汰或读取失败就跳过）。
+ *
+ * 分块通道（startDownloadFile/appendDownloadChunk/finishDownloadFile）：
+ * readFileInChunks 读一块、桥传一块，JS 侧峰值 ≈ 单块（2MB）；
+ * 整包 saveDownload 要一次性传 ~53MB base64 字符串，WebView 上有 OOM 风险，
+ * 仅在旧原生包没有分块 API 时退回。块经队列串行 append，保证写入顺序。
  */
-export async function backupLosslessZip(sid) {
+// 同 sid 并发去重：两次并发 start 同名文件会在原生侧互相顶掉对方会话，两败俱伤
+const inflightBackups = new Map();
+
+export function backupLosslessZip(sid) {
+  const existing = inflightBackups.get(sid);
+  if (existing) return existing;
+  const p = doBackupLosslessZip(sid).finally(() => inflightBackups.delete(sid));
+  inflightBackups.set(sid, p);
+  return p;
+}
+
+async function doBackupLosslessZip(sid) {
+  const fileName = `pixiv_${sid}_ugoira.zip`;
+  let chunked = false;
+  const S = getGallerySaver();
   try {
-    const S = getGallerySaver();
     if (!S) return;
     const fs = await getFS();
     if (!fs?.plugin) return;
     const zipPath = zipCachePath(sid);
-    const raw = await fs.plugin.readFile({ path: zipPath, directory: 'DATA' }).catch(() => null);
-    if (!raw) return;
-    const base64 = typeof raw === 'string' ? raw : raw.data || '';
-    if (!base64) return;
-    await S.saveDownload({
-      fileName: `pixiv_${sid}_ugoira.zip`,
-      data: base64,
-      mimeType: 'application/zip',
-    });
+
+    if (typeof S.startDownloadFile === 'function') {
+      await S.startDownloadFile({ fileName, mimeType: 'application/zip' });
+      chunked = true;
+      await new Promise((resolve, reject) => {
+        let eof = false;
+        const queue = [];
+        let drainer = null;
+        // readFileInChunks 回调不等待异步消费者：块先进队列，由单一 drainer
+        // 串行 append（并发 append 在原生线程池上会乱序）
+        const drain = () => {
+          if (drainer || !queue.length) return;
+          drainer = (async () => {
+            while (queue.length) {
+              const data = queue.shift();
+              await S.appendDownloadChunk({ fileName, data });
+            }
+          })()
+            .then(() => { drainer = null; if (eof) resolve(); })
+            .catch(reject);
+        };
+        fs.plugin.readFileInChunks(
+          { path: zipPath, directory: 'DATA', chunkSize: ZIP_CACHE_CHUNK },
+          (chunkRead, err) => {
+            if (err) { reject(err); return; }
+            const data = chunkRead?.data;
+            if (!data) { eof = true; if (!drainer) resolve(); return; } // 空块 = 文件结束
+            queue.push(typeof data === 'string' ? data : data.data || '');
+            drain();
+          },
+        );
+      });
+      await S.finishDownloadFile({ fileName });
+    } else {
+      // 旧原生包没有分块 API：退回整包读写
+      const raw = await fs.plugin.readFile({ path: zipPath, directory: 'DATA' }).catch(() => null);
+      if (!raw) return;
+      const base64 = typeof raw === 'string' ? raw : raw.data || '';
+      if (!base64) return;
+      await S.saveDownload({ fileName, data: base64, mimeType: 'application/zip' });
+    }
     log.info(`[ugoira] 已备份无损 ZIP: ${sid}`);
   } catch (e) {
+    // 尽力而为：备份失败不影响保存主流程；已开启的分块会话清掉半写文件
+    if (chunked) {
+      try { await S.abortDownloadFile({ fileName }); } catch { /* 会话可能已被原生侧清理 */ }
+    }
     log.debug('[ugoira] 备份无损 ZIP 失败:', e?.message || e);
   }
 }

@@ -17,8 +17,8 @@
  *
  * 文档：https://wallhaven.cc/help/api
  */
-import { createTransport } from '../api/transport.js';
-import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/core/utils.js';
+import { createTransport } from '../utils/transport.js';
+import { qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/index.js';
 import { createLogger } from '../utils/logger.js';
 import { classifyError, parseResolution, toIllust } from './shared.js';
 
@@ -105,10 +105,36 @@ export function createWallhavenSource(def) {
     userAgent: def.net.userAgent,
   });
 
+  /** 上游每页固定 24 条，不接受 limit 参数 */
+  const UPSTREAM_PAGE = 24;
+
   /** 取一页条目（响应统一是 { data, meta }，只用得上 data） */
   async function listPage(pathname) {
     const data = await transport(pathname);
     return Array.isArray(data?.data) ? data.data : [];
+  }
+
+  /**
+   * 窗口映射：本地第 page 页 = 全局流 [(page-1)*limit, page*limit)。
+   * 上游固定 24 条/页而调用方按 20 条翻页，直接透传页码会把上游
+   * 每页的第 21-24 条永久挤掉（翻页永远翻不到），所以拉取覆盖该窗口的
+   * 1-2 个上游页拼接后切片。连续翻页会重复拉上游首页，匿名限速
+   * 45 req/min 下这点重复远好于丢条目。
+   * @param {(upstreamPage: number) => string} buildPath — 上游页码 → 请求路径
+   */
+  async function listWindow(buildPath, page, limit) {
+    const start = (page - 1) * limit;
+    const first = Math.floor(start / UPSTREAM_PAGE);
+    const last = Math.floor((start + limit - 1) / UPSTREAM_PAGE);
+    const items = [];
+    for (let p = first; p <= last; p++) {
+      const chunk = await listPage(buildPath(p + 1));
+      if (!chunk.length) break;
+      items.push(...chunk);
+      if (chunk.length < UPSTREAM_PAGE) break; // 上游到底，多拉无益
+    }
+    const offset = start - first * UPSTREAM_PAGE;
+    return items.slice(offset, offset + limit);
   }
 
   /** 排序参数 → 查询串片段（search 端点用） */
@@ -144,10 +170,11 @@ export function createWallhavenSource(def) {
           return { images: item ? [item] : [], query: trimmed, total: item ? 1 : 0 };
         }
         const params = searchQuery({ q: trimmed, sorting: 'relevance', safeOnly });
-        params.set('page', String(page));
-        const items = await listPage(`/api/v1/search?${params}`);
-        // Wallhaven 每页固定 24 条，不接受 limit 参数 —— 这里本地夹到调用方要的数量
-        return { images: items.slice(0, limit).map(p => mapPost(p, sourceId)).filter(Boolean), query: trimmed };
+        const items = await listWindow(p => {
+          params.set('page', String(p));
+          return `/api/v1/search?${params}`;
+        }, page, limit);
+        return { images: items.map(p => mapPost(p, sourceId)).filter(Boolean), query: trimmed };
       } catch (e) {
         log.error('[search] 失败:', e?.message || e);
         return { images: [], query: trimmed, error: classifyError(e, '搜索') };
@@ -162,9 +189,11 @@ export function createWallhavenSource(def) {
     async feed({ page = 1, limit = 20, safeOnly = false } = {}) {
       try {
         const params = searchQuery({ sorting: 'hot', safeOnly });
-        params.set('page', String(page));
-        const items = await listPage(`/api/v1/search?${params}`);
-        return { illusts: items.slice(0, limit).map(p => mapPost(p, sourceId)).filter(Boolean) };
+        const items = await listWindow(p => {
+          params.set('page', String(p));
+          return `/api/v1/search?${params}`;
+        }, page, limit);
+        return { illusts: items.map(p => mapPost(p, sourceId)).filter(Boolean) };
       } catch (e) {
         log.error('[feed] 失败:', e?.message || e);
         return { illusts: [], message: classifyError(e, '推荐') };

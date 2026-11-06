@@ -18,6 +18,7 @@
  *   feed     — 每日推荐 / 收藏夹 / 关注最新作品
  *   user     — 作者作品列表 / 全部作品 ID / 作者资料
  *   social   — 关注 / 取关 / 关注的作者列表
+ *   bookmark — 作品收藏 / 取消收藏（红心远端同步）
  */
 
 import { createApiClient } from './pixiv/client.js';
@@ -27,6 +28,7 @@ import { createRankingApi } from './pixiv/ranking.js';
 import { createFeedApi } from './pixiv/feed.js';
 import { createUserApi } from './pixiv/user.js';
 import { createSocialApi } from './pixiv/social.js';
+import { createBookmarkApi } from './pixiv/bookmark.js';
 
 // ── 工厂 ──
 export function createPixivApi(transport) {
@@ -41,6 +43,8 @@ export function createPixivApi(transport) {
   const feed = createFeedApi(ctx);
   const user = createUserApi(ctx);
   const social = createSocialApi(ctx);
+  // unbookmark 先读详情 LRU 缓存的 bookmarkId（patchIllustCache 维护），miss 才拉详情
+  const bookmark = createBookmarkApi({ ...ctx, getCachedIllust: illust.getCachedIllust });
 
   return {
     ...search,
@@ -49,5 +53,6 @@ export function createPixivApi(transport) {
     ...user,
     ...ranking,
     ...social,
+    ...bookmark,
   };
 }

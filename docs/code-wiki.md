@@ -505,7 +505,7 @@ Referer 策略：仅 pximg/pixiv.re 域名带 `https://www.pixiv.net/`（booru �
 - `getSettingsSync()` 合并默认值：`proxyUrl`（默认 `http://127.0.0.1:7890`）、`pixivCookie`、`gridLayout`、`saveDirectory`、`saveAskEachTime`、`imageSource`、`booruSafeOnly`
 - `configurePixiv({getSettings, getFS})` 支持宿主注入适配器（Electron/测试）
 - `getFS()` 仅原生平台动态 import `@capacitor/filesystem`
-- ⚠️ `buildCookie` 构建期 Cookie 注入为**测试期临时方案**（`VITE_PIXIV_COOKIE` / `VITE_DEV_COOKIE`），发版前必须删除
+- 构建期 Cookie 注入（`buildCookie` / `VITE_PIXIV_COOKIE` / `VITE_DEV_COOKIE`）已**整段删除**——Vite 静态内联会把 PHPSESSID 打进产物，反编译即可泄漏；Cookie 只经设置页手填
 
 ---
 
@@ -864,9 +864,8 @@ npm run desktop:build  # Windows 安装包/便携版 → release/
 | `PROXY_URL` / `VITE_PROXY_URL` | 代理地址（默认 `http://127.0.0.1:7890`） |
 | `CAP_DEV=1` | Capacitor 开发模式（dev server URL） |
 | `CAP_DEV_URL` | 自定义 dev server 地址 |
-| `VITE_PIXIV_COOKIE` / `VITE_DEV_COOKIE` | ⚠️ 测试期临时 Cookie 注入，**发版前必须删掉 .env 及 config.js 的 buildCookie** |
 
-> 正式版不需要 .env 文件。`VITE_*` 变量会被静态内联进前端产物（反编译即可读到 PHPSESSID），Cookie 只在设置页手填。
+> 正式版不需要 .env 文件。历史变量 `VITE_PIXIV_COOKIE` / `VITE_DEV_COOKIE` 及 config.js 的 `buildCookie` 注入机制已整段删除——`VITE_*` 变量会被静态内联进前端产物（反编译即可读到 PHPSESSID），Cookie 只在设置页手填。
 
 ### 18.5 其他脚本
 

@@ -1,0 +1,10 @@
+refactor: 深度 review 30+ 问题全量修复（安全/体验/性能/结构/规范五批次）
+
+- 安全：Cookie 构建期注入整段删除、Electron 代理 CORS 改 Origin 白名单、
+  代理请求头透传改白名单、vite dev host 收敛 127.0.0.1、minSdk 29
+- 性能：排行档位缓存秒开、下载插件改分块拉模式（512KB readChunk）、
+  图片页懒 hydrate、标签缓存 TTL 收敛
+- 结构：transport 下沉 utils 层、ImageDetailView 拆 4 模块、
+  pixiv-assistant barrel 收敛并用 oxlint 强制、存储层注入解耦
+- 规范：错误对象统一 code 字段（UI 等值判断替代 4 处正则嗅探）、
+  同键 in-flight 去重收敛、getMeta 读错上抛、hasMore 修正

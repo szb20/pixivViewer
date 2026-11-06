@@ -8,9 +8,13 @@
  */
 import { appStorage, migrateFromLegacyKey } from '../../utils/appStorage.js';
 import { DEFAULT_SOURCE } from '../core/utils.js';
+import { isNative } from '../../utils/platform.js';
 
 let _getSettings = null;
 let _getFS = null;
+// 非 Pixiv 来源的下载 URL 改写器（dev 下把图床域名换成同源代理前缀）。
+// 存储层不 import sources（保持 pixiv-assistant 包独立可测），由 API 层注入（见 api/index.js）。
+let _foreignDownloadUrls = null;
 
 // 迁移旧版独立 settings key → 统一 key
 migrateFromLegacyKey('pixiv_viewer_settings', 'settings');
@@ -20,21 +24,18 @@ migrateFromLegacyKey('pixiv_viewer_settings', 'settings');
  * @param {Object} opts
  * @param {Function} [opts.getSettings] - 返回 settings 对象的异步函数
  * @param {Function} [opts.getFS] - 返回 Capacitor Filesystem 对象的异步函数
+ * @param {Function} [opts.foreignDownloadUrls] - (item) => string[]，非 Pixiv 来源的下载 URL 候选
  */
 export function configurePixiv(opts = {}) {
   if (opts.getSettings) _getSettings = opts.getSettings;
   if (opts.getFS) _getFS = opts.getFS;
+  if (opts.foreignDownloadUrls) _foreignDownloadUrls = opts.foreignDownloadUrls;
 }
 
-// ⚠️ 【测试期临时】构建期注入 Cookie —— 发版前必须整段删除（连同下面的 buildCookie 引用）。
-// Vite 会把值静态内联进产物，APK / Electron 包反编译即可拿到 PHPSESSID，属于已知取舍。
-// - DEV（vite dev server / 桌面端调试）：读 VITE_PIXIV_COOKIE，生产构建时该分支被静态剔除。
-// - 测试包（生产构建）：显式读 VITE_DEV_COOKIE —— 不设这个变量，注入即自动失效，
-//   所以「发版」只需删掉这一行，无需改别处。
-// 设置页手填的值优先级更高（用户改过一次就覆盖内置值）；点「清空」可恢复内置值。
-const buildCookie = import.meta.env.DEV
-  ? (import.meta.env.VITE_PIXIV_COOKIE || '')
-  : (import.meta.env.VITE_DEV_COOKIE || '');
+/** 取注入的非 Pixiv 下载 URL 改写器（未注入返回 null） */
+export function getForeignDownloadUrls() {
+  return _foreignDownloadUrls;
+}
 
 /** 同步读取设置（渲染期可用；合并默认值） */
 export function getSettingsSync() {
@@ -42,7 +43,7 @@ export function getSettingsSync() {
   return {
     ...stored,
     proxyUrl: stored.proxyUrl || 'http://127.0.0.1:7890',
-    pixivCookie: stored.pixivCookie || buildCookie,
+    pixivCookie: stored.pixivCookie || '',
     gridLayout: stored.gridLayout || 'waterfall',      // 内容页布局：'waterfall'（瀑布流）| 'grid'（方形宫格）
     saveDirectory: stored.saveDirectory || '',         // 桌面端图片保存目录（空 = 系统图片文件夹）
     // 桌面端：指定了目录后是否仍每次弹「另存为」。默认 false = 直接存进上面的目录
@@ -64,8 +65,7 @@ let _fsCache = null;
 async function defaultGetFS() {
   if (_fsCache !== null) return _fsCache;
   // 仅 Capacitor 原生环境提供 Filesystem；桌面端不走本路径（桌面导出/下载走 desktopProxy 通道）
-  const isNative = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.();
-  if (!isNative) {
+  if (!isNative()) {
     _fsCache = null;
     return null;
   }

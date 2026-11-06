@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { pixivApi } from '../../api/pixiv.js';
+import { pixivApi, isCookieErrorCode } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { useLikedSet } from '../../context/pixivCacheContext.js';
 import ImageGrid from '../ImageGrid.jsx';
 import NeedCookieNotice from '../NeedCookieNotice.jsx';
 
-const PAGE_SIZE = 48;
 const CACHE_KEY = 'me_following';
 
 /** 关注画师最新作品面板（fetchFollowing 返回作品流，非用户列表）。刷新注册由 MePage 聚合。 */
@@ -20,14 +19,23 @@ export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad })
       if (cache.page > 1) pageRef.current = cache.page;
       return { items: cache.items, hasMore: !!cache.hasMore };
     },
-    fetchPage: async (append) => {
+    fetchPage: async (append, _currentItems, isStale) => {
       if (!append) pageRef.current = 1;
       const r = await pixivApi.fetchFollowing({ page: pageRef.current });
+      // 响应已被刷新/新请求取代 → 立刻停手：await 之后不能推进页码，
+      // 否则会把新一轮刷新刚归零的页码又推走一页，导致触底跳页
+      if (isStale?.()) return null;
       const list = r?.illusts || [];
-      pageRef.current += 1;
+      // 失败（有 message/error 且无数据）不推进页码，重试才会重拉同一页
+      const failed = !list.length && !!(r?.message || r?.error);
+      if (!failed) pageRef.current += 1;
       return {
         list,
-        hasMore: list.length >= PAGE_SIZE,
+        // fetchFollowing 是 p=1,2,3 的整页接口，上游每页容量与本地 PAGE_SIZE(48) 无关：
+        // 只要有返回就继续，直到某页返回空（空页无 error → failed=false → hasMore=false 自然断流）
+        hasMore: !failed && list.length > 0,
+        error: failed ? (r?.message || r?.error || '') : '',
+        errorCode: failed ? (r?.error || '') : '',
         emptyMessage: r?.message || r?.error || '还没有关注任何画师 — 在排行页发现喜欢的画师吧',
         cacheExtra: { page: pageRef.current },
       };
@@ -39,7 +47,7 @@ export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad })
     onReportLoad?.('following', reload);
   }, [reload, onReportLoad]);
 
-  const needCookie = !!feed.error && /cookie|no_cookie|需要.*Cookie/i.test(feed.error);
+  const needCookie = isCookieErrorCode(feed.errorCode);
 
   return (
     <>

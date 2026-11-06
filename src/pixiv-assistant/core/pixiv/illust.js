@@ -42,7 +42,8 @@ export function createIllustApi(ctx) {
         const cached = getCachedIllust(illustId);
         if (cached) return cached;
         try {
-            const data = await apiFetch(`/ajax/illust/${illustId}`, { skipCookie: true });
+            // 带 Cookie 请求（有 Cookie 时返回 bookmarkData 供红心远端同步联动；未登录自动不带，行为不变）
+            const data = await apiFetch(`/ajax/illust/${illustId}`);
             const body = data?.body;
             if (!body) return { illust: null, error: '未找到' };
 
@@ -57,7 +58,9 @@ export function createIllustApi(ctx) {
             let pageImages = [];
             if (pageCount > 1) {
                 try {
-                    const pagesData = await apiFetch(`/ajax/illust/${illustId}/pages`, { skipCookie: true });
+                    // 带 Cookie 请求：R-18 作品的 /pages 子请求匿名会 403，
+                    // 降级到详情兜底会丢逐页宽高（未登录时 transport 自动不带，行为不变）
+                    const pagesData = await apiFetch(`/ajax/illust/${illustId}/pages`);
                     pageImages = mapAjaxPages(pagesData?.body);
                 } catch (pageErr) {
                     log.warn('[fetchIllust] 获取逐页尺寸失败，使用详情兜底:', pageErr?.message || pageErr);
@@ -83,6 +86,8 @@ export function createIllustApi(ctx) {
                     pixivUrl: `https://www.pixiv.net/artworks/${illustId}`,
                     width: body.width || 0,
                     height: body.height || 0,
+                    bookmarked: !!body.bookmarkData, // 远端收藏状态（红心同步联动）
+                    bookmarkId: body.bookmarkData?.id ?? null,
                     urls: body.urls || {}, // 原始分辨率 URL 供外部使用
                 },
             };
@@ -93,6 +98,19 @@ export function createIllustApi(ctx) {
             log.error('[fetchIllust] 失败:', e.message);
             return { illust: null, error: classifyError(e, '作品详情') };
         }
+    }
+
+    /** 就地修改缓存条目的 illust 字段（红心远端同步后防 5 分钟内回显旧状态） */
+    function patchIllustCache(illustId, patch) {
+        const entry = illustCache.get(illustId);
+        if (!entry || !patch) return;
+        if (!entry.data?.illust) {
+            // 条目被裁剪过（无 illust 字段）：patch 会写进游离对象被丢弃，留日志好排查红心回显旧态的问题
+            log.debug('[patchIllustCache] 缓存条目缺 illust，patch 未生效:', illustId, patch);
+            return;
+        }
+        Object.assign(entry.data.illust, patch);
+        // 只改数据不改 time：保留原 TTL，不续命也不提前过期
     }
 
     /** 随机插画（搜索 10000users入り 然后随机选一个） */
@@ -160,5 +178,5 @@ export function createIllustApi(ctx) {
         }
     }
 
-    return { fetchIllust, randomIllust, fetchRelated };
+    return { fetchIllust, patchIllustCache, randomIllust, fetchRelated, getCachedIllust };
 }
