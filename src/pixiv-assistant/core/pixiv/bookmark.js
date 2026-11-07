@@ -29,18 +29,29 @@ export function createBookmarkApi(ctx) {
                     restrict: restrict === 'private' ? '1' : '0',
                     format: 'json',
                 }).toString();
-                const data = await apiFetch('/bookmark_add.php', {
+                // 实测 2026-04 起 /bookmark_add.php 成功时也返回跳转页 HTML 而非 JSON
+                // （即使带 format=json，收藏实际已写入）→ raw 取回不解析，
+                // 改为回查作品详情：bookmarkData 出现即成功，顺带取回 bookmark_id。
+                await apiFetch('/bookmark_add.php', {
                     method: 'POST',
                     body,
                     headers: { ...formHeaders(cookieCheck.cookie), 'x-csrf-token': token },
                     timeout: 15000,
+                    raw: true,
                 });
-                // 已收藏过时 Pixiv 返回 error:false 或 already 类消息 → 归一为幂等成功
-                const ok = Array.isArray(data) || (data && data.error === false);
-                if (ok) return { success: true };
-                const msg = data?.message || data?.error || '';
-                if (/already/i.test(String(msg))) return { success: true, already: true };
-                return { success: false, error: msg || '收藏失败' };
+                const detail = await apiFetch(`/ajax/illust/${illustId}`, {
+                    headers: { 'Cookie': `PHPSESSID=${cookieCheck.cookie}` },
+                    timeout: 15000,
+                });
+                const bookmarkId = detail?.body?.bookmarkData?.id;
+                if (bookmarkId) return { success: true, bookmarkId };
+                // 详情里没出现收藏记录：可能 token 失效导致 POST 被 Pixiv 吞掉
+                //（其 HTML 响应无从分辨成败），换 token 重试一次
+                if (attempt === 0) {
+                    invalidateCsrfToken();
+                    continue;
+                }
+                return { success: false, error: '收藏失败：Pixiv 未记录该收藏' };
             } catch (e) {
                 if (attempt === 0 && isCsrfRetryable(e)) {
                     // token 可能已失效：清缓存强制重取后重试一次

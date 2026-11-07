@@ -54,8 +54,8 @@ async function _doSync(id, targetLiked) {
     showToast(targetLiked ? '已喜欢，同步收藏失败' : '已取消，收藏移除失败', { type: 'warning' });
     return false;
   }
-  // 修详情 LRU 缓存，防 5 分钟内详情页红心回显错误
-  try { pixivApi.patchIllustCache(id, { bookmarked: targetLiked, bookmarkId: targetLiked ? undefined : null }); } catch { }
+  // 修详情 LRU 缓存，防 5 分钟内详情页红心回显错误；顺带存 bookmarkId，取消收藏可省一次详情请求
+  try { pixivApi.patchIllustCache(id, { bookmarked: targetLiked, bookmarkId: targetLiked ? result?.bookmarkId : null }); } catch { }
   // 幂等命中（远端本来就处于目标态）不弹「已移除」——那会误导用户以为刚刚删了什么
   if (!targetLiked && !result?.already) showToast('已从 Pixiv 收藏夹移除', { type: 'info' });
   return true;
