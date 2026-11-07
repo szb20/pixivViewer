@@ -20,6 +20,22 @@ let _foreignDownloadUrls = null;
 migrateFromLegacyKey('pixiv_viewer_settings', 'settings');
 
 /**
+ * 个人自装构建的 Cookie 注入（.env 的 VITE_PIXIV_COOKIE，Vite 在构建期静态内联）。
+ * 仅适合 APK 不分发的自用场景——反编译 APK 即可拿到这个值，切勿分发内含 Cookie 的包。
+ * 首次启动时种进 settings（用户已在设置页填过则不覆盖，清空后也不会复活）。
+ */
+const BUILD_COOKIE =
+  String(import.meta.env?.VITE_PIXIV_COOKIE || '').trim().replace(/^PHPSESSID=/i, '');
+
+if (BUILD_COOKIE) {
+  const stored = appStorage.get('settings', {}) || {};
+  if (!stored.pixivCookie) {
+    stored.pixivCookie = BUILD_COOKIE;
+    appStorage.set('settings', stored);
+  }
+}
+
+/**
  * 配置 Pixiv 模块的适配器。
  * @param {Object} opts
  * @param {Function} [opts.getSettings] - 返回 settings 对象的异步函数
