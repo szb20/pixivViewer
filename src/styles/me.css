@@ -101,7 +101,7 @@
   border: none;
   border-radius: var(--r-sm);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--wash-rgb), 0.045);
   backdrop-filter: blur(14px) saturate(145%);
   cursor: pointer;
   scroll-snap-align: start;
@@ -121,10 +121,10 @@
   height: 72px;
   border-radius: var(--r-sm);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-    rgba(15, 17, 21, 0.16);
+    linear-gradient(135deg, rgba(var(--wash-rgb), 0.075), rgba(var(--wash-rgb), 0.025)),
+    rgba(var(--glass-rgb), 0.16);
   backdrop-filter: blur(16px) saturate(150%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.08),
+    inset 0 0 0 1px rgba(var(--wash-rgb), 0.045);
 }

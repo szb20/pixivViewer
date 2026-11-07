@@ -5,11 +5,18 @@ import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
 import { getSource } from '../sources/registry.js';
 import { useImageSourceId, setBooruSafeOnly } from '../hooks/useImageSource.js';
 import { isDesktopShell, getDesktopProxy } from '../utils/platform.js';
+import { setTheme } from '../utils/theme.js';
 import '../styles/settings.css';
 
 const LAYOUT_OPTIONS = [
   { value: 'waterfall', label: '瀑布流' },
   { value: 'grid', label: '方形宫格' },
+];
+
+const THEME_OPTIONS = [
+  { value: 'auto', label: '跟随系统' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
 ];
 
 /**
@@ -20,6 +27,7 @@ export default function SettingsPage({ onClose }) {
   const [cookie, setCookie] = useState('');
   const [proxyUrl, setProxyUrl] = useState('');
   const [gridLayout, setGridLayout] = useState('waterfall');
+  const [themeMode, setThemeMode] = useState('dark');
   const [saveDirectory, setSaveDirectory] = useState('');
   const [askEachTimeState, setAskEachTimeState] = useState(false);
   // 当前来源：读模块单例的实时值（切来源的入口在侧边栏 / 抽屉，不在这里）。
@@ -61,6 +69,7 @@ export default function SettingsPage({ onClose }) {
       setCookie(s.pixivCookie || '');
       setProxyUrl(s.proxyUrl || '');
       setGridLayout(s.gridLayout || 'waterfall');
+      setThemeMode(s.theme || 'dark');
       setSaveDirectory(s.saveDirectory || '');
       setAskEachTimeState(s.saveAskEachTime === true);
       setSafeOnly(s.booruSafeOnly === true);
@@ -209,6 +218,31 @@ export default function SettingsPage({ onClose }) {
                 doSave({ proxyUrl: e.target.value.trim() });
               }}
             />
+          </div>
+        </div>
+
+        {/* ── 外观 ── */}
+        <div className="settings-group">
+          <div className="settings-group-label">外观</div>
+          <div className="settings-row">
+            <div>
+              <div className="settings-row-label">主题</div>
+              <div className="settings-row-hint">跟随系统时随系统暗/亮实时联动</div>
+            </div>
+            <div className="settings-pill-group">
+              {THEME_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  className={`settings-pill${themeMode === opt.value ? ' settings-pill--active' : ''}`}
+                  onClick={() => {
+                    setThemeMode(opt.value);
+                    setTheme(opt.value);
+                    doSave({ theme: opt.value });
+                  }}
+                  aria-pressed={themeMode === opt.value}
+                >{opt.label}</button>
+              ))}
+            </div>
           </div>
         </div>
 

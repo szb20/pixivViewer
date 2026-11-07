@@ -4,6 +4,7 @@ import { scopedTabKey } from '../pixiv-assistant/index.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import SkeletonGrid from '../components/SkeletonGrid.jsx';
 import { useImageSourceId } from '../hooks/useImageSource.js';
 import { booruApiFor } from '../sources/api.js';
 import { getRankingModes, clampRankingCategory, R18_CATEGORIES } from '../utils/rankingModes.js';
@@ -147,11 +148,11 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
         </div>
       )}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
-      {feed.loading && feed.items.length === 0 && <div className="hint">加载中...</div>}
+      {feed.loading && feed.items.length === 0 && <SkeletonGrid count={12} />}
       {!feed.loading && feed.hasMore && (
         <div ref={feed.sentinelRef} style={{ height: 1 }} />
       )}
-      {feed.loadingMore && <div className="hint">加载中...</div>}
+      {feed.loadingMore && <SkeletonGrid count={6} />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

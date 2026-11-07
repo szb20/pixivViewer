@@ -54,9 +54,9 @@
   justify-content: center;
   pointer-events: none;
   /* 深玻璃底（同 .frosted 的那一档）：底下穿过的是作品图，纯白细线会糊进浅色图里 */
-  background: rgba(15, 17, 21, 0.55);
+  background: rgba(var(--glass-rgb), 0.55);
   backdrop-filter: blur(12px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
@@ -67,13 +67,13 @@
 
 .ptr-ring-track {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.22);
+  stroke: rgba(var(--wash-rgb), 0.22);
   stroke-width: 2.5;
 }
 
 .ptr-ring-arc {
   fill: none;
-  stroke: #fff;
+  stroke: var(--text-primary);
   stroke-width: 2.5;
   stroke-linecap: round;
 }
@@ -91,12 +91,12 @@
 
 /* ── 毛玻璃通用样式 ── */
 .frosted {
-  background: rgba(15, 17, 21, 0.34);
+  background: rgba(var(--glass-rgb), 0.34);
   backdrop-filter: blur(10px) saturate(140%);
 }
 
 .frosted-light {
-  background: rgba(255, 255, 255, 0.075);
+  background: rgba(var(--wash-rgb), 0.075);
   backdrop-filter: blur(8px) saturate(135%);
 }
 
@@ -106,21 +106,21 @@
   height: 48px;
   padding: 0;
   border-radius: 50%;
-  border: 0.8px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.12);
+  border: 0.8px solid rgba(var(--wash-rgb), 0.18);
+  background: rgba(var(--wash-rgb), 0.12);
   backdrop-filter: blur(12px) saturate(150%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 0;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   transition: background var(--t-fast), border-color var(--t-fast);
 }
 
 .glass-icon-btn:active {
   transform: scale(0.94);
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--wash-rgb), 0.18);
 }
 
 .glass-icon-btn:active .heart-icon {
@@ -153,9 +153,9 @@
   right: 0;
   height: env(safe-area-inset-top, 0px);
   z-index: 30;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.08);
   pointer-events: none;
-  background: rgba(15, 17, 21, 0.55);
+  background: rgba(var(--glass-rgb), 0.55);
   backdrop-filter: blur(8px);
   /* 隐藏时整块毛玻璃随系统状态栏一起上滑收走（不做透明度渐隐），
      缓动/时长与顶部汉堡按钮保持一致 */
@@ -213,7 +213,7 @@
 }
 
 .side-nav-close-btn:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--wash-rgb), 0.1);
   color: var(--text-primary);
 }
 
@@ -254,7 +254,7 @@
 }
 
 .side-nav-item.active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--wash-rgb), 0.1);
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -307,7 +307,7 @@
 }
 
 .side-nav-chevron-btn:active {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--wash-rgb), 0.1);
 }
 
 /* 展开时箭头转 90°（与「来源」组的箭头一致），注意别把 translateY(-50%) 丢了 */
@@ -323,7 +323,7 @@
   min-width: 18px;
   padding: 0 var(--sp-2);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--wash-rgb), 0.14);
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 400;
@@ -386,7 +386,7 @@
 }
 
 .side-nav-item--sub.active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--wash-rgb), 0.07);
   font-weight: 500;
 }
 
@@ -438,7 +438,7 @@
   width: 30px;
   height: 18px;
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--wash-rgb), 0.14);
   transition: background var(--t-fast) ease;
 }
 

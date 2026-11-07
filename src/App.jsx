@@ -16,10 +16,12 @@ import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
 import { downloadMonitor } from './utils/downloadMonitor.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
+import { useEdgeSwipe } from './hooks/useEdgeSwipe.js';
 import { useIsDesktop } from './hooks/useIsDesktop.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useImageSourceId } from './hooks/useImageSource.js';
 import { restoreMainScrollOnColdStart } from './utils/scroll.js';
+import { initTheme } from './utils/theme.js';
 import { isDev } from './utils/platform.js';
 import './index.css';
 import './styles/detail.css';
@@ -112,6 +114,10 @@ export default function App() {
 
   // 抽屉关闭：稳定引用 —— NavDrawer 的返回键注册依赖它，每次渲染换函数会让 handler 反复重注册
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  // 左边缘右滑拉出抽屉（手机端标准导航手势）。全屏覆盖层在场时让路：
+  // 灯箱自己有边缘滑动语义，设置/作者页打开时左滑应先关掉它们
+  const openDrawer = useCallback(() => setDrawerOpen(true), []);
+  useEdgeSwipe(!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks, openDrawer);
 
   // 窗口跨到手机宽度：桌面专属的搜索唤起态要收掉，免得切回来时残留；
   // 跨到桌面宽度则相反 —— 抽屉是手机形态，收掉（否则会和常驻侧边栏同时在场）
@@ -125,6 +131,9 @@ export default function App() {
     const { scrollPositions, activeTab: tab } = useAppStore.getState();
     restoreMainScrollOnColdStart(scrollPositions?.[tab] || 0);
   }, []);
+
+  // 启动时应用外观主题（暗/亮/跟随系统，写 <html data-theme>，颜色翻转在 tokens.css）
+  useEffect(() => { initTheme(); }, []);
 
   // 侧边栏 / 抽屉共用同一份导航 props —— 两者是同一个 SideNav 的两种形态
   const navProps = {

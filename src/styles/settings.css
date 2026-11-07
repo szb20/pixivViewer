@@ -7,7 +7,7 @@
   position: fixed;
   inset: 0;
   z-index: 70;
-  background: rgba(15, 17, 21, 0.22);
+  background: rgba(var(--glass-rgb), 0.22);
   backdrop-filter: blur(14px) saturate(145%);
   display: flex;
   flex-direction: column;
@@ -22,9 +22,9 @@
   align-items: center;
   gap: var(--sp-2);
   padding: calc(env(safe-area-inset-top, 0px) + var(--sp-2)) var(--sp-3) var(--sp-2);
-  background: rgba(15, 17, 21, 0.24);
+  background: rgba(var(--glass-rgb), 0.24);
   backdrop-filter: blur(14px) saturate(145%);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.08);
   flex: none;
 }
 
@@ -64,11 +64,11 @@
   margin-bottom: var(--sp-4);
   border-radius: var(--r-md);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash-rgb), 0.04);
   backdrop-filter: blur(14px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--wash-rgb), 0.1);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.07),
     0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
@@ -88,7 +88,7 @@
   justify-content: space-between;
   padding: var(--sp-3) var(--sp-3);
   min-height: 44px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.07);
 }
 
 .settings-row:last-child {
@@ -114,7 +114,7 @@
 }
 
 .settings-row-expand:active {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--wash-rgb), 0.03);
 }
 
 .settings-row-value {
@@ -144,9 +144,9 @@
 .settings-expand-area textarea {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--wash-rgb), 0.14);
   border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash-rgb), 0.05);
   color: var(--text-primary);
   font-size: 13px;
   font-family: monospace;
@@ -171,9 +171,9 @@
 .settings-input {
   width: 100%;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(var(--wash-rgb), 0.14);
   border-radius: var(--r-sm);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--wash-rgb), 0.05);
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
@@ -198,9 +198,9 @@
 
 .settings-pill {
   padding: var(--sp-1) var(--sp-3);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(var(--wash-rgb), 0.18);
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--wash-rgb), 0.04);
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -209,8 +209,8 @@
 }
 
 .settings-pill--active {
-  border-color: rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--wash-rgb), 0.24);
+  background: rgba(var(--wash-rgb), 0.14);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-weight: 600;
@@ -225,10 +225,10 @@
   z-index: 80;
   padding: var(--sp-2) var(--sp-4);
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--wash-rgb), 0.12);
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #fff;
+  border: 1px solid rgba(var(--wash-rgb), 0.15);
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 500;
   animation: settings-toast-in 0.3s ease;

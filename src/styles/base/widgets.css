@@ -50,11 +50,11 @@
   position: relative;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
-    rgba(15, 17, 21, 0.16);
+    linear-gradient(135deg, rgba(var(--wash-rgb), 0.075), rgba(var(--wash-rgb), 0.025)),
+    rgba(var(--glass-rgb), 0.16);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.08),
+    inset 0 0 0 1px rgba(var(--wash-rgb), 0.045);
 }
 
 /* 高光扫过：比整卡实时模糊更廉价的加载质感 */
@@ -64,9 +64,9 @@
   inset: 0;
   background: linear-gradient(100deg,
       transparent 20%,
-      rgba(255, 255, 255, 0.06) 46%,
-      rgba(255, 255, 255, 0.1) 50%,
-      rgba(255, 255, 255, 0.06) 54%,
+      rgba(var(--wash-rgb), 0.06) 46%,
+      rgba(var(--wash-rgb), 0.1) 50%,
+      rgba(var(--wash-rgb), 0.06) 54%,
       transparent 80%);
   transform: translateX(-100%);
   animation: shimmer-sweep 1.6s ease-in-out infinite;
@@ -76,6 +76,21 @@
   to {
     transform: translateX(100%);
   }
+}
+
+/* ── 骨架屏（首拉 / 触底占位卡片）：列数与尺寸完全继承 .grid / .grid-item ── */
+.skeleton-grid {
+  margin-top: var(--sp-2);
+}
+
+.skeleton-item {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* 扫光按列错开相位，避免整排卡片同一拍齐刷刷扫过（mod 不支持时退化为齐扫，无伤大雅） */
+.skeleton-item::after {
+  animation-delay: calc(mod(var(--sk-i), 4) * 0.12s);
 }
 
 /* 子页签切换：新面板叠在上层淡入（旧面板留在文档流中，高度稳定） */

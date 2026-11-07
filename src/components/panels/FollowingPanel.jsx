@@ -3,6 +3,7 @@ import { pixivApi, isCookieErrorCode } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { useLikedSet } from '../../context/pixivCacheContext.js';
 import ImageGrid from '../ImageGrid.jsx';
+import SkeletonGrid from '../SkeletonGrid.jsx';
 import NeedCookieNotice from '../NeedCookieNotice.jsx';
 
 const CACHE_KEY = 'me_following';
@@ -61,7 +62,7 @@ export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad })
         ))}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {feed.loadingMore && <div className="hint">加载中...</div>}
+      {feed.loadingMore && <SkeletonGrid count={6} />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

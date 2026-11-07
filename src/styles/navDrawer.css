@@ -30,10 +30,10 @@
   height: 18px;
   padding: 0 var(--sp-1);
   border-radius: var(--r-pill);
-  background: rgba(15, 17, 21, 0.66);
+  background: rgba(var(--glass-rgb), 0.66);
   backdrop-filter: blur(10px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  color: #fff;
+  border: 1px solid rgba(var(--wash-rgb), 0.18);
+  color: var(--text-primary);
   font-size: 11px;
   line-height: 16px;
   text-align: center;
@@ -51,7 +51,7 @@
   inset: 0;
   /* 阶梯：status-bar 30 → detail 50 → settings 70 → side-nav 80 → 抽屉 90 → 按钮层 100 */
   z-index: 90;
-  background: rgba(8, 10, 14, 0.26);
+  background: rgba(var(--scrim-rgb), 0.26);
   backdrop-filter: blur(10px) saturate(135%);
   /* 防触摸滚动穿透到底层列表；panel 是独立子元素，自身滚动不受影响 */
   touch-action: none;
@@ -81,9 +81,9 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   /* 深玻璃底：背后是真实内容列表，透出层次（同 .frosted 参数） */
-  background: rgba(15, 17, 21, 0.55);
+  background: rgba(var(--glass-rgb), 0.55);
   backdrop-filter: blur(12px) saturate(140%);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(var(--wash-rgb), 0.08);
   box-shadow: 16px 0 48px rgba(0, 0, 0, 0.45);
   padding:
     max(var(--sp-4), env(safe-area-inset-top, 0px))
@@ -165,5 +165,5 @@
 
 /* 触摸端没有 hover，用 :active 给按下反馈（桌面的 hover 规则在 responsive.css） */
 .side-nav--drawer .side-nav-item:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash-rgb), 0.08);
 }

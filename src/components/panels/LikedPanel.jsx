@@ -5,6 +5,7 @@ import { booruApiFor } from '../../sources/api.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { createLogger } from '../../utils/logger.js';
 import ImageGrid from '../../components/ImageGrid.jsx';
+import SkeletonGrid from '../../components/SkeletonGrid.jsx';
 
 const PAGE_SIZE = 24;
 const CACHE_KEY = 'me_liked';
@@ -92,7 +93,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
 
   return (
     <>
-      {feed.loading && feed.items.length === 0 && <div className="hint">加载中...</div>}
+      {feed.loading && feed.items.length === 0 && <SkeletonGrid count={12} />}
       {!feed.loading && feed.error && (
         <div className="error-box">
           {feed.error}

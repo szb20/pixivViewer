@@ -50,9 +50,9 @@ export class ErrorBoundary extends Component {
           minHeight: '200px',
           margin: '12px',
           borderRadius: '18px',
-          background: 'rgba(255, 255, 255, 0.08)',
+          background: 'rgba(var(--wash-rgb), 0.08)',
           backdropFilter: 'blur(18px) saturate(150%)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
+          border: '1px solid rgba(var(--wash-rgb), 0.12)',
         }}>
           <h2 style={{ margin: '0 0 12px', fontSize: '18px' }}>出了点问题</h2>
           <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
@@ -64,8 +64,8 @@ export class ErrorBoundary extends Component {
             style={{
               padding: '8px 20px',
               borderRadius: '8px',
-              border: '1px solid rgba(255, 255, 255, 0.16)',
-              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(var(--wash-rgb), 0.16)',
+              background: 'rgba(var(--wash-rgb), 0.1)',
               backdropFilter: 'blur(12px) saturate(150%)',
               color: 'var(--text-primary)',
               fontSize: '14px',

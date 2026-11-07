@@ -4,6 +4,7 @@ import { pixivApi } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import SkeletonGrid from '../components/SkeletonGrid.jsx';
 import SearchIcon from '../components/icons/SearchIcon.jsx';
 import BackIcon from '../components/icons/BackIcon.jsx';
 import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
@@ -317,8 +318,9 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       </div>
 
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
+      {feed.loading && feed.items.length === 0 && <SkeletonGrid count={12} />}
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {feed.loadingMore && <div className="hint">加载中...</div>}
+      {feed.loadingMore && <SkeletonGrid count={6} />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

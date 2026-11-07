@@ -3,6 +3,7 @@ import { pixivApi } from '../api/pixiv.js';
 import { registerBackHandler } from '../utils/backHandler.js';
 import { createLogger } from '../utils/logger.js';
 import ImageGrid from './ImageGrid.jsx';
+import SkeletonGrid from './SkeletonGrid.jsx';
 import FollowIcon from './icons/FollowIcon.jsx';
 import { useAuthorProfile } from '../hooks/useAuthorProfile.js';
 
@@ -156,13 +157,13 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
             <FollowIcon followed={authorIsFollowed} />
           </button>
         </div>
-        {loading && <div className="hint">加载中...</div>}
+        {loading && <SkeletonGrid count={12} />}
         {error && <div className="error-box">{error}</div>}
         {!loading && !error && (
           <ImageGrid items={items} onOpen={handleOpen} />
         )}
         {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
-        {loadingMore && <div className="hint">加载中...</div>}
+        {loadingMore && <SkeletonGrid count={6} />}
         {!loading && appendError && (
           <div className="hint hint--error" onClick={loadMore} role="button">
             {appendError}

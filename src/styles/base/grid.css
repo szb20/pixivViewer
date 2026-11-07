@@ -43,7 +43,7 @@
   font-weight: 800;
   letter-spacing: 0.5px;
   line-height: 1.15;
-  background: linear-gradient(120deg, #ffffff 25%, var(--accent) 95%);
+  background: linear-gradient(120deg, var(--text-primary) 25%, var(--accent) 95%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -65,8 +65,8 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(var(--wash-rgb), 0.07);
+  border: 1px solid rgba(var(--wash-rgb), 0.1);
   backdrop-filter: blur(8px);
 }
 
@@ -168,12 +168,12 @@
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: linear-gradient(150deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(var(--wash-rgb), 0.10);
+  background: linear-gradient(150deg, rgba(var(--wash-rgb), 0.065), rgba(var(--wash-rgb), 0.02));
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.3),
     0 8px 24px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.06);
   cursor: pointer;
   transform-origin: center;
   transition:
@@ -342,9 +342,9 @@
   margin: var(--sp-3) 0;
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash-rgb), 0.08);
   backdrop-filter: blur(18px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
   color: var(--text-secondary);
   font-size: 13px;
   text-align: center;
@@ -358,9 +358,9 @@
 .error-retry {
   flex: none;
   padding: var(--sp-2) var(--sp-4);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(var(--wash-rgb), 0.16);
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash-rgb), 0.08);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 12px;
@@ -376,9 +376,9 @@
   margin: var(--sp-3) 0;
   padding: var(--sp-3) var(--sp-3);
   border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--wash-rgb), 0.08);
   backdrop-filter: blur(18px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
   color: var(--text-secondary);
   font-size: 13px;
 }
@@ -386,9 +386,9 @@
 .cookie-notice button {
   flex: none;
   padding: var(--sp-2) var(--sp-3);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(var(--wash-rgb), 0.16);
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--wash-rgb), 0.1);
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-size: 12px;

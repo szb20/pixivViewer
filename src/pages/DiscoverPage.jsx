@@ -3,6 +3,7 @@ import { pixivApi, isCookieErrorCode } from '../api/pixiv.js';
 import { useTabFeed } from '../hooks/useTabFeed.js';
 import { useLikedSet, usePixivCache } from '../context/pixivCacheContext.js';
 import ImageGrid from '../components/ImageGrid.jsx';
+import SkeletonGrid from '../components/SkeletonGrid.jsx';
 import NeedCookieNotice from '../components/NeedCookieNotice.jsx';
 import { createLogger } from '../utils/logger.js';
 import { hiddenWorks } from '../utils/hiddenWorks.js';
@@ -132,9 +133,10 @@ export default function DiscoverPage({ onOpen, onOpenSettings, registerRefresh, 
         ))}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {/* pixiv 来源首拉需等 cacheReady（含相册权限申请），给个占位反馈避免整页空白 */}
-      {feed.loading && <div className="hint">加载中...</div>}
-      {feed.loadingMore && <div className="hint">加载中...</div>}
+      {/* pixiv 来源首拉需等 cacheReady（含相册权限申请），骨架屏占位避免整页空白。
+          下拉刷新（列表已有内容）时不叠骨架，只靠原生下拉反馈表达 */}
+      {feed.loading && feed.items.length === 0 && <SkeletonGrid count={12} />}
+      {feed.loadingMore && <SkeletonGrid count={6} />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

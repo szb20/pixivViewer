@@ -14,11 +14,11 @@
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--r-pill);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 17, 21, 0.55);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
+  background: rgba(var(--glass-rgb), 0.55);
   backdrop-filter: blur(24px) saturate(180%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.12),
     inset 0 -1px 0 rgba(0, 0, 0, 0.1),
     0 4px 20px rgba(0, 0, 0, 0.3);
   transition: border-color var(--t-slow) ease, background var(--t-slow) ease, box-shadow var(--t-slow) ease, opacity var(--t-slow) ease, transform var(--t-slow) ease;
@@ -35,23 +35,23 @@
 }
 
 .search-bar:focus-within {
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgba(var(--wash-rgb), 0.28);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 0 18px rgba(255, 255, 255, 0.06);
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.15),
+    0 0 0 1px rgba(var(--wash-rgb), 0.08),
+    0 0 18px rgba(var(--wash-rgb), 0.06);
 }
 
 .search-icon {
   flex: none;
-  color: rgba(255, 255, 255, 0.9);
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.22));
+  color: rgba(var(--wash-rgb), 0.9);
+  filter: drop-shadow(0 0 4px rgba(var(--wash-rgb), 0.22));
   transition: color var(--t-slow) ease;
 }
 
 .search-bar:focus-within .search-icon {
-  color: #fff;
-  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.35));
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 6px rgba(var(--wash-rgb), 0.35));
 }
 
 .search-input {
@@ -79,20 +79,20 @@
   height: 34px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  border: 1px solid rgba(var(--wash-rgb), 0.5);
+  background: rgba(var(--wash-rgb), 0.14);
+  color: var(--text-primary);
   font-size: 0;
   cursor: pointer;
   box-shadow:
-    0 0 8px rgba(255, 255, 255, 0.14);
+    0 0 8px rgba(var(--wash-rgb), 0.14);
   transition: background var(--t-base) ease, box-shadow var(--t-base) ease, transform var(--t-fast) ease, opacity var(--t-base) ease;
 }
 
 .search-submit:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.24);
+  background: rgba(var(--wash-rgb), 0.24);
   box-shadow:
-    0 0 12px rgba(255, 255, 255, 0.2);
+    0 0 12px rgba(var(--wash-rgb), 0.2);
 }
 
 .search-submit:active:not(:disabled) {
@@ -107,15 +107,15 @@
 .search-submit-icon {
   width: 16px;
   height: 16px;
-  color: #fff;
-  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+  color: var(--text-primary);
+  filter: drop-shadow(0 0 4px rgba(var(--wash-rgb), 0.3));
 }
 
 .search-submit-spinner {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.28);
-  border-top-color: #fff;
+  border: 2px solid rgba(var(--wash-rgb), 0.28);
+  border-top-color: var(--text-primary);
   border-radius: 50%;
   animation: ptr-spin 0.8s linear infinite;
 }
@@ -136,7 +136,7 @@
   font-size: 12px;
   letter-spacing: 0.5px;
   color: var(--text-tertiary);
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.12);
+  text-shadow: 0 0 8px rgba(var(--wash-rgb), 0.12);
 }
 
 .search-history-clear {
@@ -152,7 +152,7 @@
 
 .search-history-clear:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--wash-rgb), 0.06);
 }
 
 .search-history-tags {
@@ -166,8 +166,8 @@
   align-items: center;
   max-width: 100%;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
+  background: rgba(var(--wash-rgb), 0.06);
   overflow: hidden;
   transition: border-color var(--t-base) ease, background var(--t-base) ease, box-shadow var(--t-base) ease, text-shadow var(--t-base) ease;
 }
@@ -192,8 +192,8 @@
   height: 28px;
   padding: 0;
   border: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  border-left: 1px solid rgba(var(--wash-rgb), 0.08);
+  background: rgba(var(--wash-rgb), 0.035);
   color: var(--text-tertiary);
   font-size: 16px;
   line-height: 1;
@@ -202,17 +202,17 @@
 
 .search-history-delete:active {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--wash-rgb), 0.12);
 }
 
 .search-history-chip:hover {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(var(--wash-rgb), 0.28);
+  background: rgba(var(--wash-rgb), 0.10);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.10),
-    0 0 8px rgba(255, 255, 255, 0.08);
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.18);
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.10),
+    0 0 8px rgba(var(--wash-rgb), 0.08);
+  text-shadow: 0 0 6px rgba(var(--wash-rgb), 0.18);
 }
 
 .search-history-chip:hover .search-history-tag {
@@ -301,7 +301,7 @@
     background: var(--bg-panel);
     backdrop-filter: none;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 1px 0 rgba(var(--wash-rgb), 0.06),
       0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
@@ -326,12 +326,12 @@
     margin-bottom: 0;
     padding: var(--sp-2) var(--sp-3) var(--sp-3);
     border-radius: var(--r-lg);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(var(--wash-rgb), 0.12);
     background: var(--bg-secondary);
     backdrop-filter: none;
     box-shadow:
       0 16px 40px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      inset 0 1px 0 rgba(var(--wash-rgb), 0.08);
   }
 
   /* 下拉里的历史词不换行空间有限，收窄一点 */
@@ -352,14 +352,14 @@
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(var(--wash-rgb), 0.78);
   cursor: pointer;
   transition: background var(--t-base) ease, color var(--t-base) ease;
 }
 
 .search-back:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  background: rgba(var(--wash-rgb), 0.14);
+  color: var(--text-primary);
 }
 
 .search-back-icon {

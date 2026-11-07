@@ -5,7 +5,7 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: #000;
+  background: var(--canvas-bg);
   overflow: hidden;
   isolation: isolate;
 }
@@ -15,7 +15,7 @@
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: #000;
+  background: var(--canvas-bg);
   display: flex;
   flex-direction: column;
 }
@@ -29,8 +29,8 @@
   align-items: center;
   gap: var(--sp-2);
   padding: calc(env(safe-area-inset-top, 0px) + var(--sp-1)) var(--sp-3) var(--sp-1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 17, 21, 0.55);
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.08);
+  background: rgba(var(--glass-rgb), 0.55);
   backdrop-filter: blur(12px);
   flex: none;
 }
@@ -98,7 +98,7 @@
   margin: 0 auto;
   height: 100vh;
   height: 100dvh;
-  background: #000;
+  background: var(--canvas-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -229,11 +229,11 @@
   margin: var(--sp-3) var(--sp-2) 0;
   padding: var(--sp-3) var(--sp-3) var(--sp-3);
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--wash-rgb), 0.045);
   backdrop-filter: blur(14px) saturate(145%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--wash-rgb), 0.1);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 1px 0 rgba(var(--wash-rgb), 0.08),
     0 10px 28px rgba(0, 0, 0, 0.16);
 }
 
@@ -305,8 +305,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 0.8px solid rgba(255, 255, 255, 0.35);
-  background: rgba(15, 17, 21, 0.18);
+  border: 0.8px solid rgba(var(--wash-rgb), 0.35);
+  background: rgba(var(--glass-rgb), 0.18);
   backdrop-filter: blur(8px);
   color: var(--text-primary);
   cursor: pointer;
@@ -334,7 +334,7 @@
 .follow-btn.followed {
   border-color: rgba(74, 222, 128, 0.55);
   color: var(--ok);
-  background: rgba(15, 17, 21, 0.18);
+  background: rgba(var(--glass-rgb), 0.18);
   backdrop-filter: blur(8px);
 }
 
@@ -377,8 +377,8 @@
 .image-detail-tag {
   padding: 3px var(--sp-2);
   border-radius: var(--r-md);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(var(--wash-rgb), 0.12);
+  background: rgba(var(--wash-rgb), 0.045);
   backdrop-filter: blur(10px) saturate(140%);
   color: var(--text-secondary);
   font-size: 12px;
@@ -387,9 +387,9 @@
 }
 
 .image-detail-tag:active {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: rgba(var(--wash-rgb), 0.24);
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--wash-rgb), 0.12);
 }
 
 /* ---- 页头 ---- */
@@ -482,12 +482,12 @@
   margin: 0 auto;
   position: relative;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.022);
+  background: rgba(var(--wash-rgb), 0.022);
   /* 这里是图片卡片：不要加 backdrop-filter。
      卡片一旦带毛玻璃，图片比例与卡片比例不一致时（比例还没校正到真实值）
      露出的那一条就会被渲染成「毛玻璃压在图片上」。 */
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05),
+    0 1px 0 rgba(var(--wash-rgb), 0.05),
     0 14px 36px rgba(0, 0, 0, 0.18);
   user-select: none;
   -webkit-user-select: none;
@@ -646,13 +646,13 @@
 /* 仅手机宽度（≥900px 走侧边栏布局，见 index.css 的桌面块） */
 @media (orientation: landscape) and (max-height: 560px) and (max-width: 899px) {
   .detail-overlay {
-    background: rgba(15, 17, 21, 0.32);
+    background: rgba(var(--glass-rgb), 0.32);
   }
 
   .char-state-bar {
     max-width: none;
     width: 100vw;
-    background: rgba(15, 17, 21, 0.14);
+    background: rgba(var(--glass-rgb), 0.14);
   }
 
   .char-state-content {
@@ -684,8 +684,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(15, 17, 21, 0.2);
+    border-left: 1px solid rgba(var(--wash-rgb), 0.08);
+    background: rgba(var(--glass-rgb), 0.2);
     backdrop-filter: blur(10px) saturate(130%);
     padding-top: max(8px, env(safe-area-inset-top, 0px));
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
@@ -890,7 +890,7 @@
     border-radius: var(--r-md);
     overflow: hidden;
     box-shadow:
-      0 2px 0 rgba(255, 255, 255, 0.05),
+      0 2px 0 rgba(var(--wash-rgb), 0.05),
       0 16px 48px rgba(0, 0, 0, 0.28);
   }
 
@@ -926,8 +926,8 @@
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    border-left: 0.5px solid rgba(255, 255, 255, 0.06);
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-left: 0.5px solid rgba(var(--wash-rgb), 0.06);
+    border-bottom: 0.5px solid rgba(var(--wash-rgb), 0.06);
     /* 桌面骨架实底（详见 .side-nav 的注释）：作者栏与相关推荐同级，
        必须是同一个色值 —— 原先一个 α0.18/8px、一个 α0.22/10px，
        并排看就是一条说不清的接缝。 */
@@ -970,7 +970,7 @@
     padding: var(--sp-1) var(--sp-3);
     border-radius: var(--r-pill);
     /* 药丸在卡片里，是第三阶：底比卡片亮一档即可，别再加 blur */
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--wash-rgb), 0.07);
     backdrop-filter: none;
   }
 
@@ -988,7 +988,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    border-left: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-left: 0.5px solid rgba(var(--wash-rgb), 0.06);
     background: var(--bg-panel);
     padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
   }
@@ -1021,9 +1021,9 @@
     width: 40px;
     height: 40px;
     padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(var(--wash-rgb), 0.07);
     border-radius: var(--r-md);
-    background: rgba(255, 255, 255, 0.035);
+    background: rgba(var(--wash-rgb), 0.035);
     color: var(--text-secondary);
     cursor: pointer;
     transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease, transform var(--t-fast) ease;
@@ -1031,9 +1031,9 @@
 
   /* 主操作（喜欢 / 下载）：底更实、图标更亮，和右边两个次要操作拉开层次 */
   .detail-action--fill {
-    border-color: rgba(255, 255, 255, 0.13);
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.05));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+    border-color: rgba(var(--wash-rgb), 0.13);
+    background: linear-gradient(180deg, rgba(var(--wash-rgb), 0.105), rgba(var(--wash-rgb), 0.05));
+    box-shadow: inset 0 1px 0 rgba(var(--wash-rgb), 0.09);
     color: var(--text-primary);
   }
 
@@ -1062,8 +1062,8 @@
   .detail-action-spinner {
     width: 15px;
     height: 15px;
-    border: 2px solid rgba(255, 255, 255, 0.28);
-    border-top-color: #fff;
+    border: 2px solid rgba(var(--wash-rgb), 0.28);
+    border-top-color: var(--text-primary);
     border-radius: 50%;
     animation: ptr-spin 0.8s linear infinite;
   }
@@ -1075,9 +1075,14 @@
     border-color: rgba(255, 71, 87, 0.42);
     background: linear-gradient(180deg, rgba(255, 71, 87, 0.2), rgba(255, 71, 87, 0.09));
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.09),
+      inset 0 1px 0 rgba(var(--wash-rgb), 0.09),
       0 0 14px rgba(255, 71, 87, 0.16);
     color: #ffd9dd;
+  }
+
+  /* 浅色下粉色 #ffd9dd 与红底对比不足，换正红 */
+  :root[data-theme='light'] .detail-action.is-liked {
+    color: #c81e34;
   }
 
   .detail-action:disabled {
@@ -1106,7 +1111,7 @@
   /* 变成中栏后：去掉与下方分隔的底边，改回与右栏分隔的右边 */
   .detail-author-panel {
     border-bottom: none;
-    border-right: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-right: 0.5px solid rgba(var(--wash-rgb), 0.06);
   }
 }
 
@@ -1137,27 +1142,27 @@
     border-left: none;
     border-right: none;
     border-bottom: none;
-    border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-top: 0.5px solid rgba(var(--wash-rgb), 0.06);
     padding-inline: max(10px, calc((100% - 900px) / 2));
   }
 
   .char-state-content--wide .detail-related-panel {
     border-left: none;
-    border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+    border-top: 0.5px solid rgba(var(--wash-rgb), 0.06);
   }
 }
 
 /* ── 桌面端：详情页悬停反馈 ── */
 @media (hover: hover) and (pointer: fine) {
   .detail-action:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.09);
-    border-color: rgba(255, 255, 255, 0.18);
+    background: rgba(var(--wash-rgb), 0.09);
+    border-color: rgba(var(--wash-rgb), 0.18);
     color: var(--text-primary);
   }
 
   .detail-action--fill:not(:disabled):hover {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.085));
-    border-color: rgba(255, 255, 255, 0.24);
+    background: linear-gradient(180deg, rgba(var(--wash-rgb), 0.16), rgba(var(--wash-rgb), 0.085));
+    border-color: rgba(var(--wash-rgb), 0.24);
   }
 
   .detail-action.is-liked:not(:disabled):hover {
@@ -1174,13 +1179,13 @@
   }
 
   .image-detail-tag:hover {
-    border-color: rgba(255, 255, 255, 0.28);
+    border-color: rgba(var(--wash-rgb), 0.28);
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(var(--wash-rgb), 0.12);
   }
 
   .follow-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.24);
+    background: rgba(var(--wash-rgb), 0.24);
   }
 
   .image-detail-pixiv-link:hover {
