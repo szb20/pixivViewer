@@ -16,7 +16,7 @@ import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
 import { downloadMonitor } from './utils/downloadMonitor.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
-import { useEdgeSwipe } from './hooks/useEdgeSwipe.js';
+import { useEdgeLongPress } from './hooks/useEdgeLongPress.js';
 import { useIsDesktop } from './hooks/useIsDesktop.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useImageSourceId } from './hooks/useImageSource.js';
@@ -114,10 +114,10 @@ export default function App() {
 
   // 抽屉关闭：稳定引用 —— NavDrawer 的返回键注册依赖它，每次渲染换函数会让 handler 反复重注册
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  // 左边缘右滑拉出抽屉（手机端标准导航手势）。全屏覆盖层在场时让路：
-  // 灯箱自己有边缘滑动语义，设置/作者页打开时左滑应先关掉它们
+  // 右边缘长按拉出抽屉。全屏覆盖层在场时让路：
+  // 灯箱自己有长按/滑动手势语义，设置/作者页打开时应先关掉它们
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
-  useEdgeSwipe(!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks, openDrawer);
+  useEdgeLongPress(!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks, openDrawer);
 
   // 窗口跨到手机宽度：桌面专属的搜索唤起态要收掉，免得切回来时残留；
   // 跨到桌面宽度则相反 —— 抽屉是手机形态，收掉（否则会和常驻侧边栏同时在场）
