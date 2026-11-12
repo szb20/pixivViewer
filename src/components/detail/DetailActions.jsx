@@ -42,7 +42,8 @@ export default function DetailActions({
         await saveAllPagesShared(image, {
           pixivCache,
           setPixivCache,
-          images: illustData?.illust?.images,
+          // 详情接口未返回时（冷启动）退回列表项自带的逐页地址（X 的 _pages）
+          images: illustData?.illust?.images?.length ? illustData.illust.images : image?._pages,
           totalPages: pageCount,
         });
       } else {

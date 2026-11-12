@@ -166,7 +166,7 @@ export const DEFAULT_SOURCE = 'pixiv';
  */
 export const KNOWN_SOURCES = [
   'pixiv', 'yande', 'konachan', 'konachan-net', 'danbooru', 'safebooru', 'wallhaven',
-  'safebooru-donmai', 'tbib', 'sakugabooru', 'zerochan', 'hypnohub', 'xbooru',
+  'safebooru-donmai', 'tbib', 'sakugabooru', 'zerochan', 'hypnohub', 'xbooru', 'twitter',
 ];
 
 /**

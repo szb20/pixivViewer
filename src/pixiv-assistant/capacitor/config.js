@@ -36,6 +36,13 @@ if (BUILD_COOKIE) {
 }
 
 /**
+ * X (Twitter) 关注名单的构建期默认值（.env 的 VITE_TWITTER_USERS，逗号分隔）。
+ * 和 Cookie 同理：个人自装构建内联进去，装完即有内容；设置页填过则以设置为准。
+ * 不追求保密（关注列表本来就是公开信息），只是不想把它散落在源码里。
+ */
+const BUILD_TWITTER_USERS = String(import.meta.env?.VITE_TWITTER_USERS || '').trim();
+
+/**
  * 配置 Pixiv 模块的适配器。
  * @param {Object} opts
  * @param {Function} [opts.getSettings] - 返回 settings 对象的异步函数
@@ -69,6 +76,11 @@ export function getSettingsSync() {
     imageSource: stored.imageSource || DEFAULT_SOURCE,
     // 非 Pixiv 来源是否只显示 rating:safe。默认 false（全部显示），用户在设置页可收紧。
     booruSafeOnly: stored.booruSafeOnly === true,
+    // X (Twitter) 图源：关注名单（一行一个用户名/链接）与自定义 Nitter 实例。
+    // 都是纯本地配置 —— Nitter 读不到你的 following，名单只能手填（见 sources/nitter.js）。
+    // 名单为空时用 .env 的 VITE_TWITTER_USERS（构建期默认），再空才退到 nitter.js 的演示账号。
+    twitterUsers: stored.twitterUsers || BUILD_TWITTER_USERS,
+    nitterInstance: stored.nitterInstance || '',
   };
 }
 

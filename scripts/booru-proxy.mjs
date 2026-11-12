@@ -49,6 +49,10 @@ export const BOORU_ROUTES = (() => {
  * @returns {Function} Vite / Node 中间件
  */
 export function createBooruMiddleware(route) {
+  // X (Twitter) 的实例池会轮换，目标 host 由请求头 x-nitter-host 指定（见 createNitterProxy）
+  if (route.prefix === '/nitter-api') {
+    return createNitterProxy(new URL(route.target).host);
+  }
   // 强制 HTTP/2 的站点：走 CONNECT 隧道 + node:http2（见 proxy-utils.mjs 的 createH2Proxy）
   if (route.http2) {
     return createH2Proxy(route.target, {
@@ -64,6 +68,52 @@ export function createBooruMiddleware(route) {
     });
   }
   return createApiProxy(route.target, { userAgent: route.userAgent });
+}
+
+/**
+ * Nitter 的动态代理：目标实例由请求头 `x-nitter-host` 指定。
+ *
+ * 为什么要动态：适配器会在实例池里轮换（某个实例 403/429 就换下一个），
+ * 静态 target 跟不上轮换；而路由表仍从注册表派生（BOORU_ROUTES 里的
+ * /nitter-api 只是「默认实例」，供 check-sources 校验一致性）。
+ *
+ * 安全：这是本地 dev / 桌面壳代理，仍然只放行「公网域名」形状的 host，
+ * 拒绝 IP、端口、localhost、userinfo —— 别让它变成任意站点的跳板。
+ *
+ * @param {string} defaultHost — 无请求头时的兜底实例
+ * @returns {Function} 中间件
+ */
+export function createNitterProxy(defaultHost) {
+  const proxies = new Map();
+  const hostRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+  // Nitter 的反爬（Gandalf）只认真实浏览器 UA：默认的「AppleWebKit/537.36 开头、没有 Chrome 段」
+  // 会被判成爬虫直接 403。Accept / Referer 也一并发成浏览器读 RSS 的样子。
+  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+  const proxyFor = (host) => {
+    if (!proxies.has(host)) {
+      proxies.set(host, createApiProxy(`https://${host}`, {
+        userAgent: UA,
+        extraHeaders: {
+          'Accept': 'application/rss+xml, application/xml;q=0.9, text/html;q=0.8, */*;q=0.7',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Referer': `https://${host}/`,
+        },
+      }));
+    }
+    return proxies.get(host);
+  };
+
+  return (req, res) => {
+    const header = String(req.headers['x-nitter-host'] || '').trim().toLowerCase();
+    const host = header || defaultHost;
+    if (!hostRe.test(host) || host.includes('..')) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_nitter_host' }));
+      return;
+    }
+    proxyFor(host)(req, res);
+  };
 }
 
 /**

@@ -29,15 +29,19 @@ export async function saveAllPages(item, { pixivCache = {}, setPixivCache, image
   const isPixiv = source === 'pixiv';
   const isGif = item.type === 'gif' || Number(item.illustType) === 2;
 
-  let imgs = Array.isArray(images) ? images : [];
-  let total = isPixiv
-    ? Math.max(
-      Number(totalPages) || 0,
-      Number(item._totalPages || item.pageCount) || 0,
-      imgs.length || 0,
-      1,
-    )
-    : 1; // booru 无多页
+  let imgs = Array.isArray(images) && images.length
+    ? images
+    // 列表项自带逐页地址（X 的 _pages）：网格长按保存全部页时没有详情接口的 images 可用
+    : (Array.isArray(item._pages) ? item._pages : []);
+  // 页数统一按条目/详情给的信息算，不再按来源二分：Pixiv 与 X 都是「一个作品多页」，
+  // booru 的 pageCount 恒为 1，这个算式对它们仍是 1 页。
+  // （曾经非 pixiv 一律钳成 1，X 的多图推文就只能下到第一张。）
+  let total = Math.max(
+    Number(totalPages) || 0,
+    Number(item._totalPages || item.pageCount) || 0,
+    imgs.length || 0,
+    1,
+  );
   if (isPixiv && imgs.length === 0) {
     try {
       const r = await pixivApi.fetchIllust(item.illustId);

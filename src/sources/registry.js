@@ -294,6 +294,28 @@ export const SOURCES = {
       },
     },
   },
+  twitter: {
+    id: 'twitter',
+    label: 'X (Twitter)',
+    shortLabel: 'X',
+    kind: 'nitter',
+    ratioRange: { min: 0.4, max: 1 }, // 推文配图横竖都有：横图钳 1:1，避免扁卡片
+    caps: {
+      // 关注流由「设置 → X 图源」里的静态名单驱动（Nitter 读不到你的 following）
+      feed: true, ranking: false, search: true, multiPage: true,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      // 走公开 Nitter 实例的媒体 RSS（见 sources/nitter.js 文件头）。
+      // apiOrigin 只是默认实例：真正的目标实例由请求头 x-nitter-host 指定，
+      // 代理路由见 scripts/booru-proxy.mjs 的 createNitterProxy。
+      // 图床 pbs.twimg.com 走 /pic/ 之外的直链；国内无代理时它是被墙的，
+      // 有代理时由代理兜住（用户环境已确认有代理）。
+      apiOrigin: 'https://nitter.netbub.com',
+      apiPrefix: '/nitter-api',
+      imgHosts: { 'pbs.twimg.com': '/nitter-img' },
+    },
+  },
 };
 
 /** 设置页 / 来源胶囊里可选的全部来源（顺序即展示顺序） */

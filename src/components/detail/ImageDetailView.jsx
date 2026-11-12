@@ -79,6 +79,16 @@ export default function ImageDetailView({
   const useLargePreview = typeof window !== 'undefined' && window.innerWidth >= 900;
   const booruApi = booruApiFor(source);
   const caps = getSource(source).caps;
+  // 多页能力由 caps 决定：Pixiv 与 X 的多图推文都是「一个作品多页」，booru 一条 post 一张图。
+  // 它和 isBooru 是两件事 —— isBooru 还负责「禁止用 illustId 反推 pixiv 短链」，
+  // 那是来源身份问题，不能跟着多页能力走（否则 X 的数字 id 会拼出同号的 pixiv 图）。
+  const multiPageSource = !!caps.multiPage;
+  // 详情接口还没回来（冷启动恢复的列表项）时，用列表项自带的 _pages 兜底逐页地址
+  const pageImages = useMemo(() => {
+    const fromApi = illustData?.illust?.images;
+    if (Array.isArray(fromApi) && fromApi.length) return fromApi;
+    return Array.isArray(image?._pages) ? image._pages : [];
+  }, [illustData, image?._pages]);
   // Tag 展示：优先列表返回的 tag；列表没带（如作者页/关注流，可能为空数组）则等 fetchIllust 回来用 API 的 tag 兜底
   const listTags = Array.isArray(image?.tags) ? image.tags : [];
   const apiTags = Array.isArray(illustData?.illust?.tags) ? illustData.illust.tags : [];
@@ -129,9 +139,11 @@ export default function ImageDetailView({
   // （取的是灯箱候选链的前两级，两边保持一致）。
   // booru 不参与 —— previewUrl 本身就是原图（见下面的档位注释），手机端也不加载。
   const hdUrlForPage = useCallback((p) => {
-    if (!useLargePreview || isBooru) return '';
-    return localSrcs[p] || illustData?.illust?.images?.[p]?.originalUrl || '';
-  }, [useLargePreview, isBooru, localSrcs, illustData]);
+    // booru 单图来源：previewUrl 本身就是原图（见下面的档位注释），不参与高清层。
+    // 多页的非 pixiv 来源（X）则相反：每页都该拿到自己的原图。
+    if (!useLargePreview || (isBooru && !multiPageSource)) return '';
+    return localSrcs[p] || pageImages[p]?.originalUrl || '';
+  }, [useLargePreview, isBooru, multiPageSource, localSrcs, pageImages]);
 
   const markUserInteracted = useCallback(() => {
     userInteractedAfterRestoreRef.current = true;
@@ -230,7 +242,7 @@ export default function ImageDetailView({
 
   // 构造保存条目（单页）— 优先用详情接口的完整日期路径 URL（避免走 pixiv.re 短链反查）
   const buildSaveItem = useCallback((page, images) => {
-    const imgs = images || illustData?.illust?.images || [];
+    const imgs = images || pageImages;
     const pg = imgs[page] || {};
     // booru 的图床地址是直链，没有 pixiv.re 反查可用 → derived 恒为空，
     // 缺 URL 时只能依赖列表/详情带回的地址（booru 单图必有一份）
@@ -250,17 +262,17 @@ export default function ImageDetailView({
       authorName: image.authorName,
       tags: image.tags || [],
     };
-  }, [image, illustData, isGif, isBooru, source]);
+  }, [image, pageImages, isGif, isBooru, source]);
 
   // 保存全部页（长按❤️/喜欢单图时调用）— 与网格长按共用同一实现
   const saveAllPages = useCallback(async () => {
     return saveAllPagesShared(image, {
       pixivCache,
       setPixivCache,
-      images: illustData?.illust?.images,
+      images: pageImages,
       totalPages: pageCount,
     });
-  }, [image, pageCount, illustData, pixivCache, setPixivCache]);
+  }, [image, pageCount, pageImages, pixivCache, setPixivCache]);
 
   // 长按图片 → 下载该页原图（单页保存）
   const downloadPage = useCallback(async (page) => {
@@ -270,11 +282,13 @@ export default function ImageDetailView({
     // saveFromNetwork 对已存在文件会自动跳过真实下载、只补元数据，不会重复下载。
     const alreadySaved = !!pixivCache[ck]?.saved;
     // 确保拿到完整日期路径原图 URL：详情未加载就补拉一次（否则会退回 pixiv.re 短链，短链当前不可用）
-    // booru 无短链可退：URL 全在条目里（mapPost 已给全），补拉 pixivApi 只会拿到同号的无关作品
-    let imgs = illustData?.illust?.images || [];
-    if (imgs.length === 0 && !isBooru) {
+    // 非 pixiv 来源补拉自己的适配器（X 的多页地址只在适配器的详情接口里）；
+    // booru 无短链可退且 adapter 也只会返回同一条，补拉对它们仍然是无害的。
+    let imgs = pageImages;
+    if (imgs.length === 0) {
       try {
-        const r = await pixivApi.fetchIllust(image.illustId);
+        const api = booruApi || pixivApi;
+        const r = await api.fetchIllust(image.illustId);
         if (r?.illust?.images?.length) imgs = r.illust.images;
       } catch (e) {
         log.debug('单页下载补拉详情失败，保持兜底 URL:', e?.message || e);
@@ -294,7 +308,7 @@ export default function ImageDetailView({
       log.warn('单页下载失败:', page, e?.message || e);
       showToast('下载失败');
     }
-  }, [image, buildSaveItem, pixivCache, setPixivCache, illustData, isBooru]);
+  }, [image, buildSaveItem, pixivCache, setPixivCache, pageImages, booruApi]);
 
   // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
   // useMemo：仅依赖详情/本地URL/作品变化，避免相关推荐追加、缓存更新等无关渲染
@@ -303,7 +317,7 @@ export default function ImageDetailView({
     if (!image?.illustId) return [];
     const totalPages = Math.max(pageCount, image?._totalPages || 1);
     const items = [];
-    const imgs = illustData?.illust?.images || [];
+    const imgs = pageImages;
     for (let p = 0; p < totalPages; p++) {
       // 灯箱候选链：本地原图 → 原图（全分辨率）→ master1200 降级 → pixiv.re 短链 → 网格缩略图。
       // 原图优先，保证灯箱显示全分辨率画质；master1200 及以下仅作降级兜底。
@@ -334,16 +348,16 @@ export default function ImageDetailView({
         authorId: image?.authorId || '',
         authorName: image?.authorName || image?.author || '',
         pixivUrl: image?.pixivUrl || (isBooru ? '' : `https://www.pixiv.net/artworks/${image.illustId}`),
-        // 真实尺寸（详情接口）：供灯箱双击缩放计算倍率，避免依赖 img.naturalWidth（加载前为 0 导致前后不一致）
-        width: image?.width || illustData?.illust?.width || 0,
-        height: image?.height || illustData?.illust?.height || 0,
+        // 真实尺寸（本页优先）：供灯箱双击缩放计算倍率，避免依赖 img.naturalWidth（加载前为 0 导致前后不一致）
+        width: pageImages[p]?.width || image?.width || 0,
+        height: pageImages[p]?.height || image?.height || 0,
         // small 图（540px，同比例）——灯箱原图逐行渲染时托底，避免底部空黑
         previewUrl: imgs[p]?.previewUrl || '',
         thumbnailUrl: image?.thumbnailUrl || (isBooru ? '' : pixivReUrl(String(image.illustId), 0)),
       });
     }
     return items;
-  }, [image, illustData, localSrcs, pageCount, isGif, isBooru, source]);
+  }, [image, pageImages, localSrcs, pageCount, isGif, isBooru, source]);
 
   // 灯箱打开时注册返回处理（关闭灯箱，不回退到详情栈）
   useEffect(() => {
@@ -447,12 +461,15 @@ export default function ImageDetailView({
               {/* 详情流只显示 540px 等比预览；原图和 regular 图仅在灯箱打开后按需加载。 */}
               <div className="detail-page-stack">
                 {Array.from({ length: pageCount }, (_, p) => {
-                  const imgs = illustData?.illust?.images || [];
+                  const imgs = pageImages;
                   // 每页都必须用「本页」的预览图。绝不能复用第 0 页的方形裁剪图，
                   // 否则多图作品的非首页会保持方形、比例错误。
                   const thumbBase = image?.thumbnailUrl || image?.mediumUrl || '';
-                  // 占位图固定 540 档：由缩略图底座同步生成，不用等详情接口，秒开
-                  const placeholderUrl = masonryThumbUrl(thumbBase, p, source)
+                  // 占位图固定 540 档：由缩略图底座同步生成，不用等详情接口，秒开。
+                  // 非 pixiv 的多页来源（X）没有可推导的 URL 规则，只能用列表项自带的逐页缩略图。
+                  const pageThumb = (isBooru && multiPageSource) ? (imgs[p]?.thumbnailUrl || '') : '';
+                  const placeholderUrl = pageThumb
+                    || masonryThumbUrl(thumbBase, p, source)
                     || imgs[p]?.previewUrl
                     || '';
                   // 主图档位：
@@ -478,11 +495,15 @@ export default function ImageDetailView({
                   // （实测每张都恒为 300×200），铺在详情页上比例直接是错的。
                   // 手机端也用这一档（一条 post 就一张图，中图/原图的流量可接受），
                   // pixiv 手机端仍走 540 档：那个前缀是「限制在 540×540 内」的等比缩放，不是裁剪。
-                  const booruPreview = localSrcs[p] || image?.mediumUrl
+                  const booruPreview = localSrcs[p]
+                    || (multiPageSource ? (imgs[p]?.previewUrl || imgs[p]?.url) : '')
+                    || image?.mediumUrl
                     || imgs[p]?.previewUrl || imgs[p]?.originalUrl || thumbBase;
                   const previewUrl = (isBooru
                     ? (useLargePreview
-                      ? (localSrcs[p] || image?.originalUrl || imgs[p]?.originalUrl || booruPreview)
+                      ? (localSrcs[p]
+                        || (multiPageSource ? imgs[p]?.originalUrl : '')
+                        || image?.originalUrl || imgs[p]?.originalUrl || booruPreview)
                       : booruPreview)
                     : (useLargePreview
                       ? (reuseHd ? hd : masonryThumbUrl(thumbBase, p, source, 1200))
@@ -511,7 +532,7 @@ export default function ImageDetailView({
                       previewUrl={previewUrl}
                       hdUrl={reuseHd ? '' : hd}
                       placeholderUrl={placeholderUrl}
-                      defaultRatio={ratioOfSize(illustData?.illust?.images?.[p]?.width, illustData?.illust?.images?.[p]?.height) || defaultRatio}
+                      defaultRatio={ratioOfSize(imgs[p]?.width, imgs[p]?.height) || defaultRatio}
                       cachedRatio={pageRatios[p]}
                       previewNaturalWidth={previewW}
                       registerRef={registerPageRef}

@@ -183,8 +183,35 @@
   border-color: var(--accent);
 }
 
+/* ── 多行输入（X 图源的关注名单） ── */
+.settings-textarea {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid rgba(var(--wash-rgb), 0.14);
+  border-radius: var(--r-sm);
+  background: rgba(var(--wash-rgb), 0.05);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: monospace;
+  line-height: 1.5;
+  min-height: 88px;
+  resize: vertical;
+  outline: none;
+}
+
+.settings-textarea:focus {
+  border-color: var(--accent);
+}
+
 .settings-input-row {
   padding: var(--sp-2) var(--sp-3) var(--sp-3);
+}
+
+/* 输入框 + 按钮同行（X 图源的「从账号导入」） */
+.settings-import-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 /* ── Pill 按钮组（画质切换 / 来源切换） ── */
