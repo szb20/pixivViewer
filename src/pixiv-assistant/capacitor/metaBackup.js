@@ -1,10 +1,16 @@
 /**
- * metaBackup — 喜欢/已保存 元数据 + Cookie 的持久备份。
+ * metaBackup — 喜欢/已保存 元数据的持久备份。
  *
- * 问题：IndexedDB 位于应用私有 WebView 数据，卸载即清空；而系统相册文件保留。
- * 方案：把「喜欢/已保存」元数据 + cookie 写成一个真正的 JSON 文件，
- *      通过原生 GallerySaver.writeMeta 存到「下载」集合（Download/PixivViewer/），
- *      随系统存储一起存活；重装后若 IndexedDB 为空则从备份自动恢复。
+ * 问题：IndexedDB 位于应用私有 WebView 数据，卸载即清空；系统文件才能活过卸载。
+ * 方案（按优先级）：
+ *   1. 默认路径直写（Download/Prism/pixiv_meta.json，纯 JSON）—— 需「所有文件访问」
+ *      权限（自用侧载 APK，设置页一键跳系统开关）；重装后重开一次权限即按路径找回；
+ *   2. SAF 备份文件夹（历史兜底，未开权限且已配置时使用）；
+ *   3. Downloads JSON（Download/PixivViewer/pixiv_meta.json）—— 同一安装期内的快速路径，
+ *      卸载重装后新 UID 读不到旧 Downloads 行，仅兜底；
+ *   4. 相册 PNG 副本（1×1 PNG 尾部藏 JSON）—— 未开权限时的跨重装兜底；
+ *      开启权限后不再写入，并自动清理历史副本。
+ * 重装后恢复：设置页重开「所有文件访问」→「从备份恢复」；全新安装则启动时自动恢复。
  */
 import { Capacitor } from '@capacitor/core';
 import { getAllMeta, getMeta, putMeta, putMetaBatch } from './cacheDB.js';
@@ -76,23 +82,37 @@ export async function writeMetaBackup(records) {
   try {
     const S = plugin();
     await S.writeMeta({ fileName: META_FILE, data: payload });
-    // 同时写一份相册副本（1×1 PNG 尾部藏 JSON）：
-    // 卸载重装后 MediaStore Downloads 行对新 UID 不可见，而 Pictures 媒体行可见，
-    // 相册副本是跨重装恢复的关键载体。重写成本高（建 PNG + 删旧图 + MediaStore 写入），
-    // 内容没变就跳过；_lastAlbumPayload 只在内存，进程重启后首次仍会写一遍兜底落盘。
+    // SAF 备份文件夹（用户选定，纯 JSON，不污染相册）：配置了就写它。
+    // 相册 PNG 副本只在未配置 SAF、或 SAF 写入失败（文件夹被删/SD 卡拔出）时兜底。
+    let safOk = false;
     try {
-      if (payload !== _lastAlbumPayload) {
-        const oldPngs = await S.listMetaPngs().then(r => r?.files, () => []);
-        if (Array.isArray(oldPngs)) {
-          for (const name of oldPngs) {
-            await S.delete({ fileName: name }).catch(() => {});
-          }
-        }
-        await S.save({ fileName: LEGACY_META_PNG, data: buildMetaPng(payload), mimeType: 'image/png' });
-        _lastAlbumPayload = payload;
+      const folder = await S.getBackupFolder().catch(() => null);
+      if (folder?.uri) {
+        await S.writeBackupFile({ fileName: META_FILE, data: payload });
+        safOk = true;
       }
     } catch (e) {
-      log.warn('[metaBackup] 写入相册备份失败:', e?.message || e);
+      log.warn('[metaBackup] 写入备份文件夹失败:', e?.message || e);
+    }
+    if (!safOk) {
+      // 相册副本（1×1 PNG 尾部藏 JSON）：卸载重装后 MediaStore Downloads 行对新 UID
+      // 不可见，而 Pictures 媒体行可见，是未配置 SAF 时跨重装恢复的关键载体。
+      // 重写成本高（建 PNG + 删旧图 + MediaStore 写入），内容没变就跳过；
+      // _lastAlbumPayload 只在内存，进程重启后首次仍会写一遍兜底落盘。
+      try {
+        if (payload !== _lastAlbumPayload) {
+          const oldPngs = await S.listMetaPngs().then(r => r?.files, () => []);
+          if (Array.isArray(oldPngs)) {
+            for (const name of oldPngs) {
+              await S.delete({ fileName: name }).catch(() => {});
+            }
+          }
+          await S.save({ fileName: LEGACY_META_PNG, data: buildMetaPng(payload), mimeType: 'image/png' });
+          _lastAlbumPayload = payload;
+        }
+      } catch (e) {
+        log.warn('[metaBackup] 写入相册备份失败:', e?.message || e);
+      }
     }
     log.info('[metaBackup] 已备份', items.length, '条喜欢/已保存 → pixiv_meta.json');
   } catch (e) {
@@ -244,6 +264,17 @@ export async function readMetaBackup() {
     log.debug('[metaBackup] 枚举备份失败:', e?.message || e);
   }
 
+  // 1.5 SAF 备份文件夹里的 JSON（配置了备份文件夹时的主备份）
+  try {
+    const folder = await plugin().getBackupFolder().catch(() => null);
+    if (folder?.uri) {
+      const r = await plugin().readBackupFile({ fileName: META_FILE }).catch(() => null);
+      if (r?.data) parsed.push(parseBackupJSON(r.data));
+    }
+  } catch (e) {
+    log.debug('[metaBackup] 读取备份文件夹失败:', e?.message || e);
+  }
+
   // 2. 相册里的 PNG 备份（Pictures 集合，卸载重装后仍可见；枚举全部副本并合并）
   try {
     const names = await plugin().listMetaPngs().then(r => r?.files, () => []);
@@ -272,7 +303,19 @@ export async function readMetaBackup() {
  * 幂等，可在启动时安全调用。备份不含 Cookie（见 writeMetaBackup），重装后需在设置页重填。
  */
 export async function restoreMetaBackupIfNeeded() {
-  if (!isNative()) return;
+  return runRestore({ manual: false });
+}
+
+/**
+ * 手动恢复（设置页按钮）：跳过「仅全新安装」的门槛，喜欢标记总是幂等合并
+ * （已有记录只抬升 likedAt 并回填缺失元数据，不会覆盖任何现有数据）。
+ */
+export async function restoreNow() {
+  return runRestore({ manual: true });
+}
+
+async function runRestore({ manual }) {
+  if (!isNative()) return { imported: 0, merged: 0 };
   try {
     const existing = await getAllMeta().catch(() => []);
     const existingWorks = (existing || []).filter(isWorkRecord);
@@ -282,17 +325,20 @@ export async function restoreMetaBackupIfNeeded() {
 
     // 全新安装：库为空 → 全量导入；库已有 saved 但一条喜欢都没有、而备份里有喜欢
     // → 只合并喜欢标记（自愈：首次启动相册权限未就绪导致读不到备份的场景）。
+    // manual（设置页手动恢复）跳过这道门槛，总是合并。
     const freshInstall = existingWorks.length === 0;
-    const needLikeMerge = !freshInstall && existingLikedCount === 0 && likedFromBackup.length > 0;
-    if (!freshInstall && !needLikeMerge) return; // 非全新安装且喜欢数据已存在，不覆盖
-    if (freshInstall && items.length === 0) return;
+    if (!manual) {
+      const needLikeMerge = !freshInstall && existingLikedCount === 0 && likedFromBackup.length > 0;
+      if (!freshInstall && !needLikeMerge) return { imported: 0, merged: 0 };
+    }
+    if (freshInstall && items.length === 0) return { imported: 0, merged: 0 };
 
     if (Array.isArray(hidden) && hidden.length > 0) {
       hiddenWorks.replace(hidden);
       log.info('[metaBackup] 已恢复', hidden.length, '条"不想看"隐藏');
     }
 
-    if (needLikeMerge) {
+    if (!freshInstall) {
       // 只合并喜欢标记：已有记录仅抬升 likedAt 并回填缺失元数据，缺失的建轻记录
       let mergedCount = 0;
       for (const it of likedFromBackup) {
@@ -331,32 +377,83 @@ export async function restoreMetaBackupIfNeeded() {
         }
       }
       log.info('[metaBackup] 已合并喜欢标记', mergedCount, '条（备份', likedFromBackup.length, '条）');
-    } else if (items.length > 0) {
-      const records = items.map(it => {
-        const entity = new PixivEntity({
-          id: PixivEntity.makeId(it.illustId, it.pageIndex ?? 0),
-          illustId: it.illustId,
-          source: it.source || sourceOfId(it.illustId),
-          pageIndex: it.pageIndex ?? 0,
-          type: it.type === 'gif' ? 'gif' : 'image',
-          state: it.state === 'saved' ? 'saved' : 'cached',
-          title: it.title || '',
-          author: it.author || '',
-          authorName: it.authorName || it.author || '',
-          authorId: it.authorId || '',
-          likedAt: it.likedAt || 0,
-          fileName: it.fileName || '',
-          cachedAt: it.cachedAt || 0,
-          tags: Array.isArray(it.tags) ? it.tags : [],
-        });
-        return entity.toRecord();
-      });
-      await putMetaBatch(records);
-      log.info('[metaBackup] 已从备份恢复', records.length, '条喜欢/已保存');
+      return { imported: 0, merged: mergedCount };
     }
+
+    const records = items.map(it => {
+      const entity = new PixivEntity({
+        id: PixivEntity.makeId(it.illustId, it.pageIndex ?? 0),
+        illustId: it.illustId,
+        source: it.source || sourceOfId(it.illustId),
+        pageIndex: it.pageIndex ?? 0,
+        type: it.type === 'gif' ? 'gif' : 'image',
+        state: it.state === 'saved' ? 'saved' : 'cached',
+        title: it.title || '',
+        author: it.author || '',
+        authorName: it.authorName || it.author || '',
+        authorId: it.authorId || '',
+        likedAt: it.likedAt || 0,
+        fileName: it.fileName || '',
+        cachedAt: it.cachedAt || 0,
+        tags: Array.isArray(it.tags) ? it.tags : [],
+      });
+      return entity.toRecord();
+    });
+    await putMetaBatch(records);
+    log.info('[metaBackup] 已从备份恢复', records.length, '条喜欢/已保存');
+    return { imported: records.length, merged: 0 };
   } catch (e) {
     log.warn('[metaBackup] 恢复失败:', e?.message || e);
+    return { imported: 0, merged: 0 };
   }
+}
+
+/* ── 备份位置（设置页入口） ── */
+
+/** 「所有文件访问」权限状态（非原生环境返回 false） */
+export async function hasAllFilesAccess() {
+  if (!isNative()) return false;
+  try {
+    const r = await plugin().hasAllFilesAccess();
+    return !!r?.granted;
+  } catch {
+    return false;
+  }
+}
+
+/** 跳到系统设置页开「所有文件访问」开关（用户手动开启，回来后轮询刷新状态） */
+export async function requestAllFilesAccess() {
+  if (!isNative()) return false;
+  try {
+    const r = await plugin().requestAllFilesAccess();
+    return !!r?.launched;
+  } catch {
+    return false;
+  }
+}
+
+/** 清理相册里的历史 PNG 备份副本（默认路径接管后不再需要） */
+export async function cleanupLegacyMetaPngs() {
+  if (!isNative()) return;
+  try {
+    const oldPngs = await plugin().listMetaPngs().then(r => r?.files, () => []);
+    if (Array.isArray(oldPngs)) {
+      for (const name of oldPngs) {
+        await plugin().delete({ fileName: name }).catch(() => {});
+      }
+    }
+  } catch {
+    /* 忽略清理失败 */
+  }
+}
+
+/** 手动立即备份：返回本次备份的 喜欢/已保存 条数 */
+export async function backupNow() {
+  if (!isNative()) return 0;
+  const records = await getAllMeta().catch(() => []);
+  const count = (records || []).filter(r => (r.likedAt || 0) > 0 || r.state === 'saved').length;
+  await writeMetaBackup(records);
+  return count;
 }
 
 /**

@@ -22,4 +22,6 @@ export { getMeta, putMeta } from './capacitor/cacheDB.js';
 export { galleryHasFile, exportToGallery, isGalleryAvailable, ensureGalleryReadPermission } from './capacitor/gallery.js';
 export {
   scheduleMetaBackup, restoreMetaBackupIfNeeded, ensureMetaBackup, reconcileGallery,
+  isMetaBackupAvailable, hasAllFilesAccess, requestAllFilesAccess, cleanupLegacyMetaPngs,
+  backupNow, restoreNow,
 } from './capacitor/metaBackup.js';

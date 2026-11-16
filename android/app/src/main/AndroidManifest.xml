@@ -45,4 +45,7 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- 备份默认路径直读写（Download/Prism）：自用侧载 APK 申请「所有文件访问」，
+         上架应用市场通常不批；用户在系统设置里手动开启 -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 </manifest>

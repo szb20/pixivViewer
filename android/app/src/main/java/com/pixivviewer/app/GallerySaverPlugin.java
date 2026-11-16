@@ -1,14 +1,21 @@
 package com.pixivviewer.app;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.ContentUris;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
+import android.provider.DocumentsContract;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.Base64;
 
 import com.getcapacitor.JSObject;
@@ -21,6 +28,9 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -505,6 +515,222 @@ public class GallerySaverPlugin extends Plugin {
         } catch (Exception e) {
             call.reject(e.getMessage(), e);
         }
+    }
+
+    // ── 备份文件直读写（所有文件访问 + 默认路径）──
+    // 自用侧载 APK 申请 MANAGE_EXTERNAL_STORAGE（「所有文件访问」，系统设置里手动开启），
+    // 拿到后直接读写 Download/Prism/pixiv_meta.json：零选夹、纯 JSON、不污染相册，
+    // 且重装后重开一次权限即可按默认路径找回备份（SAF 授权无法活过重装，路径授权也一样，
+    // 但默认路径免去了「重选同一文件夹」的步骤）。
+
+    private static final String BACKUP_DIR_NAME = "Prism";
+
+    /** 是否已获得「所有文件访问」（API<30 退化为运行时写权限） */
+    private boolean isAllFilesAccess() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            return Environment.isExternalStorageManager();
+        }
+        return getContext().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** 默认备份文件：Download/Prism/<fileName> */
+    private File directBackupFile(String fileName) {
+        File dir = new File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            BACKUP_DIR_NAME);
+        return new File(dir, fileName);
+    }
+
+    /** 查询「所有文件访问」权限状态 */
+    @PluginMethod
+    public void hasAllFilesAccess(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("granted", isAllFilesAccess());
+        call.resolve(ret);
+    }
+
+    /** 跳到本应用的「所有文件访问」系统设置页（用户手动开开关，回来后轮询刷新状态） */
+    @PluginMethod
+    public void requestAllFilesAccess(PluginCall call) {
+        try {
+            Intent intent;
+            if (Build.VERSION.SDK_INT >= 30) {
+                intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.fromParts("package", getContext().getPackageName(), null));
+            } else if (Build.VERSION.SDK_INT == 29) {
+                intent = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+            } else {
+                // 更早版本走运行时权限，理论上到不了这里
+                call.resolve(new JSObject().put("launched", false));
+                return;
+            }
+            getActivity().startActivity(intent);
+            call.resolve(new JSObject().put("launched", true));
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 查询当前备份位置：有「所有文件访问」→ 默认路径；否则 SAF 目录（可能未设置） */
+    @PluginMethod
+    public void getBackupFolder(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (isAllFilesAccess()) {
+            ret.put("uri", "direct");
+            ret.put("name", "Download/" + BACKUP_DIR_NAME);
+        } else {
+            Uri uri = safTreeUri();
+            if (uri != null) {
+                ret.put("uri", uri.toString());
+                ret.put("name", safDisplayName(uri));
+            } else {
+                ret.put("uri", "");
+                ret.put("name", "");
+            }
+        }
+        call.resolve(ret);
+    }
+
+    /** 把 JSON 备份写入备份位置：优先默认路径直写（所有文件访问），退回 SAF 目录 */
+    @PluginMethod
+    public void writeBackupFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        String data = call.getString("data");
+        if (fileName == null || data == null) {
+            call.reject("fileName 与 data 不能为空");
+            return;
+        }
+        // 路径一：所有文件访问 → 默认路径直写
+        if (isAllFilesAccess()) {
+            try {
+                File f = directBackupFile(fileName);
+                //noinspection ResultOfMethodCallIgnored
+                f.getParentFile().mkdirs();
+                try (OutputStream os = new FileOutputStream(f, false)) {
+                    os.write(data.getBytes(StandardCharsets.UTF_8));
+                }
+                JSObject ret = new JSObject();
+                ret.put("uri", f.getAbsolutePath());
+                call.resolve(ret);
+                return;
+            } catch (Exception e) {
+                call.reject(e.getMessage(), e);
+                return;
+            }
+        }
+        // 路径二：SAF 目录（用户选定）
+        Uri treeUri = safTreeUri();
+        if (treeUri == null) {
+            call.reject("未设置备份文件夹");
+            return;
+        }
+        try {
+            ContentResolver cr = getContext().getContentResolver();
+            try {
+                DocumentsContract.deleteDocument(cr, safChildUri(treeUri, fileName));
+            } catch (Exception ignored) {
+                // 旧文件不存在，忽略
+            }
+            Uri created = DocumentsContract.createDocument(cr,
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, safDocId(treeUri)),
+                "application/json", fileName);
+            if (created == null) {
+                call.reject("创建备份文件失败");
+                return;
+            }
+            try (OutputStream os = cr.openOutputStream(created, "w")) {
+                if (os == null) {
+                    call.reject("打开输出流失败");
+                    return;
+                }
+                os.write(data.getBytes(StandardCharsets.UTF_8));
+            }
+            JSObject ret = new JSObject();
+            ret.put("uri", created.toString());
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject(e.getMessage(), e);
+        }
+    }
+
+    /** 从备份位置读取 JSON 备份（无权限/无文件夹/无文件统一返回空字符串，不报错） */
+    @PluginMethod
+    public void readBackupFile(PluginCall call) {
+        String fileName = call.getString("fileName");
+        if (fileName == null) {
+            call.reject("fileName 不能为空");
+            return;
+        }
+        JSObject ret = new JSObject();
+        try {
+            InputStream is = null;
+            if (isAllFilesAccess()) {
+                File f = directBackupFile(fileName);
+                if (f.isFile()) is = new FileInputStream(f);
+            } else {
+                Uri treeUri = safTreeUri();
+                if (treeUri != null) {
+                    is = getContext().getContentResolver()
+                        .openInputStream(safChildUri(treeUri, fileName));
+                }
+            }
+            if (is == null) {
+                ret.put("data", "");
+            } else {
+                try {
+                    ret.put("data", new String(readAll(is), StandardCharsets.UTF_8));
+                } finally {
+                    //noinspection ThrowFromFinallyBlock
+                    is.close();
+                }
+            }
+        } catch (Exception e) {
+            ret.put("data", "");
+        }
+        call.resolve(ret);
+    }
+
+    // ── SAF 备份文件夹（Storage Access Framework，兜底路径）──
+    // 未开「所有文件访问」时的备选：用户一次性选定目录，系统授予持久化读写授权。
+    // 卸载重装后授权失效但文件仍在，重选同一目录即可恢复。
+
+    private static final String SAF_PREFS = "prism_backup";
+    private static final String SAF_KEY_URI = "tree_uri";
+    private static final int REQ_PICK_FOLDER = 47110;
+    private PluginCall pendingPickCall = null;
+
+    private SharedPreferences safPrefs() {
+        return getContext().getSharedPreferences(SAF_PREFS, Context.MODE_PRIVATE);
+    }
+
+    /** 已保存的目录树 uri（未设置返回 null） */
+    private Uri safTreeUri() {
+        String s = safPrefs().getString(SAF_KEY_URI, null);
+        if (s == null || s.isEmpty()) return null;
+        try {
+            return Uri.parse(s);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 目录树的文档 id（形如 "primary:Documents/Prism"） */
+    private String safDocId(Uri treeUri) {
+        return DocumentsContract.getTreeDocumentId(treeUri);
+    }
+
+    /** 目录树内某个文件的文档 uri */
+    private Uri safChildUri(Uri treeUri, String fileName) {
+        return DocumentsContract.buildDocumentUriUsingTree(treeUri, safDocId(treeUri) + "/" + fileName);
+    }
+
+    /** 目录显示名（取 doc id 最后一段，用于设置页展示） */
+    private String safDisplayName(Uri treeUri) {
+        String id = safDocId(treeUri);
+        int slash = id.lastIndexOf('/');
+        String name = slash >= 0 ? id.substring(slash + 1) : id;
+        return name.isEmpty() ? id : name;
     }
 
     // ── 分块写入大文件（与 saveDownload 同目标，供 ugoira 无损 ZIP 副本等大文件） ──
