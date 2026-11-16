@@ -163,7 +163,7 @@ export default function AuthorWorksPage({ authorId, authorName, authorAvatar: in
           <ImageGrid items={items} onOpen={handleOpen} />
         )}
         {!loading && hasMore && <div ref={sentinelRef} style={{ height: 1 }} />}
-        {loadingMore && <SkeletonGrid count={6} />}
+        {loadingMore && <div className="feed-spinner" role="status" aria-label="加载中" />}
         {!loading && appendError && (
           <div className="hint hint--error" onClick={loadMore} role="button">
             {appendError}

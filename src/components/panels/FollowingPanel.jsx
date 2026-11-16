@@ -3,12 +3,12 @@ import { pixivApi, isCookieErrorCode } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { useLikedSet } from '../../context/pixivCacheContext.js';
 import ImageGrid from '../ImageGrid.jsx';
-import SkeletonGrid from '../SkeletonGrid.jsx';
+
 import NeedCookieNotice from '../NeedCookieNotice.jsx';
 
 const CACHE_KEY = 'me_following';
 
-/** 关注画师最新作品面板（fetchFollowing 返回作品流，非用户列表）。刷新注册由 MePage 聚合。 */
+/** 关注画师最新作品面板（fetchFollowing 返回作品流，非用户列表）。刷新注册由 SubTabPage 宿主聚合。 */
 export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad }) {
   const likedSet = useLikedSet();
   const pageRef = useRef(1);
@@ -62,7 +62,7 @@ export default function FollowingPanel({ onOpen, onOpenSettings, onReportLoad })
         ))}
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {feed.loadingMore && <SkeletonGrid count={6} />}
+      {feed.loadingMore && <div className="feed-spinner" role="status" aria-label="加载中" />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

@@ -14,7 +14,7 @@ const log = createLogger('LikedPanel');
 const migrateInFlight = new Set();
 const migrateFailed = new Set();
 
-/** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 MePage 聚合，不在此注册。 */
+/** 本地喜欢面板（原 GalleryPage 提取）。刷新注册由 SubTabPage 宿主聚合，不在此注册。 */
 export default function LikedPanel({ onOpen, onReportLoad }) {
   const offsetRef = useRef(0);
 
@@ -33,7 +33,7 @@ export default function LikedPanel({ onOpen, onReportLoad }) {
   });
   const { load: reload } = feed;
 
-  // 上报 load 给 MePage，用于"我"页下拉刷新 / 双击刷新
+  // 上报 load 给 SubTabPage 宿主，用于本 tab 的下拉刷新 / 双击刷新
   useEffect(() => {
     onReportLoad?.('liked', reload);
   }, [reload, onReportLoad]);

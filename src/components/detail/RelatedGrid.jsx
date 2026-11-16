@@ -1,4 +1,4 @@
-import { MasonryFeed } from '../ImageGrid.jsx';
+import { MasonryFeed } from '../MasonryFeed.jsx';
 import { allMediaFromRelated } from './helpers.js';
 
 /**
@@ -12,6 +12,8 @@ export default function RelatedGrid({
   relatedRef,
   onSelectImage,
   onLongPress,
+  onLike,
+  likedIllustIds,
 }) {
   if (!related?.length) return null;
   const seen = new Set();
@@ -32,6 +34,8 @@ export default function RelatedGrid({
       items={visibleRelated}
       onOpen={(it, index) => onSelectImage?.(allMediaFromRelated(it), { items: navItems, index })}
       onLongPress={onLongPress}
+      onLike={onLike}
+      likedIllustIds={likedIllustIds}
       containerRef={(node) => {
         if (typeof relatedRef === 'function') relatedRef(node);
         else if (relatedRef) relatedRef.current = node;

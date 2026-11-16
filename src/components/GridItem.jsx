@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import HeartIcon from './icons/HeartIcon.jsx';
+import { isSquareCropThumb, rememberMediaDims } from '../utils/mediaDims.js';
 
 const LONG_PRESS_MS = 500;
 
@@ -15,6 +16,7 @@ const LONG_PRESS_MS = 500;
  * @param {boolean} isLiked     是否显示红心
  * @param {function} onOpen     (img) => void，点击打开
  * @param {function} onLongPress (img) => void，提供则启用长按（长按后不再触发 onOpen）
+ * @param {function} onLike     (img) => void，提供则左下角红心变为可点按钮（点按切喜欢，不打开详情）
  * @param {function} onHide      (id) => void，提供则在右上角显示 ✕（不想看/不再推荐）
  * @param {string}   variant    'grid' | 'masonry' | 'gallery'
  * @param {string}   thumbSrc   覆盖缩略图 src（如瀑布流的等比 540 缩略图）
@@ -24,6 +26,7 @@ export default memo(function GridItem({
   isLiked = false,
   onOpen,
   onLongPress,
+  onLike,
   onHide,
   variant = 'grid',
   thumbSrc,
@@ -110,6 +113,16 @@ export default memo(function GridItem({
     setError(false);
   }, []);
 
+  // 缩略图加载后把测到的真实尺寸入库（X 源接口没有宽高，网格/详情靠它兜真实比例）。
+  // 方形裁剪缩略图除外（见 isSquareCropThumb）：那是裁过的，不是原图比例，记了反而污染。
+  const reportDims = useCallback((im) => {
+    const nw = im?.naturalWidth || 0;
+    const nh = im?.naturalHeight || 0;
+    if (!nw || !nh) return;
+    if (isSquareCropThumb(nw, nh)) return;
+    rememberMediaDims(img?.illustId, 0, nw, nh);
+  }, [img?.illustId]);
+
   // src 变化（换图 / 重试后拿到新地址）时复位，避免一次失败就永久停在错误态
   useEffect(() => {
     setError(false);
@@ -126,9 +139,13 @@ export default memo(function GridItem({
     if (!im || !src) return;
     if (!im.complete) return;
     // complete 但拿不到尺寸 = 这张图已经失败了（缓存里的失败也走这里）
-    if (im.naturalWidth > 0) setLoaded(true);
-    else setError(true);
-  }, [src]);
+    if (im.naturalWidth > 0) {
+      setLoaded(true);
+      reportDims(im);
+    } else {
+      setError(true);
+    }
+  }, [src, reportDims]);
 
   // 缩略图加载完成前显示高光扫描占位
   const shimmerCls = !loaded && !error ? ' grid-shimmer' : '';
@@ -160,7 +177,7 @@ export default memo(function GridItem({
         alt={img.title || ''}
         loading="lazy"
         decoding="async"
-        onLoad={() => setLoaded(true)}
+        onLoad={(e) => { setLoaded(true); reportDims(e.currentTarget); }}
         onError={() => setError(true)}
       />
       {loaded && pageCount > 1 && (
@@ -183,12 +200,20 @@ export default memo(function GridItem({
       onContextMenu={handleContextMenu}
     >
       {thumb}
-      {loaded && isLiked && (
-        <span className={v.like}><HeartIcon filled /></span>
+      {loaded && onLike && (
+        <button
+          className={`${v.like} frosted${isLiked ? ' is-liked' : ''}`}
+          onClick={(e) => { e.stopPropagation(); onLike(img); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          aria-label={isLiked ? '取消喜欢' : '喜欢'}
+        ><HeartIcon filled={isLiked} /></button>
+      )}
+      {loaded && !onLike && isLiked && (
+        <span className={`${v.like} frosted is-liked`}><HeartIcon filled /></span>
       )}
       {loaded && onHide && (
         <button
-          className="grid-hide"
+          className="grid-hide frosted"
           onClick={(e) => { e.stopPropagation(); onHide?.(img.illustId); }}
           onPointerDown={(e) => e.stopPropagation()}
           aria-label="不再推荐"

@@ -223,6 +223,12 @@
   justify-content: flex-end;
 }
 
+/* 全宽网格形态（设置页「显示的来源」）：左对齐换行铺开，贴着说明行下方 */
+.settings-pill-group--wrap {
+  justify-content: flex-start;
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
 .settings-pill {
   padding: var(--sp-1) var(--sp-3);
   border: 1px solid rgba(var(--wash-rgb), 0.18);
@@ -241,6 +247,41 @@
   backdrop-filter: blur(12px) saturate(150%);
   color: var(--text-primary);
   font-weight: 600;
+}
+
+/* ── 图源配置入口胶囊（点击进入二级子页，非开关态） ── */
+.settings-entry-pill {
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.settings-entry-chevron {
+  margin-left: var(--sp-1);
+  color: var(--text-tertiary);
+}
+
+/* ── 表单字段块：label + input/textarea 一体的紧凑形态（子页名单 / 实例 / 代理） ── */
+.settings-field {
+  padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.07);
+}
+
+.settings-field:last-child,
+.settings-expand-area:last-child {
+  border-bottom: none;
+}
+
+.settings-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-2);
+}
+
+/* Cookie 展开区后若还跟字段，补一条分隔线（折叠时由 row 自带的 border-bottom 兜底） */
+.settings-expand-area {
+  border-bottom: 1px solid rgba(var(--wash-rgb), 0.07);
 }
 
 /* ── 保存提示（floating toast 样式） ── */
@@ -325,6 +366,11 @@
 
   .settings-row {
     padding: var(--sp-4) var(--sp-4);
+  }
+
+  /* 子页字段块与桌面行内距对齐 */
+  .settings-field {
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
   }
 
   /* 保存提示同样以内容区为基准居中，并改用实底 */

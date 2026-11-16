@@ -19,17 +19,24 @@ const actionIconProps = {
 };
 
 /**
- * 桌面操作条 — 从 ImageDetailView 抽出（≥900px 显示，见 detail.css）。
- * 手机端仍用图片上的悬浮爱心 + 长按下载。
+ * 详情页操作条 — 两种形态共享同一套动作逻辑（见 detail.css）：
+ * - panel（默认）：≥900px 信息栏里的一排方形图标钮，主操作（喜欢/下载）与
+ *   次操作（复制/放大）之间有细分隔线
+ * - floating：手机端右下角悬浮玻璃钮组（喜欢/下载/复制链接）。此前手机端
+ *   只有单颗爱心，复制链接完全没有入口；点大图即是灯箱，不需要放大钮
  *
- * 纯图标方块钮，没有文字标签，语义全靠 title / aria-label；title 顺带承担
+ * 纯图标钮没有文字标签，语义全靠 title / aria-label；title 顺带承担
  * 「下载 3 页」这类提示。下载中的忙态转圈由本组件自持。
  */
 export default function DetailActions({
   image, pageCount, illustData, pixivCache, setPixivCache,
-  saveAllPages, downloadPage, onOpenLightbox,
+  saveAllPages, downloadPage, onOpenLightbox, variant = 'panel',
 }) {
   const [actionBusy, setActionBusy] = useState(false);
+  const floating = variant === 'floating';
+  // 悬浮组是玻璃圆钮，操作条是方形钮：同一套动作只换皮肤
+  const btnClass = floating ? 'glass-icon-btn' : 'detail-action detail-action--fill';
+  const minorClass = floating ? 'glass-icon-btn' : 'detail-action';
   // 图标钮没有文字，这个文案走 title / aria-label（窄栏下也能看清下载范围）
   const downloadLabel = actionBusy ? '下载中…' : (pageCount > 1 ? `下载全部 ${pageCount} 页` : '下载');
 
@@ -67,15 +74,17 @@ export default function DetailActions({
   }, [image]);
 
   return (
-    <div className="detail-actions">
+    <div className={floating ? 'detail-actions--floating' : 'detail-actions'}>
       <LikeButton
         cur={image}
         onLikeSaveAll={saveAllPages}
         totalPages={pageCount}
-        className="detail-action detail-action--fill"
+        className={btnClass}
+        // 操作条里长按是隐藏手势，多图时喜欢和下载是两个独立按钮，title 不再绕着长按解释
+        title={pageCount > 1 ? '喜欢' : '喜欢并保存'}
       />
       <button
-        className="detail-action detail-action--fill"
+        className={btnClass}
         onClick={handleDownloadAction}
         disabled={actionBusy}
         title={downloadLabel}
@@ -89,25 +98,31 @@ export default function DetailActions({
           </svg>
         )}
       </button>
-      <button className="detail-action" onClick={handleCopyLink} title="复制链接" aria-label="复制链接">
+      <button className={minorClass} onClick={handleCopyLink} title="复制链接" aria-label="复制链接">
         <svg {...actionIconProps}>
           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
         </svg>
       </button>
-      <button
-        className="detail-action"
-        onClick={onOpenLightbox}
-        title="查看原图"
-        aria-label="查看原图"
-      >
-        <svg {...actionIconProps}>
-          <path d="M15 3h6v6" />
-          <path d="M9 21H3v-6" />
-          <path d="M21 3l-7 7" />
-          <path d="M3 21l7-7" />
-        </svg>
-      </button>
+      {/* 次操作用细线隔开，和主操作（喜欢/下载）拉开层次；悬浮组只有三颗钮不分组 */}
+      {!floating && (
+        <>
+          <span className="detail-actions-divider" aria-hidden="true" />
+          <button
+            className={minorClass}
+            onClick={onOpenLightbox}
+            title="放大查看"
+            aria-label="放大查看"
+          >
+            <svg {...actionIconProps}>
+              <path d="M15 3h6v6" />
+              <path d="M9 21H3v-6" />
+              <path d="M21 3l-7 7" />
+              <path d="M3 21l7-7" />
+            </svg>
+          </button>
+        </>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import { useOverlayFocus } from '../hooks/useOverlayFocus.js';
 import { useAppStore } from '../store/useAppStore.js';
 import { booruApiFor } from '../sources/api.js';
 import { scopedTabKey } from '../pixiv-assistant/index.js';
+import { registerBackHandler } from '../utils/backHandler.js';
 import '../styles/search.css';
 
 const PAGE_SIZE = 20;
@@ -97,6 +98,15 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
   const searchReturnTab = useAppStore(s => s.searchReturnTab);
   const setActiveTab = useAppStore(s => s.setActiveTab);
   const closeSearchComposer = useAppStore(s => s.closeSearchComposer);
+  // 安卓返回手势/返回键：搜索页是从别的 tab「推进来」的（点 Tag / 点 X 作者），
+  // 返回应回到来源 tab 而不是退出 App（桌面返回按钮用的同一份 searchReturnTab）
+  useEffect(() => {
+    if (!searchReturnTab || searchReturnTab === 'search') return;
+    return registerBackHandler(() => {
+      setActiveTab(searchReturnTab);
+      return true;
+    });
+  }, [searchReturnTab, setActiveTab]);
   const inputRef = useRef(null);
   // Esc（只作用最上层覆盖层）与关闭后的焦点归还由它负责；
   // 同一个 ref 顺带给「点空白处关闭」做包含判定
@@ -320,7 +330,7 @@ export default function SearchPage({ active = true, onOpen, registerRefresh, ref
       <ImageGrid items={feed.items} likedSet={likedSet} onOpen={onOpen} />
       {feed.loading && feed.items.length === 0 && <SkeletonGrid count={12} />}
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {feed.loadingMore && <SkeletonGrid count={6} />}
+      {feed.loadingMore && <div className="feed-spinner" role="status" aria-label="加载中" />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

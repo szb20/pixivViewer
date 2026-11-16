@@ -152,7 +152,7 @@ export default function RankingPage({ onOpen, registerRefresh, refreshToken = 0 
       {!feed.loading && feed.hasMore && (
         <div ref={feed.sentinelRef} style={{ height: 1 }} />
       )}
-      {feed.loadingMore && <SkeletonGrid count={6} />}
+      {feed.loadingMore && <div className="feed-spinner" role="status" aria-label="加载中" />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

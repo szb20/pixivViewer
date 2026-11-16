@@ -10,16 +10,17 @@ import AuthorWorksPage from './components/AuthorWorksPage.jsx';
 import DiscoverPage from './pages/DiscoverPage.jsx';
 import RankingPage from './pages/RankingPage.jsx';
 import SearchPage from './pages/SearchPage.jsx';
-import MePage from './pages/MePage.jsx';
+import SubTabPage from './pages/SubTabPage.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { useAppStore } from './store/useAppStore.js';
 import { storageFacade } from './pixiv-assistant/index.js';
 import { downloadMonitor } from './utils/downloadMonitor.js';
 import { useAndroidBackButton } from './hooks/useAndroidBackButton.js';
-import { useEdgeLongPress } from './hooks/useEdgeLongPress.js';
+import { useEdgeTap } from './hooks/useEdgeTap.js';
 import { useIsDesktop } from './hooks/useIsDesktop.js';
 import { useChromeAutoHide } from './hooks/useChromeAutoHide.js';
 import { useImageSourceId } from './hooks/useImageSource.js';
+import { useVisibleTabs, setTabVisible } from './hooks/useVisibleTabs.js';
 import { restoreMainScrollOnColdStart } from './utils/scroll.js';
 import { initTheme } from './utils/theme.js';
 import { isDev } from './utils/platform.js';
@@ -36,18 +37,15 @@ if (isDev()) {
   };
 }
 
-const TABS = [
-  { key: 'discover', label: '推荐' },
-  { key: 'ranking', label: '排行' },
-  { key: 'me', label: '我' },
-  { key: 'search', label: '搜索' },
-];
-
-/** tab key → 页面组件。与 TABS 同序，加 tab 只需在这里补一行 */
+/** tab key → 页面组件。与 hooks/useVisibleTabs.js 的 TABS 同序，加 tab 两处各补一行 */
 const TAB_PAGES = {
   discover: DiscoverPage,
   ranking: RankingPage,
-  me: MePage,
+  // 「我」拆开的四项共用 SubTabPage，靠 tabProps 传入 panelKey 区分
+  following: SubTabPage,
+  subscriptions: SubTabPage,
+  liked: SubTabPage,
+  bookmarks: SubTabPage,
   search: SearchPage,
 };
 
@@ -59,8 +57,11 @@ export default function App() {
   // 全局来源：切换来源时 tab-pane 的 key 变化 → 整块重挂载，
   // 列表 / 翻页游标 / 滚动位置 / 内存缓存全部天然重置（否则会残留另一站的列表）。
   const sourceId = useImageSourceId();
+  // 当前来源实际显示的主 tab：来源 caps 过滤 + 设置页「显示的页面」开关（useVisibleTabs）。
+  // X / zerochan 没有排行、用户关掉不用的页签 → 侧边栏、抽屉、tab 面板三处一起裁掉
+  const visibleTabs = useVisibleTabs(sourceId);
   // 逐字段订阅：无 selector 的 useAppStore() 会让 App 订阅整个 store，
-  // scrollPositions（每次滚动保存）/ meSubTab / downloadOpen 等高频变化
+  // scrollPositions（每次滚动保存）/ downloadOpen 等高频变化
   // 都会重渲染 App 整棵 tab 树。action 函数引用恒定，订阅它们零成本。
   const activeTab = useAppStore(s => s.activeTab);
   const visitedTabs = useAppStore(s => s.visitedTabs);
@@ -94,9 +95,13 @@ export default function App() {
       refreshToken: tabTokens[key] || 0,
     };
     switch (key) {
-      case 'discover': return { ...base, onOpenSettings: openSettings };
+      case 'discover': return { ...base, onOpenSettings: openSettings, onSearchTag: searchByTag };
       case 'search': return { ...base, searchSeed };
-      case 'me': return { ...base, onOpenSettings: openSettings, onAuthorWorks: openAuthorWorks };
+      // 「我」拆开的四项：SubTabPage 靠 panelKey 渲染对应面板
+      case 'subscriptions':
+        return { ...base, panelKey: key, onOpenSettings: openSettings, onAuthorWorks: openAuthorWorks };
+      case 'following': case 'liked': case 'bookmarks':
+        return { ...base, panelKey: key, onOpenSettings: openSettings };
       default: return base;
     }
   };
@@ -114,10 +119,10 @@ export default function App() {
 
   // 抽屉关闭：稳定引用 —— NavDrawer 的返回键注册依赖它，每次渲染换函数会让 handler 反复重注册
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  // 右边缘长按拉出抽屉。全屏覆盖层在场时让路：
-  // 灯箱自己有长按/滑动手势语义，设置/作者页打开时应先关掉它们
+  // 左右边缘轻点拉出抽屉。全屏覆盖层在场时让路：
+  // 灯箱自己有点按/滑动手势语义，设置/作者页打开时应先关掉它们
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
-  useEdgeLongPress(!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks, openDrawer);
+  useEdgeTap(!isDesktop && !drawerOpen && !settingsOpen && !detailImage && !authorWorks, openDrawer);
 
   // 窗口跨到手机宽度：桌面专属的搜索唤起态要收掉，免得切回来时残留；
   // 跨到桌面宽度则相反 —— 抽屉是手机形态，收掉（否则会和常驻侧边栏同时在场）
@@ -135,9 +140,19 @@ export default function App() {
   // 启动时应用外观主题（暗/亮/跟随系统，写 <html data-theme>，颜色翻转在 tokens.css）
   useEffect(() => { initTheme(); }, []);
 
+  // 当前 tab 被裁掉时（来源不支持 / 用户在设置里关掉 / 冷启动恢复了被关的页）跳回第一个可用 tab。
+  // 搜索是特例：从标签 / 搜索框 / 作者页发起的跳转都会 setActiveTab('search') ——
+  // 搜索页被关时不弹回首页，而是自动把它拉回可见（用户明确要用它了）。
+  // 只在真的不合法时写 store：切回 pixiv 时 visitedTabs / 滚动位置原样恢复。
+  useEffect(() => {
+    if (visibleTabs.some(t => t.key === activeTab)) return;
+    if (activeTab === 'search') { setTabVisible('search', true); return; }
+    setActiveTab(visibleTabs[0]?.key || 'discover');
+  }, [visibleTabs, activeTab, setActiveTab]);
+
   // 侧边栏 / 抽屉共用同一份导航 props —— 两者是同一个 SideNav 的两种形态
   const navProps = {
-    tabs: TABS,
+    tabs: visibleTabs,
     active: activeTab,
     onChange: setActiveTab,
     onOpenSettings: openSettings,
@@ -153,7 +168,7 @@ export default function App() {
 
       <ErrorBoundary>
         <main className="app-content">
-          {TABS.map(({ key }) => {
+          {visibleTabs.map(({ key }) => {
             const Page = TAB_PAGES[key];
             return (
               <div key={key} className="tab-pane" style={{ display: activeTab === key ? undefined : 'none' }}>
@@ -174,7 +189,7 @@ export default function App() {
 
       <PullToRefresh onRefresh={triggerPullRefresh} />
 
-      {/* 手机端左上角汉堡：打开导航抽屉。桌面有常驻 SideNav，不渲染。
+      {/* 手机端左下角汉堡：打开导航抽屉。桌面有常驻 SideNav，不渲染。
           抽屉打开期间它只滑出屏、不卸载 —— 关闭时 useOverlayFocus 要把焦点还给它，
           卸载了焦点就只能掉到 body */}
       {!isDesktop && !settingsOpen && !detailImage && !authorWorks && (

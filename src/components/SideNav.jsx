@@ -1,14 +1,14 @@
 /**
  * 侧边栏导航 —— 常驻形态在 ≥900px 显示，手机端（<900px）装进抽屉（NavDrawer）里同一份实现。
  *
- * 三段结构：主导航 / 当前章节的二级项 / 底部设置入口。
+ * 三段结构：主导航 / 当前章节的二级项 / 底部全局组（喜欢/下载/设置）。
  * 三组可折叠，交互一致（行右侧箭头，状态持久化）：来源组点整行，主导航行上的箭头是独立热区 ——
  * 那行还要负责切页签，不能让点一下就翻倍成「切页 + 折叠」。
- * 二级项默认只在对应章节展开（把「我」4 项和「排行」8 项常驻铺开会把侧边栏撑得很长），
+ * 二级项默认只在对应章节展开（「排行」8 项常驻铺开会把侧边栏撑得很长），
  * 手动点过箭头的章节以用户的选择为准，见 useSectionExpanded。
  * 点二级项 = 选中它 + 切到它所属的页面（已在那一页则只换内容）—— 二级项是「具体条目」，
  * 选完必须能看到结果，否则这一下点击在界面上等于没发生（抽屉里还先把抽屉关掉了）。
- * 取值与过滤和 MePage / RankingPage 共用 getMeSubTabs / getRankingModes，避免两处逻辑漂移。
+ * 取值与过滤和 RankingPage 共用 getRankingModes，避免两处逻辑漂移。
  *
  * R18 是当前档位的修饰（公开/R18 两个变体）而不是又一个档位，所以不跟档位列表并排：
  * 开关挂在「排行」行右侧，与展开箭头一样是独立热区（不能塞进 .side-nav-item —— button 套 button 是非法 HTML）。
@@ -18,12 +18,11 @@
  * —— 选完要能立刻看到结果。
  */
 import { useRef } from 'react';
-import { useImageSourceId, setImageSource } from '../hooks/useImageSource.js';
+import { useImageSourceId, useVisibleSourceIds, setImageSource } from '../hooks/useImageSource.js';
 import { useDownloadJobs } from '../hooks/useDownloadJobs.js';
 import { useSourcesExpanded, setSourcesExpanded } from '../hooks/useSourcesExpanded.js';
 import { useSectionExpanded, setSectionExpanded } from '../hooks/useSectionExpanded.js';
 import { useAppStore } from '../store/useAppStore.js';
-import { getMeSubTabs, clampMeSubTab } from '../utils/meTabs.js';
 import { getRankingModes, clampRankingCategory, canToggleR18 } from '../utils/rankingModes.js';
 import { SOURCE_LIST, getSource } from '../sources/registry.js';
 
@@ -66,10 +65,28 @@ const ICONS = {
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </>
   ),
-  me: (
+  following: (
     <>
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" />
+      <line x1="22" y1="11" x2="16" y2="11" />
+    </>
+  ),
+  subscriptions: (
+    <>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </>
+  ),
+  liked: (
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+  ),
+  bookmarks: (
+    <>
+      <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
     </>
   ),
   settings: (
@@ -137,15 +154,13 @@ export default function SideNav({
 }) {
   const isDrawer = variant === 'drawer';
   const sourceId = useImageSourceId(); // 排行/我的子项跟随当前来源
+  // 设置页「来源开关」可隐藏部分来源；当前来源即使被隐藏也保留在列表里，
+  // 否则展开后没有激活项，收起时也看不出当前在哪一站
+  const visibleSourceIds = useVisibleSourceIds();
+  const sourceOptions = SOURCE_LIST.filter(s => visibleSourceIds.includes(s.id) || s.id === sourceId);
   const sourcesExpanded = useSourcesExpanded();
   const sectionExpanded = useSectionExpanded();
   const currentSource = getSource(sourceId);
-  const meSubTabs = getMeSubTabs(sourceId);
-  const rawMeSubTab = useAppStore(s => s.meSubTab);
-  // 与排行档位同样收敛到当前来源可用的项：store 里可能留着别站的 key（如 pixiv 的「关注」），
-  // 不收敛的话 booru 下唯一那行「喜欢」不会被高亮，而页面显示的正是它
-  const meSubTab = clampMeSubTab(meSubTabs, rawMeSubTab);
-  const setMeSubTab = useAppStore(s => s.setMeSubTab);
   const settingsOpen = useAppStore(s => s.settingsOpen);
   const searchComposerOpen = useAppStore(s => s.searchComposerOpen);
   const setDownloadOpen = useAppStore(s => s.setDownloadOpen);
@@ -159,9 +174,10 @@ export default function SideNav({
   const selectRankingCategory = useAppStore(s => s.selectRankingCategory);
   const toggleRankingR18 = useAppStore(s => s.toggleRankingR18);
 
-  // 「我」的二级页签要跟在本项正下方，所以把它排到最后，
-  // 否则四个主项会被二级项割断（手机端 TABS 顺序不受影响）
-  const orderedTabs = [...tabs.filter(t => t.key !== 'me'), ...tabs.filter(t => t.key === 'me')];
+  // 「喜欢」是跨来源的本地库（IndexedDB），语义上属全局项 → 从主导航拆出、渲染到底部组，
+  // 主导航保持「每一项都跟随当前来源」的纯粹。tab 机制不变：点它同样走 onChange
+  const likedTab = tabs.find(t => t.key === 'liked');
+  const mainTabs = tabs.filter(t => t.key !== 'liked');
 
   // 抽屉里点任何一项都先关抽屉再执行 —— 抽屉盖着的正是要看的页面。
   // 例外是「来源」副项与 R18 开关：它们不换页，连换几站/拨开关时不希望每次都要重开抽屉。
@@ -178,28 +194,15 @@ export default function SideNav({
   });
 
   // 哪些章节有二级项可展开（决定要不要给这一行加箭头）。
-  // 「我」在 booru 来源下只剩「喜欢」一项，照样给箭头：有箭头与否只看「点开有没有东西」，
-  // 让「点行先展开」这套手势在所有来源下一致（否则换个站，同一行的行为就变了）
-  const hasSubs = (key) =>
-    (key === 'me' && meSubTabs.length > 0) || (key === 'ranking' && rankingModes.length > 0);
+  // 有箭头与否只看「点开有没有东西」，让「点行先展开」这套手势在所有来源下一致。
+  const hasSubs = (key) => key === 'ranking' && rankingModes.length > 0;
 
   // 二级项显隐 = 用户手动点过箭头就听他的，没点过沿用旧规则（只在当前章节展开）。
-  // 旧规则的意义见上面注释：常驻铺开的话「我」4 项 + 「排行」8 项会把侧边栏撑满。
+  // 常驻铺开的话「排行」8 项会把侧边栏撑满。
   const subsVisible = (key) => sectionExpanded[key] ?? (active === key);
 
   // 二级项的内容渲染（显隐由上面的 subsVisible 决定）
   const renderSubs = (key) => {
-    if (key === 'me' && meSubTabs.length > 0) {
-      return meSubTabs.map(s => (
-        <NavButton
-          key={s.key}
-          label={s.label}
-          active={meSubTab === s.key}
-          onClick={pickSub('me', () => setMeSubTab(s.key))}
-          sub
-        />
-      ));
-    }
     if (key === 'ranking') {
       return rankingModes.map(m => (
         <NavButton
@@ -254,7 +257,7 @@ export default function SideNav({
       {/* 来源单选：折叠样式同「排行」展开二级项 —— 标题行展开/收起，
           列表里当前来源恒为激活副项（收起时只留一行显示当前来源名）。
           点副项切换来源但不收起列表，方便连换几站对比 */}
-      {SOURCE_LIST.length > 1 && (
+      {sourceOptions.length > 1 && (
         <div className="side-nav-group side-nav-group--source">
           <button
             className="side-nav-item side-nav-toggle"
@@ -286,7 +289,7 @@ export default function SideNav({
           </button>
           {sourcesExpanded && (
             <div className="side-nav-subs">
-              {SOURCE_LIST.map(s => (
+              {sourceOptions.map(s => (
                 <NavButton
                   key={s.id}
                   label={s.shortLabel || s.label}
@@ -301,7 +304,7 @@ export default function SideNav({
       )}
 
       <div className="side-nav-group">
-        {orderedTabs.map(t => {
+        {mainTabs.map(t => {
           // 桌面端「搜索」点开的是悬浮搜索框（不跳页），所以唤起态也算选中
           const isActive = active === t.key || (t.key === 'search' && searchComposerOpen);
           const expandable = hasSubs(t.key);
@@ -365,6 +368,15 @@ export default function SideNav({
       </div>
 
       <div className="side-nav-footer">
+        {likedTab && (
+          <NavButton
+            icon={<svg {...svgProps}>{ICONS.liked}</svg>}
+            label={likedTab.label}
+            active={active === 'liked'}
+            aria-current={active === 'liked' ? 'page' : undefined}
+            onClick={act(() => onChange('liked'))}
+          />
+        )}
         <button className="side-nav-item" onClick={act(() => setDownloadOpen(true))}>
           <span className="side-nav-icon"><svg {...svgProps}>{ICONS.download}</svg></span>
           <span className="side-nav-label">下载</span>

@@ -14,11 +14,28 @@ import { getSource, SOURCE_LIST } from '../sources/registry.js';
 const SOURCE_ORDER = SOURCE_LIST.map(s => s.id);
 const DEFAULT_SOURCE = 'pixiv';
 
+// 默认在侧边栏可见的来源，其余默认隐藏（设置页「显示的来源」可自由开回）。
+// 不依赖 registry 的结构 —— 白名单写死在这一个地方即可。
+const DEFAULT_VISIBLE_SOURCES = ['pixiv', 'twitter', 'weibo', 'instagram', 'yande'];
+const defaultHiddenIds = () => SOURCE_ORDER.filter(id => !DEFAULT_VISIBLE_SOURCES.includes(id));
+
 // 同步取初值：settings 存在 localStorage，首帧就能拿到正确来源，
 // 避免先按 pixiv 渲染再闪回用户选的站点。
 const initial = getSettingsSync();
 let currentSource = SOURCE_ORDER.includes(initial.imageSource) ? initial.imageSource : DEFAULT_SOURCE;
 let safeOnly = initial.booruSafeOnly;
+// 被隐藏的来源（设置页「来源开关」）：侧边栏来源列表不再显示它们，
+// 但当前来源恒保留（否则列表里没有激活项）。缺省 = 白名单外全部隐藏（见上），
+// 存量配置（数组）原样尊重。
+let hiddenSources = new Set(
+  Array.isArray(initial.hiddenSources) ? initial.hiddenSources.filter(id => SOURCE_ORDER.includes(id)) : defaultHiddenIds()
+);
+// 可见来源快照：useSyncExternalStore 要求 getSnapshot 引用稳定（每次返回新数组会多渲一帧），
+// 只在 hiddenSources 变化时重建
+function computeVisibleSourceIds() {
+  return SOURCE_ORDER.filter(id => !hiddenSources.has(id));
+}
+let visibleSourceIds = computeVisibleSourceIds();
 let bootstrapped = false;
 
 const listeners = new Set();
@@ -34,9 +51,13 @@ function subscribe(fn) {
     // 异步兜底：settings 可能被注入过自定义实现（configurePixiv），与同步读不一致
     getSettings().then((s) => {
       const want = SOURCE_ORDER.includes(s.imageSource) ? s.imageSource : DEFAULT_SOURCE;
-      if (want !== currentSource || s.booruSafeOnly !== safeOnly) {
+      const hidden = Array.isArray(s.hiddenSources) ? s.hiddenSources : defaultHiddenIds();
+      if (want !== currentSource || s.booruSafeOnly !== safeOnly
+        || hidden.length !== hiddenSources.size || hidden.some(id => !hiddenSources.has(id))) {
         currentSource = want;
         safeOnly = s.booruSafeOnly === true;
+        hiddenSources = new Set(hidden.filter(id => SOURCE_ORDER.includes(id)));
+        visibleSourceIds = computeVisibleSourceIds();
         emit();
       }
     }).catch(() => { });
@@ -81,7 +102,7 @@ export function useImageSourceId() {
   return useSyncExternalStore(subscribe, getImageSourceId);
 }
 
-/** 当前来源定义（label / caps / net） */
+/** 来源定义（label / caps / net） */
 export function useImageSource() {
   return getSource(useImageSourceId());
 }
@@ -89,4 +110,32 @@ export function useImageSource() {
 /** 「非 Pixiv 来源只显示 safe」开关（响应式） */
 export function useBooruSafeOnly() {
   return useSyncExternalStore(subscribe, getBooruSafeOnly);
+}
+
+/** 未被隐藏的来源 id 列表（注册表顺序；响应式） */
+export function useVisibleSourceIds() {
+  return useSyncExternalStore(subscribe, getVisibleSourceIds);
+}
+
+/** 未被隐藏的来源 id 列表（注册表顺序）。同步读，供非 React 上下文；引用稳定 */
+export function getVisibleSourceIds() {
+  return visibleSourceIds;
+}
+
+/**
+ * 显示/隐藏某个来源（设置页「来源开关」用）。
+ * 隐藏当前来源不做拦截 —— 当前来源仍会保留在侧边栏列表里（SideNav 合并兜底）。
+ * @param {string} id
+ * @param {boolean} visible — true 显示 / false 隐藏
+ */
+export async function setSourceVisible(id, visible) {
+  if (!SOURCE_ORDER.includes(id)) return;
+  const next = visible ? 'delete' : 'add';
+  if (hiddenSources[next](id) === false) return; // Set.add/delete：无变化返回 false
+  visibleSourceIds = computeVisibleSourceIds();
+  emit();
+  try {
+    const s = await getSettings();
+    await saveSettings({ ...s, hiddenSources: [...hiddenSources] });
+  } catch { /* 持久化失败不回滚：本次会话仍按用户选择工作 */ }
 }

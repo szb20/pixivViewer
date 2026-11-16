@@ -6,12 +6,13 @@
  * - 长按：切换喜欢 + 下载全部页
  *
  * @param {string} [className] 外层样式，默认玻璃圆钮；详情页操作条传 'detail-action'
+ * @param {string} [title] 覆盖默认提示文案（操作条里长按是隐藏手势，提示不绕着长按解释）
  */
 
 import { useLikeAction } from '../hooks/useLikeAction.js';
 import HeartIcon from './icons/HeartIcon.jsx';
 
-export function LikeButton({ cur, onLikeSaveAll, totalPages, className = 'glass-icon-btn' }) {
+export function LikeButton({ cur, onLikeSaveAll, totalPages, className = 'glass-icon-btn', title }) {
   const { liked, multiPage, handleLike, startLongPress, cancelLongPress } = useLikeAction(cur, { onLikeSaveAll, totalPages });
 
   if (!cur?.illustId) return null;
@@ -27,7 +28,7 @@ export function LikeButton({ cur, onLikeSaveAll, totalPages, className = 'glass-
       onPointerUp={cancelLongPress}
       onPointerLeave={cancelLongPress}
       onPointerCancel={cancelLongPress}
-      title={multiPage ? '点按喜欢；长按喜欢+下载全部页' : '喜欢并保存'}
+      title={title ?? (multiPage ? '点按喜欢；长按喜欢+下载全部页' : '喜欢并保存')}
       aria-pressed={liked}
       aria-label={liked ? '取消喜欢' : '喜欢'}
     >

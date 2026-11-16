@@ -2,12 +2,12 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } fr
 import { pixivApi } from '../../api/pixiv.js';
 import { saveItem } from '../../api/index.js';
 import { saveAllPages as saveAllPagesShared } from '../../api/saveAllPages.js';
-import { pixivReUrl, pixivPageUrl, getCompositeKey } from '../../pixiv-assistant/index.js';
+import { pixivReUrl, pixivPageUrl, getCompositeKey, getSettings, getSettingsSync, saveSettings } from '../../pixiv-assistant/index.js';
 import { masonryThumbUrl } from '../../utils/imageUrl.js';
 import { isImageLoaded } from '../../utils/loadedImages.js';
 import { getSource } from '../../sources/registry.js';
 import { booruApiFor } from '../../sources/api.js';
-import { LikeButton } from '../LightboxActions.jsx';
+import { parseUserList } from '../../sources/nitter.js';
 import MediaLightbox from '../MediaLightbox.jsx';
 import UgoiraPlayer from '../UgoiraPlayer.jsx';
 import FollowIcon from '../icons/FollowIcon.jsx';
@@ -17,10 +17,12 @@ import DetailActions from './DetailActions.jsx';
 import { useRelatedWorks } from './useRelatedWorks.js';
 import { useLocalSrcs } from './useLocalSrcs.js';
 import { useMetaBackfill } from './useMetaBackfill.js';
-import { usePixivCache, usePixivCacheSetter } from '../../context/pixivCacheContext.js';
+import { usePixivCache, usePixivCacheSetter, useLikedSet } from '../../context/pixivCacheContext.js';
+import { buildLikedIllustIdSet } from '../../utils/worksState.js';
 import { useAuthorProfile } from '../../hooks/useAuthorProfile.js';
-import { useGridLikeToggle } from '../../hooks/useGridLikeToggle.js';
+import { useGridActions } from '../../hooks/useGridActions.js';
 import { registerBackHandler } from '../../utils/backHandler.js';
+import { ratioOfSize, resolveRatio } from '../../utils/mediaDims.js';
 import { createLogger } from '../../utils/logger.js';
 import { showToast } from '../../utils/toast.js';
 import { StatusBar } from '@capacitor/status-bar';
@@ -46,9 +48,12 @@ export default function ImageDetailView({
 }) {
   const { pixivCache, recommendationExcludedSet } = usePixivCache();
   const { setPixivCache } = usePixivCacheSetter();
-  const toggleLike = useGridLikeToggle();
+  const { toggleLike, downloadAll } = useGridActions();
   // 相关推荐只排除启动前已喜欢/已保存的作品，避免当前会话的收藏让卡片立即消失。
   const excludedAtStartup = recommendationExcludedSet || new Set();
+  // 相关推荐卡片左下角红心的喜欢态（likedSet 是只读 context，Set 相等时引用复用，不额外重渲染）
+  const likedSet = useLikedSet();
+  const relatedLikedIds = useMemo(() => buildLikedIllustIdSet(likedSet), [likedSet]);
   const [lightboxIndex, setLightboxIndex] = useState(null); // 灯箱：点击大图打开全屏预览
   const [illustData, setIllustData] = useState(null);
   const authorId = String(image?.authorId || illustData?.illust?.authorId || '');
@@ -79,6 +84,40 @@ export default function ImageDetailView({
   const useLargePreview = typeof window !== 'undefined' && window.innerWidth >= 900;
   const booruApi = booruApiFor(source);
   const caps = getSource(source).caps;
+  // X 没有作者页接口：作者行点击改为跳搜索页看该用户的媒体流（X 搜索原生支持 @用户名）
+  const twitterHandle = source === 'twitter'
+    ? (illustData?.illust?.authorAccount || image?.authorAccount || '')
+    : '';
+  // 微博同样没有作者页：点作者名跳搜索页看该 UID 的媒体流（搜索支持纯数字 UID 直查）
+  const weiboAuthorUid = source === 'weibo'
+    ? (illustData?.illust?.authorId || image?.authorId || '')
+    : '';
+  // X 的关注是纯本地名单（settings.twitterUsers，无远端 API）：关注/取关 = 增删该名单。
+  // 与 pixiv 的 follow-btn 同一颗图标同一位置，语义对齐；设置页的手填名单也会同步变化。
+  const [twFollowed, setTwFollowed] = useState(false);
+  useEffect(() => {
+    if (!twitterHandle) { setTwFollowed(false); return; }
+    setTwFollowed(parseUserList(getSettingsSync()?.twitterUsers || '').includes(twitterHandle));
+  }, [twitterHandle, illustData]);
+  const toggleTwitterFollow = useCallback(async () => {
+    if (!twitterHandle) return;
+    const s = await getSettings();
+    const users = parseUserList(s?.twitterUsers || '');
+    const next = users.includes(twitterHandle)
+      ? users.filter(u => u !== twitterHandle)
+      : [...users, twitterHandle];
+    const followed = next.includes(twitterHandle);
+    setTwFollowed(followed);
+    try {
+      await saveSettings({ ...s, twitterUsers: next.join('\n') });
+      showToast(followed ? `已关注 @${twitterHandle}` : `已取消关注 @${twitterHandle}`, { type: 'success' });
+      // 通知 X 推荐页刷新：取关的帖子立即从列表消失，新关注的账号下一拉并入
+      window.dispatchEvent(new CustomEvent('twitter:follows-changed', { detail: { user: twitterHandle, followed } }));
+    } catch {
+      setTwFollowed(!followed);
+      showToast('操作失败', { type: 'error' });
+    }
+  }, [twitterHandle]);
   // 多页能力由 caps 决定：Pixiv 与 X 的多图推文都是「一个作品多页」，booru 一条 post 一张图。
   // 它和 isBooru 是两件事 —— isBooru 还负责「禁止用 illustId 反推 pixiv 短链」，
   // 那是来源身份问题，不能跟着多页能力走（否则 X 的数字 id 会拼出同号的 pixiv 图）。
@@ -106,7 +145,8 @@ export default function ImageDetailView({
   useMetaBackfill({ illustId: image?.illustId, illustData, image, pixivCache, pageCount });
   // 相关推荐（模块级 LRU 缓存 + 切换作品时的 seq 守卫）
   const { related, loadingRelated, relatedRef } = useRelatedWorks(image?.illustId, caps.related);
-  const ratioOfSize = (w, h) => (w && h ? `${w} / ${h}` : '');
+  // 比例真相源统一走 utils/mediaDims.js 的 resolveRatio（实测→接口→列表→学到→兜底），
+  // 本文件不再自维护优先级链；详情接口尺寸是每页数组，列表尺寸只有页 0 可靠。
   // 详情页占位宽高比：优先真实尺寸，拿不到用常见 3:4 兜底
   const defaultRatio = (() => {
     const p0 = illustData?.illust?.images?.[0];
@@ -116,14 +156,18 @@ export default function ImageDetailView({
   })();
   const pageRatios = ratioCacheRef.current[image?.illustId] || {};
 
-  // 宽图 → 上下布局（见 WIDE_LAYOUT_RATIO）。比例优先取本页：实测缓存 > 接口尺寸 > 列表尺寸；
-  // 都拿不到时沿用 defaultRatio 的占位兜底（3:4），那种情况保持原来的左右分栏最安全。
+  // 宽图 → 上下布局（见 WIDE_LAYOUT_RATIO）。比例链统一走 resolveRatio；
+  // 都拿不到时沿用 defaultRatio 的占位兜底（3:4），那种情况保持左右分栏最安全。
   const wideLayout = (() => {
     const page = image?._pageIndex ?? 0;
-    const src = pageRatios[page]
-      || ratioOfSize(illustData?.illust?.images?.[page]?.width, illustData?.illust?.images?.[page]?.height)
-      || ratioOfSize(image?.width, image?.height)
-      || defaultRatio;
+    const src = resolveRatio({
+      measured: pageRatios[page],
+      api: ratioOfSize(illustData?.illust?.images?.[page]?.width, illustData?.illust?.images?.[page]?.height),
+      list: ratioOfSize(image?.width, image?.height),
+      illustId: image?.illustId,
+      page,
+      fallback: defaultRatio,
+    });
     const [w, h] = String(src).split('/').map(v => parseFloat(v));
     return !!w && !!h && w / h > WIDE_LAYOUT_RATIO;
   })();
@@ -274,7 +318,7 @@ export default function ImageDetailView({
     });
   }, [image, pageCount, pageImages, pixivCache, setPixivCache]);
 
-  // 长按图片 → 下载该页原图（单页保存）
+  // 单页作品的下载按钮（DetailActions 单页分支）；多页与长按都走 saveAllPages 汇总链路
   const downloadPage = useCallback(async (page) => {
     if (!image?.illustId) return;
     const ck = getCompositeKey({ illustId: image.illustId, _pageIndex: page });
@@ -309,6 +353,34 @@ export default function ImageDetailView({
       showToast('下载失败');
     }
   }, [image, buildSaveItem, pixivCache, setPixivCache, pageImages, booruApi]);
+
+  // X 推文正文里的 @ 提及渲染成可点链接：跳到该账号的媒体流（与作者行同一条路径）。
+  // handle 按 Twitter 语法严格匹配（字母数字下划线 ≤15 位），避免把标题里的普通文字误伤。
+  const renderTitle = () => {
+    const title = image?.title || '未命名';
+    if (source !== 'twitter') return title;
+    const parts = [];
+    const re = /@([A-Za-z0-9_]{1,15})/g;
+    let last = 0;
+    let m;
+    while ((m = re.exec(title))) {
+      // handle 必须在循环内 const 固化：onClick 闭包若直接引用 m，
+      // 循环结束后 exec 返回 null 会把 m 置空，点击时 m[1] 抛 TypeError → 跳转静默失败
+      const handle = m[1];
+      if (m.index > last) parts.push(title.slice(last, m.index));
+      parts.push(
+        <button
+          key={`${m.index}-${handle}`}
+          className="image-detail-mention"
+          onClick={(e) => { e.stopPropagation(); onSearchTag?.(`@${handle}`); }}
+        >@{handle}</button>
+      );
+      last = m.index + m[0].length;
+    }
+    if (!parts.length) return title;
+    if (last < title.length) parts.push(title.slice(last));
+    return parts;
+  };
 
   // 灯箱媒体项：点击大图弹出全屏预览（直接加载原图档）。
   // useMemo：仅依赖详情/本地URL/作品变化，避免相关推荐追加、缓存更新等无关渲染
@@ -532,12 +604,18 @@ export default function ImageDetailView({
                       previewUrl={previewUrl}
                       hdUrl={reuseHd ? '' : hd}
                       placeholderUrl={placeholderUrl}
-                      defaultRatio={ratioOfSize(imgs[p]?.width, imgs[p]?.height) || defaultRatio}
+                      defaultRatio={resolveRatio({
+                        api: ratioOfSize(imgs[p]?.width, imgs[p]?.height),
+                        illustId: image?.illustId,
+                        page: p,
+                        fallback: defaultRatio,
+                      })}
                       cachedRatio={pageRatios[p]}
                       previewNaturalWidth={previewW}
                       registerRef={registerPageRef}
                       onOpenLightbox={(page) => setLightboxIndex(page)}
-                      onLongPress={downloadPage}
+                      // 长按与网格同语义：喜欢 + 下载全部（单页 toast 链路退役，只留汇总提示）
+                      onLongPress={() => downloadAll(image)}
                       onRatioReady={rememberPageRatio}
                     />
                   );
@@ -549,11 +627,14 @@ export default function ImageDetailView({
 
         <div className="detail-author-panel">
           <div className="image-detail-meta">
-            <h2 className="image-detail-title">{image?.title || '未命名'}</h2>
+            <h2 className="image-detail-title">{renderTitle()}</h2>
             <div className="image-detail-author-row">
               {image?.authorName || image?.author ? (
-                <span className={`image-detail-author${caps.follow ? '' : ' image-detail-author--static'}`}
-                  onClick={caps.follow ? () => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar) : undefined}>
+                <span className={`image-detail-author${(caps.follow || twitterHandle || weiboAuthorUid) ? '' : ' image-detail-author--static'}`}
+                  onClick={caps.follow
+                    ? () => onAuthorWorks?.(image.authorId, image.authorName || image.author, image.authorAvatar)
+                    : (twitterHandle ? () => onSearchTag?.(`@${twitterHandle}`)
+                      : (weiboAuthorUid ? () => onSearchTag?.(weiboAuthorUid) : undefined))}>
                   <span className="image-detail-avatar-wrap">
                     {authorAvatar
                       ? <img className="image-detail-author-avatar" src={authorAvatar} alt="" loading="lazy" />
@@ -566,6 +647,15 @@ export default function ImageDetailView({
                         onClick={(e) => { e.stopPropagation(); toggleFollow(); }}
                       >
                         <FollowIcon followed={authorIsFollowed} />
+                      </button>
+                    )}
+                    {twitterHandle && !caps.follow && (
+                      <button
+                        className={`follow-btn${twFollowed ? ' followed' : ''}`}
+                        aria-label={twFollowed ? '取消关注' : '关注'}
+                        onClick={(e) => { e.stopPropagation(); toggleTwitterFollow(); }}
+                      >
+                        <FollowIcon followed={twFollowed} />
                       </button>
                     )}
                   </span>
@@ -628,7 +718,9 @@ export default function ImageDetailView({
                 excludedSet={excludedAtStartup}
                 relatedRef={relatedRef}
                 onSelectImage={onSelectImage}
-                onLongPress={toggleLike}
+                onLongPress={downloadAll}
+                onLike={toggleLike}
+                likedIllustIds={relatedLikedIds}
               />
               <div className="hint">没有更多推荐了</div>
             </>
@@ -649,13 +741,20 @@ export default function ImageDetailView({
         />
       )}
 
-      {/* 喜欢按钮 — 左下角悬浮，滑到相关推荐后隐藏 */}
+      {/* 手机端悬浮操作组（喜欢/下载/复制链接）——此前只有单颗爱心，
+          复制链接在手机上没有任何入口。滑到相关推荐后隐藏；≥900px 由
+          CSS 隐藏（桌面用信息栏操作条）。点大图即是灯箱，不需要放大钮 */}
       {showFloatingLike && (
         <div className="detail-floating-like">
-          <LikeButton
-            cur={image}
-            onLikeSaveAll={saveAllPages}
-            totalPages={pageCount}
+          <DetailActions
+            variant="floating"
+            image={image}
+            pageCount={pageCount}
+            illustData={illustData}
+            pixivCache={pixivCache}
+            setPixivCache={setPixivCache}
+            saveAllPages={saveAllPages}
+            downloadPage={downloadPage}
           />
         </div>
       )}

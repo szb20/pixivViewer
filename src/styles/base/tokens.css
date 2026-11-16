@@ -108,8 +108,10 @@
   --color-text-secondary: var(--text-secondary);
   --color-text-tertiary: var(--text-tertiary);
   --color-primary: var(--accent);
-  --color-accent: var(--accent);
-  --color-danger: var(--danger);
+  /* 注意别在这里反向定义 --color-accent/--color-danger：
+     文件头部已有真实值，若再写 var(--accent)/var(--danger) 会与
+     「兼容旧引用」块的 --accent: var(--color-accent) 互相引用成环，
+     变量全部失效，按钮文字/图标回退成继承色（白） */
   --z-lightbox: 10000;
   --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-xs: 11px;
@@ -170,6 +172,18 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* 手机端 WebView 长按文本会弹系统「选择文字/复制」菜单 —— 边缘长按呼出抽屉时
+     指下常常正好是标题/作者名，菜单会跟着一起弹。全局关掉，输入框单独恢复 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button {

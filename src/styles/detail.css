@@ -386,6 +386,21 @@
   cursor: pointer;
 }
 
+/* X 推文正文里的 @ 提及链接：内联在标题里，accent 上色不加壳 */
+.image-detail-mention {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.image-detail-mention:active {
+  opacity: 0.6;
+}
+
 .image-detail-tag:active {
   border-color: rgba(var(--wash-rgb), 0.24);
   color: var(--text-primary);
@@ -507,20 +522,17 @@
   transform: none;
 }
 
-.image-detail-main.is-loaded {
-  filter: blur(0) saturate(1);
-  transform: scale(1);
-}
-
 /* 预览图加载完成前保留清晰缩略图，避免“清晰→模糊”的中间态。
-   不加过渡：主图就是同一张图，直接换掉即可，任何淡入都会被看成「进入动画」。 */
+   不加过渡：主图就是同一张图，直接换掉即可，任何淡入都会被看成「进入动画」。
+   z-index 必须高于主图（1）：X/pbs 的渐进式 JPEG 解码中途就上软扫描，
+   占位图若压不住它，就会出现「清晰小图 → 模糊半成品 → 清晰」的三段闪烁。 */
 .image-detail-thumb-placeholder {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: 1;
+  z-index: 2;
   opacity: 1;
   pointer-events: none;
 }
@@ -592,15 +604,41 @@
 .image-detail-placeholder-spinner {
   width: 22px;
   height: 22px;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  border-top-color: rgba(255, 255, 255, 0.7);
+  border: 2px solid rgba(var(--wash-rgb), 0.25);
+  border-top-color: var(--text-primary);
   border-radius: 50%;
   animation: ptr-spin 0.8s linear infinite;
 }
 
-/* 详情操作条 — 桌面端专用（手机端仍是图片上的悬浮爱心 + 长按下载） */
+/* ===== 详情页操作条 =====
+ * 桌面（≥900px）：信息栏里的一排方形图标钮；手机：右下角悬浮玻璃钮组。
+ * 两套皮肤由 DetailActions 的 variant 切换，动作逻辑同一份 */
 .detail-actions {
   display: none;
+}
+
+/* 手机悬浮操作组（喜欢/下载/复制链接）：玻璃圆钮横排，定位沿用 .detail-floating-like */
+.detail-actions--floating {
+  display: flex;
+  gap: 10px;
+}
+
+/* 悬浮组的图标统一 22px（玻璃圆钮 48px，和 24px 的红心视觉同量级） */
+.detail-actions--floating svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 下载忙态转圈：与操作条图标同尺寸（18px），替换图标时按钮不跳动 */
+.detail-action-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(var(--wash-rgb), 0.25);
+  border-top-color: var(--text-primary);
+  border-radius: 50%;
+  animation: ptr-spin 0.8s linear infinite;
+  flex: none;
 }
 
 /* 详情页右下角悬浮 like 按钮 */
@@ -632,14 +670,12 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(15, 17, 21, 0.55);
-  backdrop-filter: blur(10px) saturate(150%);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  /* 对齐网格红心的超浅玻璃：无色底、仅模糊 */
+  background: transparent;
+  backdrop-filter: blur(10px) saturate(140%);
+  color: rgba(255, 255, 255, 0.92);
+  /* 字体规格对齐网格页数角标：11px、常规字重、无字距 */
+  font-size: 11px;
   pointer-events: none;
 }
 
@@ -1058,14 +1094,16 @@
     outline-offset: 2px;
   }
 
-  /* 下载转圈：文字标签没了，忙碌状态改用 spinner 表达 */
-  .detail-action-spinner {
-    width: 15px;
-    height: 15px;
-    border: 2px solid rgba(var(--wash-rgb), 0.28);
-    border-top-color: var(--text-primary);
-    border-radius: 50%;
-    animation: ptr-spin 0.8s linear infinite;
+  /* 下载转圈已上移为全局基础样式（18px 与图标同尺寸，悬浮组也要用） */
+
+  /* 主次分组：喜欢/下载（主）与复制/放大（次）之间的细分隔线 */
+  .detail-actions-divider {
+    width: 1px;
+    height: 22px;
+    align-self: center;
+    margin: 0 2px;
+    background: rgba(var(--wash-rgb), 0.12);
+    flex: none;
   }
 
   /* 已喜欢：整颗按钮跟着红心一起变调，别只剩图标是红的。
@@ -1078,6 +1116,11 @@
       inset 0 1px 0 rgba(var(--wash-rgb), 0.09),
       0 0 14px rgba(255, 71, 87, 0.16);
     color: #ffd9dd;
+  }
+
+  /* 点红心时的弹跳反馈：与网格红心/灯箱同款动效（keyframes 复用 shell.css 的 heart-pop） */
+  .detail-action.is-liked .heart-icon {
+    animation: heart-pop 0.3s ease;
   }
 
   /* 浅色下粉色 #ffd9dd 与红底对比不足，换正红 */

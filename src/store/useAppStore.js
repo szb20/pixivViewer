@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { getMainScrollEl, restoreMainScroll } from '../utils/scroll.js';
 import { nextRankingSelection, canToggleR18 } from '../utils/rankingModes.js';
+import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
 
 const detailKeyOf = (item) => (
     item?.illustId ? `${item.illustId}:${item._pageIndex ?? item.pageIndex ?? 0}` : ''
@@ -35,21 +36,19 @@ const authorItemToDetail = (item, fallback = {}) => ({
 
 // ===== 滚动位置持久化（页面快照）=====
 // 会话内靠页面保活（display:none）+ 内存 scrollPositions 恢复；
-// App 重启后内存丢失，这里把各 tab 的 scrollTop 存进 localStorage，
+// App 重启后内存丢失，这里把各 tab 的 scrollTop 存进 appStorage（统一小数据入口），
 // 冷启动后 setActiveTab / 挂载恢复逻辑直接从持久化值取。
-const SCROLL_STORE_KEY = 'pv:scrollPositions';
+const SCROLL_NS = 'scrollPositions';
+// 旧独立 key 一次性迁移到统一存储
+migrateFromLegacyKey('pv:scrollPositions', SCROLL_NS);
 
 function loadScrollPositions() {
-    try {
-        return JSON.parse(localStorage.getItem(SCROLL_STORE_KEY) || '{}') || {};
-    } catch {
-        return {};
-    }
+    return appStorage.get(SCROLL_NS, {}) || {};
 }
 
 function persistScrollPositions(sp) {
     try {
-        localStorage.setItem(SCROLL_STORE_KEY, JSON.stringify(sp || {}));
+        appStorage.set(SCROLL_NS, sp || {});
     } catch { /* 存储不可用时静默跳过 */ }
 }
 
@@ -60,12 +59,8 @@ export const useAppStore = create((set, get) => ({
     scrollPositions: loadScrollPositions(),
     tabTokens: {},
     refreshFns: {},
-    // 「我」页当前子页签。桌面侧边栏要驱动它，所以放在 store 而非 MePage 局部状态
-    meSubTab: 'liked',
 
-    setMeSubTab: (key) => set({ meSubTab: key }),
-
-    // 排行榜当前档位与 R18 开关。同样是为了让桌面侧边栏能驱动（手机端是底部的筛选条）
+    // 排行榜当前档位与 R18 开关。为了桌面侧边栏能驱动（手机端是底部的筛选条）
     rankingCategory: 'daily',
     rankingR18: false, // 默认只看公开档，R18 需手动开启
 

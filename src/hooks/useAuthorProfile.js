@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivApi } from '../api/pixiv.js';
 import { showToast } from '../utils/toast.js';
+import { appStorage, migrateFromLegacyKey } from '../utils/appStorage.js';
 
 // 作者资料缓存（userId → { avatar, isFollowed }）：跨页面共享，避免重复请求
 const profileCache = new Map();
-// 头像持久缓存：userId → avatar URL（成功拉取后写入 localStorage，接口被拦/重启后仍可显示）
-const AVATAR_CACHE_KEY = 'pixiv_author_avatars';
+// 旧独立 key 一次性迁移到统一存储（此前存的是 userId → avatar URL 的 map）
+migrateFromLegacyKey('pixiv_author_avatars', 'authorAvatars');
+// 头像持久缓存：userId → avatar URL（成功拉取后写入 appStorage，接口被拦/重启后仍可显示）
 function loadAvatarCache() {
-  try { return JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || '{}') || {}; } catch { return {}; }
+  return appStorage.get('authorAvatars', {}) || {};
 }
 function saveAvatarCache(id, url) {
   try {
     const map = loadAvatarCache();
     map[id] = url;
-    localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(map));
+    appStorage.set('authorAvatars', map);
   } catch { /* 存储不可用时忽略 */ }
 }
 

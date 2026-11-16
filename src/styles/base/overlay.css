@@ -209,47 +209,36 @@
   }
 }
 
+/* 纯玻璃药丸 —— 与网格角标同一套极简语言：无描边、无字影、无整块染色。
+   文本单行居中：短消息药丸贴内容宽度，超长在视口内截断省略 */
 .toast {
-  padding: var(--sp-2) var(--sp-4);
-  border-radius: var(--r-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 8px 16px;
+  border-radius: var(--r-pill);
   color: var(--text-primary);
   font-size: 13px;
-  animation: toast-in 0.2s ease;
-  backdrop-filter: blur(18px) saturate(160%);
-  /* 语义色只作为细微光效，不再把提醒整体染成红色等实色块 */
-  background: rgba(var(--glass-rgb), 0.58);
-  border: 1px solid rgba(var(--wash-rgb), 0.16);
-  text-shadow: 0 0 10px rgba(var(--toast-color, var(--wash-rgb)), 0.3);
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(var(--wash-rgb), 0.08);
-}
-
-/* 每个语义变体只声明 --toast-color */
-.toast[data-type="info"] {
-  --toast-color: var(--color-accent-rgb);
-}
-
-.toast[data-type="success"] {
-  --toast-color: var(--color-accent-rgb);
-}
-
-.toast[data-type="error"] {
-  --toast-color: var(--wash-rgb);
-}
-
-.toast[data-type="warning"] {
-  --toast-color: var(--color-warning-rgb);
+  font-weight: 500;
+  text-align: center;
+  background: rgba(var(--glass-rgb), 0.45);
+  backdrop-filter: blur(16px) saturate(150%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  animation: toast-in 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(-8px);
+    transform: translateY(-10px) scale(0.94);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }

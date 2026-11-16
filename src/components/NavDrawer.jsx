@@ -76,8 +76,10 @@ export default function NavDrawer({ onClose, children }) {
 }
 
 /**
- * 左上角汉堡入口。offscreen 时只做位移不收起来 —— 抽屉打开期间它必须留在 DOM 里，
+ * 左缘垂直居中的汉堡入口（位置见 navDrawer.css 的 .drawer-trigger）。
+ * offscreen 时只做位移不收起来 —— 抽屉打开期间它必须留在 DOM 里，
  * 否则 useOverlayFocus 关闭时要把焦点还回去的那个元素已经不在文档中了（焦点会掉到 body）。
+ * 隐藏动画是向左滑出（见 navDrawer.css 的 .drawer-trigger--hidden），回来时从左划入。
  */
 export function DrawerTrigger({ offscreen, onClick }) {
   const { activeCount, failCount } = useDownloadJobs();

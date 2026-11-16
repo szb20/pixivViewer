@@ -2,13 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { pixivReUrl } from '../../pixiv-assistant/index.js';
 import { createLogger } from '../../utils/logger.js';
 import { markImageLoaded } from '../../utils/loadedImages.js';
+import { isSquareCropThumb, rememberMediaDims } from '../../utils/mediaDims.js';
 
 const log = createLogger('DetailPageBlock');
 
 /**
  * 多图详情页的单页块 — 所有页面上下堆叠展示。
  * 进入视口时懒加载原图（本地相册优先 → 网络原图），
- * 原图就绪前用缩略图/等比预览铺底；点击打开灯箱；长按下载该页原图。
+ * 原图就绪前用缩略图/等比预览铺底；点击打开灯箱；长按喜欢+下载全部（与网格一致）。
  *
  * hdUrl：桌面端传高清原图（本地原图或详情接口的原图直链）。
  * 预览先渲染保证秒开，原图到货后淡入覆盖；失败就保持预览，不打断阅读。
@@ -42,7 +43,7 @@ export default function DetailPageBlock({
   // 卸载时丢掉未触发的长按：500ms 窗口内滑走/关闭详情，不该再弹出下载框
   useEffect(() => () => clearTimeout(longPressTimerRef.current), []);
 
-  // 长按 500ms 触发单页下载；只有明显移动(>10px)/抬起/离开才取消。
+  // 长按 500ms 触发（喜欢+下载全部，语义由父组件的 onLongPress 决定）；只有明显移动(>10px)/抬起/离开才取消。
   // 用 setPointerCapture 锁定指针，配合 contextmenu 兜底，避免被 WebView/click 吃掉。
   const startLongPress = useCallback((e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -81,12 +82,13 @@ export default function DetailPageBlock({
   }, [page, onLongPress]);
 
   // 详情流始终显示 540px 等比预览，避免打开作品时出现空白或加载高分图。
-  // 后续页必须使用本页预览，不得复用第 0 页缩略图。
+  // 逐页占位：placeholderUrl 由父级按页算好（X 用本页 name=small 小图、pixiv 用本页
+  // 540 裁剪档，见 ImageDetailView 的 pageThumb 注释），比例与本页主图一致，
+  // 铺底不会错位；转圈动画叠在占位图上方（z-index 高一档），主图到货淡入覆盖。
   // pixivReUrl 只认 Pixiv 的 illustId：非 Pixiv 来源兜底为空，宁可空底也不拿同号 pixiv 图顶包。
   const isBooru = (image?.source || 'pixiv') !== 'pixiv';
-  const bg = placeholderUrl || (page === 0
-    ? (image?.thumbnailUrl || (isBooru ? '' : pixivReUrl(String(image.illustId), page)))
-    : '');
+  const bg = placeholderUrl
+    || (page === 0 ? (image?.thumbnailUrl || (isBooru ? '' : pixivReUrl(String(image.illustId), page))) : '');
   // 详情流只展示 540px 预览图；原图只由灯箱按需加载。
   const src = previewUrl;
   const loaded = !!src && loadedSrc === src;
@@ -110,14 +112,16 @@ export default function DetailPageBlock({
     setLoadedSrc(src);
     const nw = el.naturalWidth;
     const nh = el.naturalHeight;
-    const isSquareCrop = nw === nh && (nw === 540 || nw === 250 || nw === 1200);
+    const isSquareCrop = isSquareCropThumb(nw, nh);
     // 仅等比预览图参与宽高比校准，跳过 Pixiv 方形裁剪缩略图（540×540, 250×250, 1200×1200）
     if (nw && nh && !isSquareCrop) {
       const nextRatio = `${nw} / ${nh}`;
       setRatio(nextRatio);
+      // 学到的尺寸全局入库：X 源接口没有宽高，网格卡片与下次打开的首帧比例靠它兜
+      rememberMediaDims(image?.illustId, page, nw, nh);
       onRatioReady?.(page, nextRatio);
     }
-  }, [src, page, onRatioReady]);
+  }, [src, page, image?.illustId, onRatioReady]);
 
   // 补挂载竞态：命中缓存的图可能在 React 收到 load 之前就已 complete，onLoad 丢失后
   // 预览永不淡入、高清图永远盖不上（同 GridItem.jsx 的处理；切页/重进作品时很常见）。
@@ -177,11 +181,9 @@ export default function DetailPageBlock({
               draggable={false}
             />
           )}
-          {!bg && (
-            <div className="image-detail-placeholder">
-              <span className="image-detail-placeholder-spinner" />
-            </div>
-          )}
+          <div className="image-detail-placeholder">
+            <span className="image-detail-placeholder-spinner" />
+          </div>
         </>
       ) : !failed ? (
         <>
@@ -193,7 +195,7 @@ export default function DetailPageBlock({
               draggable={false}
             />
           )}
-          {!loaded && !bg && (
+          {!loaded && (
             <div className="image-detail-placeholder">
               <span className="image-detail-placeholder-spinner" />
             </div>

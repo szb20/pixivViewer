@@ -3,14 +3,14 @@ import { pixivApi, isCookieErrorCode } from '../../api/pixiv.js';
 import { useTabFeed } from '../../hooks/useTabFeed.js';
 import { useLikedSet, usePixivCache } from '../../context/pixivCacheContext.js';
 import ImageGrid from '../ImageGrid.jsx';
-import SkeletonGrid from '../SkeletonGrid.jsx';
+
 import NeedCookieNotice from '../NeedCookieNotice.jsx';
 
 const PAGE_SIZE = 48;
 const CACHE_KEY = 'me_bookmarks';
 
 /**
- * Pixiv 收藏夹面板（原 BookmarksPage 提取）。刷新注册由 MePage 聚合。
+ * Pixiv 收藏夹面板（原 BookmarksPage 提取）。刷新注册由 SubTabPage 宿主聚合。
  * 展示 pixiv 账号收藏；列表项天然视为已收藏 → 红心全亮（显示层合并，
  * 不写本地“喜欢”库）；长按红心的远端收藏同步见 api/bookmarkSync.js。
  */
@@ -83,7 +83,7 @@ export default function BookmarksPanel({ onOpen, onOpenSettings, onReportLoad })
         ))}
       <ImageGrid items={items} likedSet={displayLikedSet} onOpen={onOpen} />
       {!feed.loading && feed.hasMore && <div ref={feed.sentinelRef} style={{ height: 1 }} />}
-      {feed.loadingMore && <SkeletonGrid count={6} />}
+      {feed.loadingMore && <div className="feed-spinner" role="status" aria-label="加载中" />}
       {!feed.loading && feed.appendError && (
         <div className="hint hint--error" onClick={feed.retryAppend} role="button">
           加载失败，点击重试

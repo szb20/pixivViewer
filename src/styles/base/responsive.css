@@ -160,6 +160,11 @@
   .grid-hide:hover {
     background: rgba(255, 255, 255, 0.22);
   }
+
+  /* 图上的喜欢按钮：玻璃底常驻（喜欢/未喜欢都有），悬停提亮 */
+  .grid-like.frosted:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -173,6 +178,7 @@
   .dialog-overlay,
   .dialog-panel,
   .grid-shimmer::after,
+  .feed-spinner::before,
   .ptr-refreshing .ptr-ring {
     animation: none !important;
     transition: none !important;
