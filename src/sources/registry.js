@@ -8,7 +8,7 @@
  * BOORU_ROUTES 直接 import 本表派生）与前端的 URL 重写都从它派生 —— 改这里即全局生效。
  */
 import { DEFAULT_SOURCE } from '../pixiv-assistant/index.js';
-import { API_CLIENT_UA } from './shared.js';
+import { API_CLIENT_UA, CHROME_DESKTOP_UA } from './shared.js';
 
 /**
  * @typedef {object} SourceCaps
@@ -27,6 +27,9 @@ import { API_CLIENT_UA } from './shared.js';
  * @property {string} apiOrigin      — 生产环境 API 直连源
  * @property {string} apiPrefix      — dev / 桌面壳的 API 代理前缀
  * @property {Record<string,string>} imgHosts — 图片域名 → dev 下的代理前缀
+ * @property {string} [imgReferer]   — 图床代理注入的 Referer（缺省同图床域自身；
+ *                                     微博的 sinaimg 校验 Referer 必须是微博域，必须显式给）
+ * @property {boolean} [direct]      — dev/桌面代理直连目标站，不走 Clash（国内站点用）
  * @property {string} [userAgent]    — 覆盖默认 UA（见 shared.js 的 API_CLIENT_UA 说明）
  * @property {boolean} [http2]       — 全站应用层强制 HTTP/2（代理路由走 createH2Proxy，
  *                                     见 scripts/proxy-utils.mjs 的 createH2Proxy 说明）
@@ -314,6 +317,55 @@ export const SOURCES = {
       apiOrigin: 'https://nitter.netbub.com',
       apiPrefix: '/nitter-api',
       imgHosts: { 'pbs.twimg.com': '/nitter-img' },
+    },
+  },
+  weibo: {
+    id: 'weibo',
+    label: '微博',
+    shortLabel: '微博',
+    kind: 'weibo',
+    ratioRange: { min: 0.4, max: 1 }, // 微博配图横竖都有：横图钳 1:1，避免扁卡片
+    caps: {
+      // 关注流由「设置 → 微博图源」的 UID 名单驱动（匿名读不到登录态的 following）；
+      // 匿名访客模式下所有列表只有第 1 页，追加页靠多名关注账号合并凑
+      feed: true, ranking: false, search: true, multiPage: true,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      // m.weibo.cn 移动端 JSON 接口 + 访客 Cookie（见 sources/weibo.js 文件头）。
+      // 图床 *.sinaimg.cn 校验 Referer（空 Referer 也 403）：适配器把 host 归一到
+      // tva1，dev 走 /weibo-img 代理注入 Referer，真机由原生 WebViewClient 拦截补头。
+      // 访客系统的 passport 域走 /weibo-passport 路由（booru-proxy 手动登记）。
+      apiOrigin: 'https://m.weibo.cn',
+      apiPrefix: '/weibo-api',
+      imgHosts: { 'tva1.sinaimg.cn': '/weibo-img' },
+      imgReferer: 'https://m.weibo.cn/',
+      direct: true, // 国内站点：dev/桌面代理直连，不走 Clash
+    },
+  },
+  instagram: {
+    id: 'instagram',
+    label: 'Instagram',
+    shortLabel: 'IG',
+    kind: 'instagram',
+    ratioRange: { min: 0.5, max: 1 }, // 横图钳 1:1：放开横图后横向卡片过小，统一方化
+    caps: {
+      // 推荐流优先用登录账号的真实主页时间线（/api/v1/feed/timeline/），失败回退
+      // 「设置 → Instagram 图源」的用户名名单（见 sources/instagram.js 文件头）；
+      // 无榜单；搜索只支持用户名/主页链接
+      feed: true, ranking: false, search: true, multiPage: true,
+      follow: false, related: false, ugoira: false, accountTabs: false,
+    },
+    net: {
+      // www.instagram.com（GraphQL + 主页时间线接口，POST form + 登录 Cookie）。
+      // 图床 instagram.f*.fna.fbcdn.net 被墙且 host 动态（几十个区域分域）：
+      // imgHosts 里登记的 host 只是路由表占位（check-sources 一致性校验用），
+      // 实际转发由 booru-proxy 的 /ig-img 动态 host 中间件完成（白名单 fbcdn.net /
+      // cdninstagram.com）。真机走 Clash VPN 直连，无需原生拦截（图床无防盗链）。
+      apiOrigin: 'https://www.instagram.com',
+      apiPrefix: '/ig-api',
+      imgHosts: { 'instagram.fhkg4-2.fna.fbcdn.net': '/ig-img' },
+      userAgent: CHROME_DESKTOP_UA, // GraphQL 对 UA 形态有校验，必须完整桌面 Chrome UA
     },
   },
 };

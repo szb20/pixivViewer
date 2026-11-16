@@ -76,11 +76,32 @@ export function getSettingsSync() {
     imageSource: stored.imageSource || DEFAULT_SOURCE,
     // 非 Pixiv 来源是否只显示 rating:safe。默认 false（全部显示），用户在设置页可收紧。
     booruSafeOnly: stored.booruSafeOnly === true,
+    // 注意：hiddenSources 不在这里给默认值（缺省走 useImageSource 的白名单逻辑，见其 DEFAULT_VISIBLE_SOURCES）。
+    // 在主导航里隐藏的页签 key（设置页「显示的页面」，仅 推荐/排行/搜索 可关）。缺省 = 全部显示。
+    hiddenTabs: Array.isArray(stored.hiddenTabs) ? stored.hiddenTabs : [],
+    // 在网格卡片上隐藏的信息标记 key（设置页「卡片标记」：页数/GIF/红心）。缺省 = 全部显示。
+    hiddenGridBadges: Array.isArray(stored.hiddenGridBadges) ? stored.hiddenGridBadges : [],
     // X (Twitter) 图源：关注名单（一行一个用户名/链接）与自定义 Nitter 实例。
     // 都是纯本地配置 —— Nitter 读不到你的 following，名单只能手填（见 sources/nitter.js）。
     // 名单为空时用 .env 的 VITE_TWITTER_USERS（构建期默认），再空才退到 nitter.js 的演示账号。
     twitterUsers: stored.twitterUsers || BUILD_TWITTER_USERS,
     nitterInstance: stored.nitterInstance || '',
+    // X (Twitter) 直连凭据：浏览器登录 x.com 后复制的 Cookie（须含 auth_token 与 ct0）。
+    // 配置后 feed / 搜索 / 推荐博主优先走官方 GraphQL 直连（见 sources/xDirect.js），
+    // 无 cookie 或直连失败自动回落 Nitter。凭据只存本机，绝不进代码仓库。
+    twitterCookie: stored.twitterCookie || '',
+    // 微博图源：关注名单（一行一个 UID / weibo.com/u/123 链接，纯本地配置）。
+    // 匿名访客模式读不到登录态的 following，只能手填（见 sources/weibo.js）。
+    weiboUsers: stored.weiboUsers || '',
+    // 微博图源：登录 Cookie（浏览器登录 m.weibo.cn 后复制的整段 Cookie 头）。
+    // 配置后优先于访客模式，并解锁列表翻页；失效时会明确提示更新。
+    weiboCookie: stored.weiboCookie || '',
+    // Instagram 图源：关注名单（一行一个用户名 / instagram.com/<name> 链接，纯本地配置）。
+    // 登录 Cookie 模式读不到 following 列表，只能手填（见 sources/instagram.js）。
+    instagramUsers: stored.instagramUsers || '',
+    // Instagram 图源：登录 Cookie（浏览器登录 www.instagram.com 后复制的整段 Cookie 头，
+    // 须含 sessionid 与 ds_user_id）。必须配置，无匿名通道；失效时会明确提示更新。
+    instagramCookie: stored.instagramCookie || '',
   };
 }
 

@@ -104,6 +104,14 @@ const PASSTHROUGH_HEADERS = {
   'content-type': 'Content-Type',
   'x-csrf-token': 'x-csrf-token',
   'x-pixiv-cookie': 'Cookie',
+  'x-weibo-cookie': 'Cookie',
+  'x-ig-cookie': 'Cookie',
+  // Instagram GraphQL 的必需头（X-FB-Friendly-Name 首屏/翻页不同名，由适配器按请求给值；
+  // X-FB-LSD 供主页时间线接口 /api/v1/feed/timeline/ 使用）
+  'x-fb-friendly-name': 'X-FB-Friendly-Name',
+  'x-fb-lsd': 'X-FB-LSD',
+  'x-asbd-id': 'X-ASBD-ID',
+  'x-ig-app-id': 'X-IG-App-ID',
 };
 
 /**
@@ -112,10 +120,11 @@ const PASSTHROUGH_HEADERS = {
  * @param {Object} [opts]
  * @param {Object} [opts.extraHeaders] — 额外的请求头
  * @param {string} [opts.userAgent] — 覆盖默认 UA
+ * @param {boolean} [opts.direct] — 直连目标站（国内站点如微博：绕过 Clash，agent 为空）
  * @returns {Function} Vite 中间件
  */
 export function createApiProxy(targetHost, opts = {}) {
-  const holder = createAgentHolder();
+  const holder = opts.direct ? null : createAgentHolder();
   const extraHeaders = opts.extraHeaders || {};
   const userAgent = opts.userAgent || DEFAULT_UA;
 
@@ -191,7 +200,7 @@ export function createApiProxy(targetHost, opts = {}) {
 
     (async () => {
       try {
-        await send(holder.get());
+        await send(holder ? holder.get() : undefined);
       } catch (err) {
         const msg0 = err.message || String(err);
         if (!retryable) {
@@ -204,9 +213,9 @@ export function createApiProxy(targetHost, opts = {}) {
         }
         // 连接级失败：记录真实错误、换新连接、重试一次
         console.warn(`[proxy] ${targetHost} 上游连接失败: ${msg0}，正在重试...`);
-        holder.reset();
+        holder?.reset();
         try {
-          await send(holder.get());
+          await send(holder ? holder.get() : undefined);
         } catch (err2) {
           const msg = err2.message || String(err2);
           console.error(`[proxy] ${targetHost} 重试仍失败: ${msg}`);
@@ -229,10 +238,11 @@ export function createApiProxy(targetHost, opts = {}) {
  * @param {number} [opts.timeout=30000] — 超时毫秒（图片可能较大）
  * @param {string} [opts.cacheControl] — 响应 Cache-Control 头（例如 'public, max-age=604800'），缺省透传上游
  * @param {string} [opts.userAgent] — 覆盖默认 UA（图床在 Cloudflare 后面时需要，见 DEFAULT_UA）
+ * @param {boolean} [opts.direct] — 直连目标站（国内图床如微博 sinaimg：绕过 Clash）
  * @returns {Function} Vite 中间件
  */
 export function createImageProxy(targetHost, opts = {}) {
-  const holder = createAgentHolder();
+  const holder = opts.direct ? null : createAgentHolder();
   const referer = opts.referer || targetHost;
   const timeout = opts.timeout || 30000;
   const cacheControl = opts.cacheControl || null;
@@ -293,12 +303,12 @@ export function createImageProxy(targetHost, opts = {}) {
 
     (async () => {
       try {
-        await send(holder.get());
+        await send(holder ? holder.get() : undefined);
       } catch (err) {
         console.warn(`[proxy] ${targetHost} 上游连接失败: ${err.message || err}，正在重试...`);
-        holder.reset();
+        holder?.reset();
         try {
-          await send(holder.get());
+          await send(holder ? holder.get() : undefined);
         } catch (err2) {
           const msg = err2.message || String(err2);
           console.error(`[proxy] ${targetHost} 重试仍失败: ${msg}`);

@@ -28,17 +28,20 @@ export const BOORU_ROUTES = (() => {
   const seen = new Set();
   for (const source of Object.values(SOURCES)) {
     if (source.kind === 'pixiv') continue;
-    const { apiPrefix, apiOrigin, imgHosts, userAgent, http2 } = source.net;
+    const { apiPrefix, apiOrigin, imgHosts, imgReferer, direct, userAgent, http2 } = source.net;
     if (!seen.has(apiPrefix)) {
       seen.add(apiPrefix);
-      routes.push({ prefix: apiPrefix, target: apiOrigin, kind: 'api', userAgent, http2 });
+      routes.push({ prefix: apiPrefix, target: apiOrigin, kind: 'api', userAgent, http2, direct });
     }
     for (const [host, prefix] of Object.entries(imgHosts || {})) {
       if (seen.has(prefix)) continue;
       seen.add(prefix);
-      routes.push({ prefix, target: `https://${host}`, kind: 'img', userAgent, http2 });
+      routes.push({ prefix, target: `https://${host}`, kind: 'img', imgReferer, userAgent, http2, direct });
     }
   }
+  // 微博访客系统（换 SUB Cookie 的 passport 域，见 sources/weibo.js）：
+  // 不属于任何单站的 API/图床，手动登记一条（POST 表单由 createApiProxy 原样透传）。
+  routes.push({ prefix: '/weibo-passport', target: 'https://visitor.passport.weibo.cn', kind: 'api', direct: true });
   return routes;
 })();
 
@@ -53,6 +56,25 @@ export function createBooruMiddleware(route) {
   if (route.prefix === '/nitter-api') {
     return createNitterProxy(new URL(route.target).host);
   }
+  // Instagram 的 GraphQL 必需头大部分由适配器发送（X-FB-Friendly-Name 等见
+  // PASSTHROUGH_HEADERS），这里只注入浏览器禁设、脚本发不出来的三个；
+  // 缺 X-FB-Friendly-Name 会吃到 403 "Page Not Found"（见 sources/instagram.js）
+  if (route.prefix === '/ig-api') {
+    return createApiProxy(route.target, {
+      userAgent: route.userAgent,
+      extraHeaders: {
+        'Origin': 'https://www.instagram.com',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-origin',
+      },
+    });
+  }
+  // Instagram 图床的 host 动态（instagram.f*.fna.fbcdn.net 几十个区域分域）：
+  // 适配器把 URL 改写成 /ig-img/<host>/<path>，host 由路径指定（见 createIgImgProxy）
+  if (route.prefix === '/ig-img') {
+    return createIgImgProxy();
+  }
   // 强制 HTTP/2 的站点：走 CONNECT 隧道 + node:http2（见 proxy-utils.mjs 的 createH2Proxy）
   if (route.http2) {
     return createH2Proxy(route.target, {
@@ -62,12 +84,14 @@ export function createBooruMiddleware(route) {
   }
   if (route.kind === 'img') {
     return createImageProxy(route.target, {
-      referer: route.target,
+      // imgReferer：sinaimg 这类校验 Referer 的图床必须发微博域（缺省同图床域自身）
+      referer: route.imgReferer || route.target,
       cacheControl: 'public, max-age=604800',
       userAgent: route.userAgent,
+      direct: route.direct,
     });
   }
-  return createApiProxy(route.target, { userAgent: route.userAgent });
+  return createApiProxy(route.target, { userAgent: route.userAgent, direct: route.direct });
 }
 
 /**
@@ -112,6 +136,48 @@ export function createNitterProxy(defaultHost) {
       res.end(JSON.stringify({ error: 'invalid_nitter_host' }));
       return;
     }
+    proxyFor(host)(req, res);
+  };
+}
+
+/**
+ * Instagram 图床的动态代理：目标 host 由路径首段指定（/ig-img/<host>/<path...>）。
+ *
+ * 为什么要动态：fbcdn 的图片域是区域分域（instagram.fhkg4-2.fna.fbcdn.net 等
+ * 几十个，且会随 CDN 调度变化），枚举进注册表不现实；适配器直接把完整 host
+ * 编进代理路径（见 sources/instagram.js 的 igImg）。
+ *
+ * 安全：本地代理不能变成任意站点跳板 —— host 白名单只放行 *.fbcdn.net 与
+ * *.cdninstagram.com（Instagram 的官方 CDN 域），并做形状校验。
+ *
+ * @returns {Function} 中间件
+ */
+export function createIgImgProxy() {
+  const proxies = new Map();
+  const hostRe = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i;
+  const allow = (host) =>
+    hostRe.test(host) && !host.includes('..')
+    && (host.endsWith('.fbcdn.net') || host.endsWith('.cdninstagram.com'));
+
+  const proxyFor = (host) => {
+    if (!proxies.has(host)) {
+      proxies.set(host, createImageProxy(`https://${host}`, {
+        cacheControl: 'public, max-age=604800',
+      }));
+    }
+    return proxies.get(host);
+  };
+
+  return (req, res) => {
+    // Vite / Electron 已剥掉 /ig-img 前缀，req.url 形如 /<host>/<path...>
+    const m = String(req.url || '').match(/^\/([^/]+)(\/.*)?$/);
+    const host = (m?.[1] || '').toLowerCase();
+    if (!allow(host)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid_ig_img_host' }));
+      return;
+    }
+    req.url = m?.[2] || '/';
     proxyFor(host)(req, res);
   };
 }

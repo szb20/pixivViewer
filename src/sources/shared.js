@@ -17,6 +17,13 @@
 export const API_CLIENT_UA = 'PixivViewer/1.0';
 
 /**
+ * 完整桌面 Chrome UA — Instagram 这类「既要浏览器形态、又不校验 TLS 指纹」的站点用：
+ * GraphQL 端点对 UA 形态有校验（精简 UA 会吃到挑战 / 403）。
+ * registry 的 net.userAgent 与 instagram.js 适配器共用这一份，避免两处漂移。
+ */
+export const CHROME_DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+/**
  * HTTP 错误 → 用户可读文案。
  * @param {any} e
  * @param {string} what — 「搜索」「排行榜」等，拼进提示语
