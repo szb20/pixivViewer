@@ -21,6 +21,9 @@ public class MainActivity extends BridgeActivity {
             webView.setVerticalScrollBarEnabled(false);
             webView.setHorizontalScrollBarEnabled(false);
             webView.setScrollBarStyle(WebView.SCROLLBARS_INSIDE_OVERLAY);
+            // 微博图床防盗链：替换 Capacitor 默认 WebViewClient，
+            // 拦截 *.sinaimg.cn 请求补 Referer（其余请求走父类默认链路）
+            webView.setWebViewClient(new WeiboWebViewClient(getBridge()));
         }
     }
 }

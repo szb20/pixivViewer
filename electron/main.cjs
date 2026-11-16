@@ -273,11 +273,15 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  // 兜底：仅为 i.pximg.net 直连请求补 pixiv Referer（正常情况下代理已改写为 i.pixiv.re，无需 Referer）
+  // 兜底1：为 i.pximg.net 直连请求补 pixiv Referer（正常情况下代理已改写为 i.pixiv.re，无需 Referer）
+  // 兜底2：微博图床 sinaimg.cn 校验 Referer 必须是微博域（空 Referer 也 403）——
+  //        页面跑在 file:// / 127.0.0.1，直链一律被拒，这里统一补 m.weibo.cn
   session.defaultSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders };
     if (/^https:\/\/i\.pximg\.net\//i.test(details.url)) {
       headers['Referer'] = 'https://www.pixiv.net/';
+    } else if (/^https:\/\/[^/]*\.sinaimg\.cn\//i.test(details.url)) {
+      headers['Referer'] = 'https://m.weibo.cn/';
     }
     callback({ requestHeaders: headers });
   });
