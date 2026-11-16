@@ -19,16 +19,18 @@ import java.util.Arrays;
  * 流式下载插件 — 原生 HttpURLConnection 下载，绕开 WebView 对 i.pixiv.re 的
  * CORS 限制（fetch/XHR 跨域读不到字节），且能按字节汇报真实进度。
  *
- * 数据以拉模式分块过桥：startStream 打开连接 → JS 循环 readChunk（每块 ≤512KB
- * base64）→ EOF / 失败后 closeStream。整份 base64 过桥在 WebView 有 OOM 风险
+ * 数据以拉模式分块过桥：startStream 打开连接 → JS 循环 readChunk（每块 ≤510KB
+ * base64，大小为 3 的倍数，JS 侧直接拼接不解码）→ EOF / 失败后 closeStream。整份 base64 过桥在 WebView 有 OOM 风险
  * （同 GallerySaverPlugin 分块写入的教训：40MB 文件经桥传整包会产生 ~53MB 字符串
  * 峰值），拉模式还天然保证顺序与背压，进度由 JS 按累计字节自行计算。
  */
 @CapacitorPlugin(name = "StreamingDownload")
 public class StreamingDownloadPlugin extends Plugin {
 
-    /** 单块大小（字节）：512KB → 过桥 base64 峰值约 700KB */
-    private static final int CHUNK_BYTES = 512 * 1024;
+    /** 单块大小（字节）：510KB → 过桥 base64 峰值约 680KB。
+     *  必须是 3 的倍数：JS 侧直接拼接各块 base64（不解码，避免主线程逐字节搬运
+     *  造成下载中滑动卡顿），非 3 倍数的块会产生填充字符破坏拼接 */
+    private static final int CHUNK_BYTES = 510 * 1024;
 
     /** 下载会话：id → 打开中的连接与输入流 */
     private final Map<String, HttpURLConnection> sessionConns = new HashMap<>();
