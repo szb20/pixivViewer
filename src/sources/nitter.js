@@ -20,6 +20,7 @@ import { createLogger } from '../utils/logger.js';
 import { isDev, isDesktopShell, getDesktopProxyPort } from '../utils/platform.js';
 import { getSettings, qualifyId, rawIdOf, sourceOfId } from '../pixiv-assistant/index.js';
 import { classifyError } from './shared.js';
+import { directReady, homeFeed, followingFeed, searchFeed, authorsFromItems } from './xDirect.js';
 
 const log = createLogger('nitter');
 
@@ -61,6 +62,13 @@ const instanceFails = new Map();
 const userCache = new Map();      // user → { ts, items }
 const itemIndex = new Map();      // illustId → 条目
 let inflightFeed = null;          // 同一时刻的并发 feed 合并成一次
+
+/** 冷启动快出：feed page1 不等全量拉完，前 FAST_FIRST_USERS 个账号 settle 即先出一屏；
+ *  其余账号在同一个 inflight 里继续后台并入，追加页等全量后按「未服务条目」推进 */
+const FAST_FIRST_USERS = 3;
+let releaseFastBatch = null;      // 当前 inflight 的「首批就绪」回调
+const servedInFeed = new Set();   // 本次 feed 会话已返回给页面的条目 id（快出页与全量页间去重）
+let feedCursor = 0;               // 全量列表游标：追加页从这里继续收集未服务条目
 
 /** 记一次实例失败：连续 2 次才冷却（21 个账号一批拉时，一次 403 很常见） */
 function markInstanceFailure(host) {
@@ -150,12 +158,24 @@ async function fetchFirstOk(path, custom) {
  * @returns {Promise<string[]>} 用户名数组（失败时为空数组）
  */
 export async function fetchFollowing(handle) {
+  return (await fetchFollowingEntries(handle, 20)).map(e => e.user);
+}
+
+/**
+ * 拉某账号关注列表（带档案），页数上限可选。
+ * maxPages 控制成本：博主推荐图谱的种子只拉前 2 页（聚合共现信号足够），
+ * 设置页导入走默认 20 页拉全。
+ * @param {string} handle
+ * @param {number} [maxPages=20]
+ * @returns {Promise<Array<{user: string, fullname: string, avatar: string}>>}
+ */
+async function fetchFollowingEntries(handle, maxPages = 20) {
   const name = String(handle || '').trim().replace(/^@/, '');
   if (!/^[A-Za-z0-9_]{1,15}$/.test(name)) return [];
   const custom = await customInstance();
-  const found = new Set();
+  const found = new Map();
   let cursor = '';
-  for (let page = 0; page < 20; page++) {
+  for (let page = 0; page < maxPages; page++) {
     // 光标在页面里已经是百分号编码过的，原样回传（再编码一次会翻页失败）
     const path = `/${encodeURIComponent(name)}/following${cursor ? `?cursor=${cursor}` : ''}`;
     // 翻页时实例偶尔抽一次 403/429：重试一次再放弃，否则导入会在半路截断（实测少 28 个）
@@ -167,12 +187,15 @@ export async function fetchFollowing(handle) {
     if (!html) break;
     const doc = new DOMParser().parseFromString(html, 'text/html');
     let added = 0;
-    for (const a of doc.querySelectorAll('a.username')) {
-      const user = String(a.getAttribute('href') || '').replace(/^\//, '');
-      if (/^[A-Za-z0-9_]{1,15}$/.test(user) && !found.has(user)) {
-        found.add(user);
-        added += 1;
-      }
+    for (const item of doc.querySelectorAll('.timeline-item')) {
+      const a = item.querySelector('a.username');
+      const user = String(a?.getAttribute('href') || '').replace(/^\//, '');
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(user) || user === name || found.has(user)) continue;
+      const fullname = item.querySelector('.fullname')?.textContent?.trim() || user;
+      // 实例代理头像多是相对路径（来源实例拉取后才知道），直接置空走 UI 的首字母占位
+      const avatar = item.querySelector('img.avatar')?.getAttribute('src') || '';
+      found.set(user, { user, fullname, avatar: avatar.startsWith('https://') ? avatar : '' });
+      added += 1;
     }
     if (!added) break;
     // 页面上可能有两个 .show-more（其中一个不属于分页），认带 cursor 的那个
@@ -184,7 +207,7 @@ export async function fetchFollowing(handle) {
     cursor = next;
     await new Promise(r => setTimeout(r, 500)); // 别把实例打急
   }
-  return [...found];
+  return [...found.values()];
 }
 
 /**
@@ -283,9 +306,10 @@ function toPage(url, index) {
 
 /**
  * 一条 RSS item → 应用统一条目（与 booru 的 mapPost 同形，上层零改动）。
+ * avatar：RSS 频道的 <image> 就是作者头像（直连 pbs.twimg.com），随列表免费带上。
  * @returns {object|null}
  */
-function mapItem(item, userName) {
+function mapItem(item, userName, avatar = '') {
   const link = item.querySelector('link')?.textContent || '';
   const guid = item.querySelector('guid')?.textContent || '';
   const rawId = link.match(/\/status\/(\d+)/)?.[1] || (/^\d+$/.test(guid) ? guid : '');
@@ -296,7 +320,9 @@ function mapItem(item, userName) {
   if (!mediaUrls.length) return null; // 纯文字推文不进图流
 
   const pages = mediaUrls.map(toPage);
+  // 标题去掉 #话题：tag 已由 extractTags 提取展示在标签区，标题里留着只是重复
   const titleText = decodeEntities(item.querySelector('title')?.textContent || '')
+    .replace(/#[\p{L}\p{N}_]{1,30}/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
   const pubDate = Date.parse(item.querySelector('pubDate')?.textContent || '') || 0;
@@ -314,9 +340,9 @@ function mapItem(item, userName) {
     title: titleText,
     author: userName,
     authorName: userName,
-    authorAccount: `@${userName}`,
+    authorAccount: userName,
     authorId: '',
-    authorAvatar: '',
+    authorAvatar: avatar,
     tags: extractTags(description),
     width: 0,
     height: 0,
@@ -329,12 +355,13 @@ function mapItem(item, userName) {
   };
 }
 
-/** RSS 文本 → 条目数组 */
+/** RSS 文本 → 条目数组（顺带取频道 <image> 的作者头像） */
 function parseRss(xmlText, userName) {
   const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
   if (doc.querySelector('parsererror')) throw new Error('RSS 解析失败');
+  const avatar = doc.querySelector('channel > image > url')?.textContent?.trim() || '';
   return [...doc.querySelectorAll('item')]
-    .map(el => mapItem(el, userName))
+    .map(el => mapItem(el, userName, avatar))
     .filter(Boolean);
 }
 
@@ -368,6 +395,10 @@ async function fetchUser(user, customInstance, { force = false } = {}) {
 
   let lastError = null;
   let saw404 = false;
+  // 404 之外的网络类错误（超时/SSL/5xx/403）：有它们在就不能断定账号不存在，
+  // 否则实例抖动期（一个实例 404、其余超时）会把账号投毒成空缓存 15 分钟，
+  // 期间所有重试秒失败且不发请求 —— 表现为「点击重试」假死。
+  let sawOtherError = false;
   for (let attempt = 0; attempt < 2; attempt++) {
     for (const instance of instanceOrder(customInstance)) {
       try {
@@ -380,6 +411,7 @@ async function fetchUser(user, customInstance, { force = false } = {}) {
         return { items, ok: true };
       } catch (e) {
         if (e?.status === 404) saw404 = true;
+        else sawOtherError = true;
         lastError = e;
         log.debug(`[fetchUser] ${instance} 失败:`, e?.message || e);
         markInstanceFailure(instance);
@@ -388,15 +420,151 @@ async function fetchUser(user, customInstance, { force = false } = {}) {
     // 把所有实例都试完才退避：单次 403 往往几百毫秒后就恢复
     if (attempt === 0) await new Promise(r => setTimeout(r, 700));
   }
-  // 全部实例都 404 = 账号已注销 / 没有媒体 RSS：缓存空结果，别再每轮重试它
+  // 「所有失败都是 404」= 账号已注销 / 没有媒体 RSS：缓存空结果，别再每轮重试它
   // （128 个关注里实测有 23 个这种账号，重试它们纯属浪费）。
-  if (saw404) {
+  // 混有网络错误时不下结论，走下面的旧缓存兜底。
+  if (saw404 && !sawOtherError) {
     userCache.set(user, { ts: Date.now(), items: [] });
     return { items: [], ok: true };
   }
   log.debug(`[fetchUser] ${user} 全部实例失败:`, lastError?.message || lastError);
   // 失败但仍返回旧缓存：宁可显示上一次的内容，也别让卡片凭空消失
   return { items: hit?.items || [], ok: false };
+}
+
+/**
+ * 解析 nitter 网页搜索结果页（?f=tweets&q=…），只抽博主推荐需要的作者信息。
+ * HTML 结构稳定：每个 timeline-item 自带 data-username，首个 tweet-avatar img
+ * 是作者头像，fullname 链接的 title 是昵称（实测见 2026-11 会话）。
+ */
+function parseSearchAuthors(html) {
+  const out = [];
+  const chunks = String(html || '').split('<div class="timeline-item');
+  for (let i = 1; i < chunks.length; i++) {
+    const c = chunks[i].slice(0, 4000);
+    const username = c.match(/data-username="([^"]+)"/)?.[1];
+    if (!username) continue;
+    const fullname = c.match(/class="fullname"[^>]*title="([^"]*)"/)?.[1] || username;
+    const avatar = c.match(/class="tweet-avatar[^"]*"[^>]*>\s*<img[^>]+src="([^"]+)"/)?.[1] || '';
+    out.push({ username, fullname, avatar });
+  }
+  return out;
+}
+
+/** 按话题标签搜索推文（nitter 网页搜索），返回发帖作者列表。 */
+async function searchTagAuthors(tag, customInstance) {
+  for (const instance of instanceOrder(customInstance)) {
+    try {
+      const html = await fetchText(instance, `/search?f=tweets&q=${encodeURIComponent('#' + tag)}`);
+      const authors = parseSearchAuthors(html);
+      markInstanceSuccess(instance);
+      return authors;
+    } catch (e) {
+      log.debug('[searchTagAuthors] ' + instance + ' 失败:', e?.message || e);
+      markInstanceFailure(instance);
+    }
+  }
+  return [];
+}
+
+// 博主推荐会话级缓存：重新搜 tag 聚合要走数轮网络请求，TTL 1 小时；
+// 关注名单变化由返回路径上的 exclude 过滤兜住，不必失效缓存。
+const suggestCache = { ts: 0, users: [] };
+const SUGGEST_TTL = 60 * 60 * 1000;
+
+/**
+ * tabCache 水合时重建内存索引。缓存条目自带 tags，灌回 itemIndex 即可恢复
+ * tag 频次信号 —— 之前索引只在真实网络拉取时建立，冷启动水合态下推荐博主
+ * 一直拿不到信号（ready=false 干等首拉/下拉刷新）。同 id 覆盖，幂等可重入。
+ * @param {Array<{illustId: string, tags?: string[]}>} items — tabCache 里的 feed 条目
+ */
+export function hydrateIndex(items) {
+  if (!Array.isArray(items)) return;
+  for (const it of items) {
+    if (it?.illustId) itemIndex.set(it.illustId, it);
+  }
+}
+
+/**
+ * 推荐博主：两路信号聚合，按「证据数」排序。
+ *   1. 高频 tag → 逐 tag 搜推文（实例搜索可用时；2026-11 大面积 403/空结果，哪天恢复自动生效）
+ *   2. 关注图谱（协同过滤）：你关注的种子博主的 following 里，几个种子共同关注的人
+ *      —— 走 /following HTML 页，与搜索后端独立，是当前的主力信号
+ * exclude = 当前关注名单（裸 handle）。
+ * 返回 { users, ready }：ready=false 表示两路信号都还没产出（索引空 / 聚合空），
+ * 结果不可信也不写缓存，调用方应稍后重试而不是当作「没有推荐」。
+ */
+async function suggestUsers(customInstance, exclude = []) {
+  const excluded = new Set(exclude);
+  if (Date.now() - suggestCache.ts >= SUGGEST_TTL) {
+    // username → 聚合条目：count = 证据数（几个 tag 搜到 / 几个种子关注），tagCount = 命中 tag 的总热度
+    const score = new Map();
+    const bump = (entry) => {
+      const cur = score.get(entry.username) || { ...entry, count: 0, tagCount: 0 };
+      cur.count += 1;
+      cur.tagCount += entry.tagCount || 0;
+      if (!cur.avatar && entry.avatar) cur.avatar = entry.avatar;
+      score.set(entry.username, cur);
+    };
+
+    // ── 信号 1：高频 tag 搜索 ──
+    // 出现 ≥2 次的 tag 才值得搜，按频次取前 4 个
+    const tagCount = new Map();
+    for (const it of itemIndex.values()) {
+      for (const t of (it.tags || [])) {
+        if (t) tagCount.set(t, (tagCount.get(t) || 0) + 1);
+      }
+    }
+    const topTags = [...tagCount.entries()]
+      .filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t]) => t);
+    await mapLimit(topTags, 2, async (tag) => {
+      // 直连优先：SearchTimeline `#tag filter:images`（2026-11 实例搜索大面积 403，
+      // 有 cookie 时这里是主力信号）；无 cookie / 直连失败回落实例搜索
+      let authors = [];
+      if (await directReady()) {
+        try {
+          const r = await searchFeed(`#${tag} filter:images`, 1);
+          authors = authorsFromItems(r.items);
+        } catch (e) {
+          log.debug('[suggest] tag 直连失败，回落实例搜索:', e?.message || e);
+        }
+      }
+      if (!authors.length) authors = await searchTagAuthors(tag, customInstance);
+      for (const a of authors) {
+        if (excluded.has(a.username)) continue;
+        bump({ ...a, tagCount: tagCount.get(tag) || 0 });
+      }
+    });
+
+    // ── 信号 2：关注图谱 ──
+    // 种子 = 关注名单前 3 个、每个最多 2 页（~100 人）——控制请求量，
+    // 「多个种子共同关注」的共现本身就是排序信号。
+    if (exclude.length) {
+      const seeds = exclude.slice(0, 3);
+      await mapLimit(seeds, 2, async (seed) => {
+        try {
+          for (const f of await fetchFollowingEntries(seed, 2)) {
+            if (excluded.has(f.user)) continue;
+            bump({ ...f, username: f.user });
+          }
+        } catch { /* 单个种子拉失败不影响其他种子 */ }
+      });
+    }
+
+    const ranked = [...score.values()]
+      .sort((a, b) => b.count - a.count || b.tagCount - a.tagCount)
+      // 保留 24 个候选：推荐行每批展示 8 个、「换一批」轮换浏览（见 DiscoverPage）。
+      // 全量保留会掺进只有单一证据的低质账号，24 是「够翻三批」的量
+      .slice(0, 24)
+      .map(({ username, fullname, avatar }) => ({ username, fullname, avatar }));
+    if (!ranked.length) {
+      // 聚合无产出（实例瞬时抽风 / 种子都拉不到）：不写 1h 缓存，让调用方重试自愈
+      return { users: [], ready: false };
+    }
+    suggestCache.users = ranked;
+    suggestCache.ts = Date.now();
+  }
+  return { users: suggestCache.users.filter(u => !excluded.has(u.username)), ready: true };
 }
 
 /** 读设置里的自定义实例 */
@@ -423,20 +591,64 @@ export function createNitterSource(def) {
 
     /**
      * 关注流 —— 名单里所有人最近发出的图片，按时间倒序合并成一页。
+     * 冷启动快出：page 1 只等名单前 FAST_FIRST_USERS 个账号，到位即先出一屏；
+     * 其余账号在同一 inflight 里后台继续拉，追加页等全量后按未服务条目补齐（不重不漏）。
      * @returns {Promise<{illusts: object[], message?: string}>}
      */
-    async feed({ page = 1, limit = 20 } = {}) {
-      // 同一时刻只允许一次全量拉取（页面切 tab 会重复触发）
+    async feed({ page = 1, limit = 20, mode = 'foryou' } = {}) {
+      // ── 直连模式（设置页配了 cookie）：登录态时间线，失败回落 Nitter ──
+      // mode='foryou' → For You（算法推荐）；mode='following' → 关注（按时间序）。
+      // 直连拿的是账号真实时间线（覆盖全部关注），不再依赖本地关注名单；
+      // 401/403 时 xDirect 内部已置冷却，这里的 catch 之后整点内直接走 Nitter。
+      if (await directReady()) {
+        try {
+          const { items, hasMore } = mode === 'following'
+            ? await followingFeed(page)
+            : await homeFeed(page);
+          if (items.length || !hasMore) {
+            for (const it of items) itemIndex.set(it.illustId, it);
+            // hasMore 透传给面板：直连时间线「本页 0 新图」≠ 没有更多（空页已在 xDirect 内续拉），
+            // 面板据此判断断流，而不是用 list.length 瞎猜。条目不 slice ——
+            // xDirect 续拉聚合的一批新图可能超过 limit，截断会把已去重登记的图永久丢掉
+            return { illusts: items, hasMore };
+          }
+        } catch (e) {
+          log.debug('[feed] 直连失败，回落 nitter:', e?.message || e);
+        }
+      }
+
+      const users = await configuredUsers();
+      const isFirstPage = Math.max(1, page) === 1;
+      // page 1 = 一次全新的浏览会话（首拉 / 下拉刷新）：清空去重表、游标归零
+      if (isFirstPage) {
+        servedInFeed.clear();
+        feedCursor = 0;
+      }
+      if (!users.length) {
+        return { illusts: [], message: '还没有配置关注名单：设置 → X 图源' };
+      }
+
+      // 同一时刻只允许一次全量拉取（页面切 tab 会重复触发）。
+      // 快出批次与全量在同一个 inflight 里：并发不变、不重复请求，首批 settle 即放行。
       if (!inflightFeed) {
         inflightFeed = (async () => {
-          const [users, instance] = await Promise.all([configuredUsers(), customInstance()]);
-          const results = await mapLimit(users, FETCH_CONCURRENCY, (u) => fetchUser(u, instance));
+          // 首批就绪的 resolver 挂到模块级 releaseFastBatch（feed 侧再包装一层用于赛跑）
+          new Promise((r) => { releaseFastBatch = r; });
+          const [ulist, instance] = await Promise.all([configuredUsers(), customInstance()]);
+          const headSet = new Set(ulist.slice(0, FAST_FIRST_USERS));
+          const settled = new Set();
+          const results = await mapLimit(ulist, FETCH_CONCURRENCY, async (u) => {
+            const r = await fetchUser(u, instance);
+            settled.add(u);
+            if (headSet.delete(u) && !headSet.size) releaseFastBatch?.([...settled]);
+            return r;
+          });
           const lists = results.map(r => r.items);
           // 第二轮补拉：首轮失败的账号串行再来一次（实例对它们通常只是短暂限流）。
           // 这一步把「每次冷启动随机少几个号」压到基本不出现。
-          const failed = users.filter((_, i) => !results[i].ok);
+          const failed = ulist.filter((_, i) => !results[i].ok);
           if (failed.length) {
-            log.debug(`[feed] ${users.length} 个账号，首轮失败 ${failed.length} 个，串行补拉`);
+            log.debug(`[feed] ${ulist.length} 个账号，首轮失败 ${failed.length} 个，串行补拉`);
             for (const u of failed) {
               await new Promise(r => setTimeout(r, 350));
               const r = await fetchUser(u, instance, { force: true });
@@ -450,22 +662,65 @@ export function createNitterSource(def) {
             if (!merged.has(item.illustId)) merged.set(item.illustId, item);
           }
           return [...merged.values()].sort((a, b) => b.publishedAt - a.publishedAt);
-        })().finally(() => { inflightFeed = null; });
+        })().finally(() => { inflightFeed = null; releaseFastBatch = null; });
       }
+
+      // 快出与全量赛跑：首批 settle 就先用「已到位账号」的缓存合并出一屏；
+      // 全量先完成（如全部命中 15min 缓存）则 fastReady 落空，自然走全量路径。
+      const fastReady = releaseFastBatch
+        ? new Promise((resolve) => {
+          const prev = releaseFastBatch;
+          releaseFastBatch = (settledUsers) => { prev?.(settledUsers); resolve(settledUsers); };
+        })
+        : Promise.resolve(null);
       try {
+        const fastUsers = await Promise.race([
+          fastReady,
+          inflightFeed.then(() => null).catch(() => null),
+        ]);
+        if (isFirstPage && fastUsers?.length) {
+          const merged = new Map();
+          for (const u of fastUsers) {
+            for (const item of userCache.get(u)?.items || []) {
+              if (!merged.has(item.illustId)) merged.set(item.illustId, item);
+            }
+          }
+          const sorted = [...merged.values()].sort((a, b) => b.publishedAt - a.publishedAt);
+          const slice = sorted.slice(0, limit);
+          if (slice.length) {
+            for (const it of slice) servedInFeed.add(it.illustId);
+            // 游标保持 0：全量列表从头按「未服务」推进，快出页的条目靠 servedInFeed 去重
+            return { illusts: slice };
+          }
+          // 首批全空（实例抽风）→ 落回等全量
+        }
         const all = await inflightFeed;
-        const start = (Math.max(1, page) - 1) * limit;
-        const slice = all.slice(start, start + limit);
         if (all.length === 0) {
-          const users = await configuredUsers();
           return {
             illusts: [],
-            message: users.length
-              ? '关注名单里没有拿到图片（实例暂时不可用，稍后下拉刷新重试）'
-              : '还没有配置关注名单：设置 → X 图源',
+            message: '关注名单里没有拿到图片（实例暂时不可用，稍后下拉刷新重试）',
           };
         }
-        return { illusts: slice };
+        if (isFirstPage) {
+          const slice = all.slice(0, limit);
+          for (const it of slice) servedInFeed.add(it.illustId);
+          feedCursor = limit;
+          return { illusts: slice };
+        }
+        // 追加页：从游标起收集未服务条目。快出会话里全量 top 与快出页部分重叠，
+        // 按条目 id 去重后正好补齐快出页没覆盖的头部内容，不跳条也不重复。
+        const out = [];
+        while (out.length < limit && feedCursor < all.length) {
+          for (const it of all.slice(feedCursor, feedCursor + limit)) {
+            if (!servedInFeed.has(it.illustId)) {
+              out.push(it);
+              servedInFeed.add(it.illustId);
+              if (out.length >= limit) break;
+            }
+          }
+          feedCursor += limit;
+        }
+        return { illusts: out };
       } catch (e) {
         log.error('[feed] 失败:', e?.message || e);
         return { illusts: [], message: classifyError(e, '关注流') };
@@ -476,7 +731,7 @@ export function createNitterSource(def) {
      * 搜索 —— 只支持按 @用户名 查看（Nitter 的关键词搜索质量太差，先不做）。
      * @returns {Promise<{images: object[], query: string, error?: string}>}
      */
-    async search(query, { limit = 20 } = {}) {
+    async search(query, { limit = 20, page = 1 } = {}) {
       const trimmed = String(query || '').trim();
       if (!trimmed) return { images: [], query: '' };
       const name = trimmed.match(/(?:x\.com|twitter\.com)\/@?([A-Za-z0-9_]{1,15})/i)?.[1]
@@ -484,6 +739,19 @@ export function createNitterSource(def) {
       const looksLikeName = name && !/^\d+$/.test(name);
       if (!looksLikeName) {
         return { images: [], query: trimmed, error: 'X 源目前只支持按 @用户名 查看，关键词搜索暂不支持' };
+      }
+      // ── 直连模式：SearchTimeline `from:name filter:images`（覆盖该账号全部媒体推文，
+      // 不受 Nitter「最近 50 条」限制）；失败回落 Nitter RSS ──
+      if (await directReady()) {
+        try {
+          const r = await searchFeed(`from:${name} filter:images`, page);
+          if (r.items.length || !r.hasMore) {
+            for (const it of r.items) itemIndex.set(it.illustId, it);
+            if (r.items.length) return { images: r.items.slice(0, limit), query: trimmed };
+          }
+        } catch (e) {
+          log.debug('[search] 直连失败，回落 nitter:', e?.message || e);
+        }
       }
       try {
         const result = await fetchUser(name, await customInstance());
@@ -494,6 +762,22 @@ export function createNitterSource(def) {
       } catch (e) {
         log.error('[search] 失败:', e?.message || e);
         return { images: [], query: trimmed, error: classifyError(e, '搜索') };
+      }
+    },
+
+    /**
+     * 推荐博主 —— 以关注流高频 tag 为线索搜推文，聚合结果里未关注的发帖作者。
+     * 会话级缓存 1 小时；失败静默返回空列表（推荐行不显示即可）。
+     * @param {string[]} exclude 当前关注名单（裸 handle）
+     * @returns {Promise<{users: object[], ready: boolean}>} ready=false = 内存 tag 索引
+     *   还没建起来（冷启动水合态），调用方应稍后重试而不是当作「没有推荐」
+     */
+    async suggest(exclude = []) {
+      try {
+        return await suggestUsers(await customInstance(), exclude);
+      } catch (e) {
+        log.debug('[suggest] 失败:', e?.message || e);
+        return { users: [], ready: false };
       }
     },
 
@@ -529,6 +813,7 @@ export function createNitterSource(def) {
           authorName: item.authorName,
           authorAccount: item.authorAccount,
           authorId: '',
+          authorAvatar: item.authorAvatar,
           tags: item.tags,
           pageCount: item.pageCount,
           illustType: 0,
