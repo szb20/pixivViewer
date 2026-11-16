@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.pixivviewer.app',
-  appName: 'PixivViewer',
+  appName: 'Prism',
   webDir: 'dist',
 };
 

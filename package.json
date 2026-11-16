@@ -1,5 +1,5 @@
 {
-  "name": "pixivviewer",
+  "name": "prism",
   "private": true,
   "version": "1.0.0",
   "description": "Pixiv 图片浏览 / 下载应用（个人自用）",
@@ -15,7 +15,8 @@
     "check:sources": "node scripts/check-sources.mjs",
     "desktop": "npm run build && electron .",
     "desktop:dev": "cross-env PIXIVVIEWER_DEV_URL=http://localhost:5182 electron .",
-    "desktop:build": "npm run build && electron-builder --config electron/electron-builder.yml"
+    "desktop:build": "npm run build && electron-builder --config electron/electron-builder.yml",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.1",
@@ -39,6 +40,8 @@
     "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "oxlint": "^1.75.0",
-    "vite": "^8.2.0"
+    "typescript": "^7.0.2",
+    "vite": "^8.2.0",
+    "vitest": "^5.1.0"
   }
 }
